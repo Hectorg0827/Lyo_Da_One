@@ -26,16 +26,16 @@ import LearnerStats from '@/components/stats/LearnerStats';
 import { shouldShowLearnerDashboard } from '@/lib/entry-contract.mjs';
 import { streakFrom } from '@/lib/learner-stats.mjs';
 import { hasConceptEvidence } from '@/lib/learner-model.mjs';
-import { COMMUNITY_LAUNCH_ENABLED } from '@/lib/launch-features';
+import { COMMUNITY_LAUNCH_ENABLED, DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 const activityColors = ['#6366f1', '#22c55e', '#ec4899', '#3b82f6', '#f59e0b'];
 
 // iOS FocusView.DiscoverStrip — pill chips injected into the feed
 const discoverChips = [
   ...(COMMUNITY_LAUNCH_ENABLED ? [{ label: 'People', color: '#a855f7', href: '/community' }] : []),
-  { label: 'Content', color: '#22d3ee', href: '/clips' },
+  ...(DISCOVER_LAUNCH_ENABLED ? [{ label: 'Content', color: '#22d3ee', href: '/clips' }] : []),
   { label: 'Courses', color: '#f59e0b', href: '/courses' },
-  { label: 'Search', color: '#6366f1', href: '/discover' },
+  ...(DISCOVER_LAUNCH_ENABLED ? [{ label: 'Search', color: '#6366f1', href: '/discover' }] : []),
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/Avatar';
 import { useAuthStore } from '@/stores/auth-store';
-import { COMMUNITY_LAUNCH_ENABLED } from '@/lib/launch-features';
+import { COMMUNITY_LAUNCH_ENABLED, DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 /* ============================================================
    Nav item definitions
@@ -32,7 +32,7 @@ const navItems = [
   // in mind needs their readiness and today's sessions, not the catalogue.
   { href: '/test-prep', icon: Target, label: 'Test Prep' },
   ...(COMMUNITY_LAUNCH_ENABLED ? [{ href: '/community', icon: Users, label: 'Community' }] : []),
-  { href: '/discover', icon: Compass, label: 'Discover' },
+  ...(DISCOVER_LAUNCH_ENABLED ? [{ href: '/discover', icon: Compass, label: 'Discover' }] : []),
   { href: '/profile', icon: User, label: 'Profile' },
 ] as { href: string; icon: typeof Home; label: string; isAI?: boolean }[];
 
