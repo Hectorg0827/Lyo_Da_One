@@ -21,6 +21,7 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://www.lyoai.app'),
   title: {
     default: 'LYO',
     template: '%s | LYO',
@@ -51,9 +52,12 @@ export const metadata: Metadata = {
     title: 'LYO',
     description: "The Living AI Classroom. Don't just chat with AI — learn with it.",
     siteName: 'LYO',
+    url: 'https://www.lyoai.app/',
+    images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'LYO Living AI Classroom' }],
   },
   twitter: {
     card: 'summary_large_image',
+    images: ['/opengraph-image'],
     title: 'LYO',
     description: "The Living AI Classroom. Don't just chat with AI — learn with it.",
   },
