@@ -473,3 +473,83 @@ test('an extraction with no study block adds nothing', () => {
   assert.equal(mergeStudyBlocks([], textOnly, 'hi'), null);
   assert.equal(mergeStudyBlocks([], null, 'hi'), null);
 });
+
+// ─── Slides ──────────────────────────────────────────────────────────────────
+
+const slidesOf = (result) => result?.blocks.find((b) => b.subtype === 'slides');
+
+test('a headed walkthrough becomes slides when slides were asked for', () => {
+  const reply = [
+    '## What it is',
+    'Photosynthesis turns light into sugar.',
+    '',
+    '## Where it happens',
+    'Inside the chloroplast.',
+    '',
+    '## Why it matters',
+    'It feeds almost every food chain.',
+  ].join('\n');
+
+  const deck = slidesOf(extractStudyBlocks(reply, 'present this as slides'));
+  assert.equal(deck.content.slides.length, 3);
+  assert.equal(deck.content.slides[0].title, 'What it is');
+  assert.equal(deck.content.slides[2].body, 'It feeds almost every food chain.');
+});
+
+test('explicit --- breaks mean slides and keep their titles', () => {
+  const reply = ['# Intro', 'Light makes sugar.', '---', '# Where', 'The chloroplast.'].join('\n');
+  const deck = slidesOf(extractStudyBlocks(reply, 'make slides on photosynthesis'));
+  assert.deepEqual(deck.content.slides, [
+    { title: 'Intro', body: 'Light makes sugar.' },
+    { title: 'Where', body: 'The chloroplast.' },
+  ]);
+});
+
+test('the same reply is notes or slides depending on what was asked', () => {
+  // Both read a reply by its headings; the learner picks which they get.
+  const reply = ['## One', 'First point.', '', '## Two', 'Second point.'].join('\n');
+  assert.ok(slidesOf(extractStudyBlocks(reply, 'present this as slides')));
+  assert.equal(slidesOf(extractStudyBlocks(reply, 'give me study notes')), undefined);
+  assert.ok(extractStudyBlocks(reply, 'give me study notes').blocks.some(
+    (b) => b.subtype === 'studyNotes'));
+});
+
+test('one section is a paragraph, not a presentation', () => {
+  const reply = '## Only one\nA single point.';
+  assert.equal(extractStudyBlocks(reply, 'make slides'), null);
+});
+
+test('a reply with no structure is left alone', () => {
+  const reply = 'Photosynthesis turns light into sugar inside the chloroplast.';
+  assert.equal(extractStudyBlocks(reply, 'present this as slides'), null);
+});
+
+test('a wall of text per section is notes, not a slide', () => {
+  const wall = 'Light energy is captured and converted into chemical energy. '.repeat(20);
+  const reply = `## One\n${wall}\n\n## Two\n${wall}`;
+  assert.equal(extractStudyBlocks(reply, 'present this as slides'), null);
+});
+
+test('slides classification', () => {
+  assert.equal(classifyStudyAsk('present this as slides'), 'slides');
+  assert.equal(classifyStudyAsk('make slides on the water cycle'), 'slides');
+  assert.equal(classifyStudyAsk('turn this into slides'), 'slides');
+  // Still notes when notes were asked for.
+  assert.equal(classifyStudyAsk('give me study notes'), 'notes');
+  assert.equal(classifyStudyAsk('explain photosynthesis'), 'unrelated');
+});
+
+test('the deck is not headed with its own first slide title', () => {
+  // "What it is" above a slide headed "What it is" reads as a mistake.
+  const reply = ['## What it is', 'Light into sugar.', '', '## Where', 'Chloroplast.'].join('\n');
+  const deck = slidesOf(extractStudyBlocks(reply, 'present this as slides'));
+  assert.equal(deck.content.title, 'Slides');
+  assert.equal(deck.content.slides[0].title, 'What it is');
+});
+
+test('a heading above the slides does name the deck', () => {
+  const reply = ['# Photosynthesis', '', '## What it is', 'Light into sugar.', '',
+    '## Where', 'Chloroplast.'].join('\n');
+  const deck = slidesOf(extractStudyBlocks(reply, 'present this as slides'));
+  assert.equal(deck.content.title, 'Photosynthesis');
+});

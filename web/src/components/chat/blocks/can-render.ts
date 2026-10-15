@@ -64,6 +64,9 @@ export function canRenderBlock(block: ChatBlock | null | undefined): boolean {
       if (block.subtype === 'studyPlan') {
         return Array.isArray(content.schedule) && content.schedule.length > 0;
       }
+      if (block.subtype === 'slides') {
+        return Array.isArray(content.slides) && content.slides.length > 0;
+      }
       if (block.subtype === 'studyNotes') {
         return Array.isArray(content.sections) && content.sections.length > 0;
       }
