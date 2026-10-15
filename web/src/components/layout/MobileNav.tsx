@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import MascotAvatar from '@/components/chat/MascotAvatar';
 import CreateSheet from '@/components/create/CreateSheet';
 import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
+import { COMMUNITY_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 // Mirrors iOS LivingHubTabBar (MainTabView.swift): two icon groups flanking
 // the center mascot FAB — target/Focus, compass/Discover · people/Community,
@@ -19,7 +20,7 @@ const leftItems = [
   { href: '/discover', icon: Compass, label: 'Discover' },
 ];
 
-const rightItems = [{ href: '/community', icon: Users, label: 'Community' }];
+const rightItems = COMMUNITY_LAUNCH_ENABLED ? [{ href: '/community', icon: Users, label: 'Community' }] : [];
 
 function GhostTab({
   href,

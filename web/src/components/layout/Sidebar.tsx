@@ -19,6 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/Avatar';
 import { useAuthStore } from '@/stores/auth-store';
+import { COMMUNITY_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 /* ============================================================
    Nav item definitions
@@ -30,7 +31,7 @@ const navItems = [
   // Test prep is a distinct job from browsing courses: a learner with a date
   // in mind needs their readiness and today's sessions, not the catalogue.
   { href: '/test-prep', icon: Target, label: 'Test Prep' },
-  { href: '/community', icon: Users, label: 'Community' },
+  ...(COMMUNITY_LAUNCH_ENABLED ? [{ href: '/community', icon: Users, label: 'Community' }] : []),
   { href: '/discover', icon: Compass, label: 'Discover' },
   { href: '/profile', icon: User, label: 'Profile' },
 ] as { href: string; icon: typeof Home; label: string; isAI?: boolean }[];
@@ -187,7 +188,7 @@ export function Sidebar() {
                   {user?.displayName ?? 'User'}
                 </p>
                 <p className="text-[10px] text-[var(--text-secondary)] truncate">
-                  Level {user?.level ?? 1} · {(user?.xp ?? 0).toLocaleString()} XP
+                  {user ? `Level ${user.level ?? 1} · ${(user.xp ?? 0).toLocaleString()} XP` : 'Explore LYO'}
                 </p>
               </motion.div>
             )}
