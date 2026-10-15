@@ -216,7 +216,11 @@ export default function LoginPage() {
           </p>
 
           <p className="text-center text-xs leading-relaxed text-secondary">
-            Password recovery and social sign-in will appear only after their backend flows are available.
+            <Link href="/terms" className="text-[#a78bfa] hover:underline">Terms of Service</Link>
+            <span className="mx-2" aria-hidden="true">·</span>
+            <Link href="/privacy" className="text-[#a78bfa] hover:underline">Privacy Policy</Link>
+            <span className="mx-2" aria-hidden="true">·</span>
+            <a href="mailto:support@lyo.app" className="text-[#a78bfa] hover:underline">Support</a>
           </p>
         </div>
       </motion.div>

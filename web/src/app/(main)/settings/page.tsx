@@ -142,8 +142,8 @@ export default function SettingsPage() {
       </Section>
 
       <Section title="About & support">
-        <ExternalRow label="Terms of Service" href="https://lyo.app/terms" />
-        <ExternalRow label="Privacy Policy" href="https://lyo.app/privacy" />
+        <ExternalRow label="Terms of Service" href="/terms" />
+        <ExternalRow label="Privacy Policy" href="/privacy" />
         <ExternalRow label="Contact Support" href="mailto:support@lyo.app" />
       </Section>
 
