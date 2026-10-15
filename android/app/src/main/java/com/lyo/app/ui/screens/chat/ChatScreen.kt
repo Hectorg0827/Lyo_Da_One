@@ -3,6 +3,8 @@ package com.lyo.app.ui.screens.chat
 import android.Manifest
 import android.app.Activity
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -15,6 +17,7 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.RepeatMode
@@ -25,6 +28,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +51,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
@@ -205,6 +213,7 @@ fun ChatScreen(nav: NavHostController) {
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
+    var pendingResponseSave by remember { mutableStateOf<Pair<String, String>?>(null) }
     var voiceConversation by remember { mutableStateOf(false) }
     var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
     var liveVoiceTranscript by remember { mutableStateOf("") }
@@ -296,6 +305,29 @@ fun ChatScreen(nav: NavHostController) {
                     .joinToString(" ")
                     .take(MAX_CHAT_CHARS)
                 inputError = null
+            }
+        }
+    }
+
+    val saveResponseLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/markdown"),
+    ) { uri ->
+        val pending = pendingResponseSave
+        pendingResponseSave = null
+        if (uri != null && pending != null) {
+            scope.launch {
+                val saved = runCatching {
+                    withContext(Dispatchers.IO) {
+                        val stream = context.contentResolver.openOutputStream(uri)
+                            ?: error("Unable to open the selected file")
+                        stream.bufferedWriter(Charsets.UTF_8).use { it.write(pending.second) }
+                    }
+                }.isSuccess
+                Toast.makeText(
+                    context,
+                    if (saved) "Response saved" else "Could not save response",
+                    Toast.LENGTH_SHORT,
+                ).show()
             }
         }
     }
@@ -922,6 +954,18 @@ fun ChatScreen(nav: NavHostController) {
                         onAnswerCheck = { blockId, index -> answerCheck(msg.id, blockId, index) },
                         onVisualUpdate = { blockId, values -> updateVisual(msg.id, blockId, values) },
                         onToggleSpeech = { toggleSpeech(msg) },
+                        canRegenerate = !isStreaming && msg.role == "assistant" && messages.lastOrNull()?.id == msg.id,
+                        onRegenerate = { send("Please retry your answer to my previous request with a fresh, clearer explanation.") },
+                        onCopy = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Lyo response", msg.content))
+                            Toast.makeText(context, "Response copied", Toast.LENGTH_SHORT).show()
+                        },
+                        onSave = {
+                            pendingResponseSave = "lyo-response-" + msg.id.take(8) + ".md" to
+                                ("# Lyo response\n\n" + msg.content.trim() + "\n")
+                            saveResponseLauncher.launch(pendingResponseSave!!.first)
+                        },
                     )
                 }
             }
@@ -1138,6 +1182,10 @@ private fun MessageBubble(
     canSpeak: Boolean,
     speaking: Boolean,
     onToggleSpeech: () -> Unit,
+    canRegenerate: Boolean,
+    onRegenerate: () -> Unit,
+    onCopy: () -> Unit,
+    onSave: () -> Unit,
     onAnswerCheck: (blockId: String, selectedIndex: Int) -> Unit,
     onVisualUpdate: (blockId: String, values: Map<String, JsonElement>) -> Unit,
 ) {
@@ -1154,10 +1202,10 @@ private fun MessageBubble(
         },
     ) {
         val bubbleShape = RoundedCornerShape(
-            topStart = 18.dp,
-            topEnd = 18.dp,
-            bottomStart = if (isUser) 18.dp else 4.dp,
-            bottomEnd = if (isUser) 4.dp else 18.dp,
+            topStart = if (isUser) 18.dp else 24.dp,
+            topEnd = if (isUser) 18.dp else 24.dp,
+            bottomStart = if (isUser) 18.dp else 24.dp,
+            bottomEnd = if (isUser) 4.dp else 24.dp,
         )
         val bubbleModifier = Modifier
             .then(
@@ -1171,7 +1219,10 @@ private fun MessageBubble(
                     .background(Surface)
                     .border(1.dp, BorderColor, bubbleShape)
             }
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(
+                horizontal = if (isUser) 14.dp else 18.dp,
+                vertical = if (isUser) 10.dp else 16.dp,
+            )
 
         Column(modifier = bubbleModifier) {
             if (showTyping) {
@@ -1257,24 +1308,62 @@ private fun MessageBubble(
                     )
                 }
 
-                if (canSpeak) {
-                    IconButton(
-                        onClick = onToggleSpeech,
+                if (!isUser && !showTyping && msg.content.isNotBlank()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier
-                            .align(Alignment.End)
-                            .padding(top = 4.dp)
-                            .size(32.dp),
+                            .fillMaxWidth()
+                            .padding(top = 14.dp)
+                            .horizontalScroll(rememberScrollState()),
                     ) {
-                        Icon(
-                            imageVector = if (speaking) Icons.Default.Stop else Icons.Default.VolumeUp,
-                            contentDescription = if (speaking) "Stop reading" else "Read response aloud",
-                            tint = LyoPurple,
-                            modifier = Modifier.size(18.dp),
+                        ResponseAction(
+                            label = "Copy",
+                            icon = Icons.Default.ContentCopy,
+                            onClick = onCopy,
+                        )
+                        ResponseAction(
+                            label = if (speaking) "Stop" else "Listen",
+                            icon = if (speaking) Icons.Default.Stop else Icons.Default.VolumeUp,
+                            enabled = canSpeak,
+                            onClick = onToggleSpeech,
+                        )
+                        ResponseAction(
+                            label = "Try again",
+                            icon = Icons.Default.Refresh,
+                            enabled = canRegenerate,
+                            onClick = onRegenerate,
+                        )
+                        ResponseAction(
+                            label = "Save",
+                            icon = Icons.Default.Download,
+                            onClick = onSave,
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ResponseAction(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 9.dp)
+            .alpha(if (enabled) 1f else 0.35f),
+    ) {
+        Icon(imageVector = icon, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(15.dp))
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = TextPrimary, maxLines = 1)
     }
 }
 
