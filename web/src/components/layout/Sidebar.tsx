@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth-store';
+import { COMMUNITY_LAUNCH_ENABLED } from '@/lib/launch-features';
 import CreateSheet from '@/components/create/CreateSheet';
 import {
   NAV,
@@ -63,14 +64,17 @@ export function Sidebar() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (!isRailShortcut(event)) return;
+      if (isActiveHref('/classroom', pathname) || !isRailShortcut(event)) return;
       event.preventDefault();
       toggle();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pathname]);
+
+  // Keep the active lesson in its own focused layout.
+  if (isActiveHref('/classroom', pathname)) return null;
 
   const open = !collapsed;
   const profileActive = isActiveHref(NAV.profile.href, pathname);
@@ -145,7 +149,7 @@ export function Sidebar() {
 
         {/* ---- Nav ---- */}
         <nav aria-label="Main" className="flex flex-1 flex-col gap-[3px] overflow-y-auto px-2.5 no-scrollbar">
-          {SIDEBAR_ITEMS.map((item) => {
+          {SIDEBAR_ITEMS.filter((item) => item.key !== 'community' || COMMUNITY_LAUNCH_ENABLED).map((item) => {
             const active = item.action === 'create' ? false : isActiveHref(item.href, pathname);
             const Icon = NAV_ICONS[item.key as keyof typeof NAV_ICONS];
             const isLyo = item.key === 'askLyo';

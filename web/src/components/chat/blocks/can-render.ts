@@ -1,5 +1,6 @@
 import { parseTeachingVisual } from '@/lib/teaching-activity.mjs';
 import { canRenderExplorable } from '@/lib/explorable.mjs';
+import { slideRows } from '@/lib/study-material.mjs';
 import type { ChatBlock } from '@/types';
 
 /**
@@ -64,6 +65,10 @@ export function canRenderBlock(block: ChatBlock | null | undefined): boolean {
       if (block.subtype === 'studyPlan') {
         return Array.isArray(content.schedule) && content.schedule.length > 0;
       }
+      // Delegated, like explorables above: LessonSlidesBlock draws exactly
+      // these rows, so a block carrying `[{}]` cannot pass here and then
+      // render nothing behind a hidden prose fallback.
+      if (block.subtype === 'slides') return slideRows(content).length > 0;
       if (block.subtype === 'studyNotes') {
         return Array.isArray(content.sections) && content.sections.length > 0;
       }

@@ -19,7 +19,9 @@
  */
 
 /** What the learner asked for. */
-export const STUDY_ASKS = Object.freeze(['flashcards', 'studyPlan', 'notes', 'unrelated']);
+export const STUDY_ASKS = Object.freeze([
+  'flashcards', 'studyPlan', 'notes', 'slides', 'unrelated',
+]);
 
 /**
  * How many cards the learner is given at a time.
@@ -69,6 +71,13 @@ const PLAN_PHRASES = [
   'study plan', 'study schedule', 'revision plan', 'revision schedule',
   'study timetable', 'plan to study', 'schedule to study',
 ];
+// Every phrase names a slide or a presentation. "present this" alone did not,
+// and "present this argument fairly" is a request for prose — it would have
+// become a deck the moment the reply had two headings.
+const SLIDES_PHRASES = [
+  'slides', 'slide deck', 'slideshow', 'slide show',
+  'presentation on', 'presentation about', 'as a presentation',
+];
 const NOTES_PHRASES = [
   'study material', 'study materials', 'study guide', 'study notes', 'study sheet',
   'cheat sheet', 'revision notes', 'summary notes', 'notes on', 'notes for',
@@ -82,6 +91,9 @@ export function classifyStudyAsk(userAsk) {
   const text = String(userAsk || '').toLowerCase();
   if (FLASHCARD_PHRASES.some((phrase) => text.includes(phrase))) return 'flashcards';
   if (PLAN_PHRASES.some((phrase) => text.includes(phrase))) return 'studyPlan';
+  // Before notes: a deck of slides and a page of notes are both built from
+  // headings, and the learner asked for the one they asked for.
+  if (SLIDES_PHRASES.some((phrase) => text.includes(phrase))) return 'slides';
   if (NOTES_PHRASES.some((phrase) => text.includes(phrase))) return 'notes';
   return 'unrelated';
 }
@@ -115,7 +127,8 @@ export function extractStudyBlocks(reply, userAsk, idPrefix = 'study') {
     fromFencedJSON(text) ??
     ((ask === 'flashcards' || selfLabelled) ? deckFromMarkdown(text, userAsk) : null) ??
     (ask === 'studyPlan' ? planFromMarkdown(text) : null) ??
-    (ask === 'notes' ? notesFromMarkdown(text) : null);
+    (ask === 'notes' ? notesFromMarkdown(text) : null) ??
+    (ask === 'slides' ? slidesFromMarkdown(text) : null);
 
   if (!found) return null;
 
@@ -129,6 +142,78 @@ export function extractStudyBlocks(reply, userAsk, idPrefix = 'study') {
   }
   blocks.push({ ...found.block, id: `${idPrefix}-${found.block.subtype}` });
   return { blocks, displayText: found.displayText };
+}
+
+// ─── Whether a turn still needs study material ───────────────────────────────
+
+/**
+ * Whether a block is study material the backend already supplied.
+ *
+ * Only these suppress the fallback. An ordinary text or lesson block must not:
+ * a turn that happens to arrive as blocks is still a turn whose reply may be
+ * describing a deck in prose, and treating "has any block at all" as "already
+ * handled" is what left a learner looking at a paragraph.
+ */
+export function isStudyBlock(block) {
+  if (!block || typeof block !== 'object') return false;
+  if (block.type === 'flashcard' || block.type === 'quiz') return true;
+  return (
+    block.type === 'interactive' &&
+    (block.subtype === 'studyPlan' || block.subtype === 'studyNotes')
+  );
+}
+
+/** Whether the turn already carries study material of its own. */
+export function hasStudyBlock(blocks) {
+  return Array.isArray(blocks) && blocks.some(isStudyBlock);
+}
+
+/**
+ * The blocks a turn should end up with once its deck has been lifted out.
+ *
+ * When the turn already carries blocks, the text block the deck was parsed
+ * from has to be *replaced*, not kept beside it: it holds the same Front/Back
+ * prose the cards now show, so appending the deck renders every card twice —
+ * the paragraph the deck exists to replace, with a deck underneath it.
+ *
+ * Only a text block holding the whole reply is swapped. When a turn splits its
+ * prose across several blocks there is no way to tell which parts the cards
+ * came from, so they are all kept: showing something twice is recoverable,
+ * deleting a learner's lesson is not.
+ *
+ * @returns the new block list, or null when there is nothing to add
+ */
+export function mergeStudyBlocks(existingBlocks, extraction, reply) {
+  if (!extraction || !Array.isArray(extraction.blocks)) return null;
+
+  const lead = extraction.blocks.find((block) => block && block.type === 'text') ?? null;
+  const study = extraction.blocks.filter((block) => block && block.type !== 'text');
+  if (!study.length) return null;
+
+  const existing = Array.isArray(existingBlocks) ? existingBlocks : [];
+  if (!existing.length) return [...extraction.blocks];
+
+  const consumed = String(reply || '').trim();
+  let swapped = false;
+  const kept = [];
+
+  for (const block of existing) {
+    const text =
+      block && block.type === 'text' && typeof block.content?.text === 'string'
+        ? block.content.text.trim()
+        : '';
+    if (!swapped && text && text === consumed) {
+      swapped = true;
+      // The leftover framing takes its place, or it goes entirely.
+      if (lead) {
+        kept.push({ ...block, content: { ...block.content, text: lead.content.text } });
+      }
+      continue;
+    }
+    kept.push(block);
+  }
+
+  return [...kept, ...study];
 }
 
 // ─── Growing a deck ──────────────────────────────────────────────────────────
@@ -647,7 +732,12 @@ function taskKind(title) {
 
 // ─── Notes from Markdown ─────────────────────────────────────────────────────
 
-function notesFromMarkdown(reply) {
+/**
+ * The reply split on its headings: the prose before the first one, then a
+ * section per heading. Shared by notes and slides, which are the same reading
+ * of a reply presented two ways.
+ */
+function splitSections(reply) {
   const lines = reply.split(/\r?\n/);
   const sections = [];
   const lead = [];
@@ -679,6 +769,11 @@ function notesFromMarkdown(reply) {
   }
   closeSection();
 
+  return { lead, sections };
+}
+
+function notesFromMarkdown(reply) {
+  const { lead, sections } = splitSections(reply);
   if (sections.length < MIN_NOTE_SECTIONS) return null;
 
   return {
@@ -689,6 +784,117 @@ function notesFromMarkdown(reply) {
       content: { title: firstHeading(reply) ?? 'Study notes', sections },
     },
   };
+}
+
+/**
+ * The slides in a block that are worth drawing.
+ *
+ * Shared by `LessonSlidesBlock` and `can-render`, deliberately: a block
+ * carrying `[{}]` is a non-empty array that renders nothing, and if the two
+ * disagree the turn hides its prose behind an empty bubble.
+ */
+export function slideRows(content) {
+  const rows = Array.isArray(content?.slides) ? content.slides : [];
+  return rows
+    .map((row) => (row ?? {}))
+    .map((row) => ({
+      title: typeof row.title === 'string' ? row.title : '',
+      body: typeof row.body === 'string' ? row.body : '',
+    }))
+    .filter((row) => row.title || row.body);
+}
+
+// ─── Slides from Markdown ────────────────────────────────────────────────────
+
+/** Fewest slides worth presenting. One slide is a paragraph. */
+const MIN_SLIDES = 2;
+/** Past this, a "slide" is a page of text and belongs in notes. */
+const MAX_SLIDE_BODY = 900;
+
+/** A line that is only a rule: the classic Markdown slide break. */
+const SLIDE_BREAK = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+
+/**
+ * A reply presented as slides.
+ *
+ * Two shapes, in the order a reply is likely to use them: explicit `---`
+ * breaks, which mean slides and nothing else, then headings, which are how a
+ * model usually structures a walkthrough it was asked to present.
+ */
+function slidesFromMarkdown(reply) {
+  const slides = fromSlideBreaks(reply) ?? fromHeadings(reply);
+  if (!slides || slides.length < MIN_SLIDES) return null;
+  if (slides.some((slide) => slide.body.length > MAX_SLIDE_BODY)) return null;
+
+  // The reply's first heading is usually the first slide's own title, and a
+  // deck headed "What it is" above a slide headed "What it is" reads as a
+  // mistake. Only a heading that is not already on a slide names the deck.
+  const heading = firstHeading(reply);
+  const title = heading && heading !== slides[0].title ? heading : 'Slides';
+
+  return {
+    // The deck carries the lesson, so the bubble above it just introduces it.
+    displayText: '',
+    block: {
+      type: 'interactive',
+      subtype: 'slides',
+      content: { title, slides },
+    },
+  };
+}
+
+function fromSlideBreaks(reply) {
+  const lines = reply.split(/\r?\n/);
+  if (!lines.some((line) => SLIDE_BREAK.test(line))) return null;
+
+  const chunks = [];
+  let current = [];
+  for (const line of lines) {
+    if (SLIDE_BREAK.test(line)) {
+      chunks.push(current);
+      current = [];
+      continue;
+    }
+    current.push(line);
+  }
+  chunks.push(current);
+
+  const slides = [];
+  for (const chunk of chunks) {
+    const slide = slideFromLines(chunk);
+    if (slide) slides.push(slide);
+  }
+  return slides.length ? slides : null;
+}
+
+function fromHeadings(reply) {
+  const { sections } = splitSections(reply);
+  return sections.length ? sections.map((s) => ({ title: s.title, body: s.body })) : null;
+}
+
+/** One chunk of a break-separated reply, titled by its heading if it has one. */
+function slideFromLines(lines) {
+  const kept = lines.map((line) => String(line || '').trimEnd());
+  while (kept.length && !kept[0].trim()) kept.shift();
+  while (kept.length && !kept[kept.length - 1].trim()) kept.pop();
+  if (!kept.length) return null;
+
+  let title = null;
+  const heading = sectionHeading(kept[0].trim()) ?? headingOneTitle(kept[0].trim());
+  if (heading) {
+    title = heading;
+    kept.shift();
+    while (kept.length && !kept[0].trim()) kept.shift();
+  }
+
+  const body = kept.join('\n').trim();
+  if (!title && !body) return null;
+  return { title: title ?? '', body };
+}
+
+/** `sectionHeading` deliberately ignores a single `#`; a slide title may use one. */
+function headingOneTitle(line) {
+  return line.startsWith('#') ? tidy(line.replace(/^#+/, '')) : null;
 }
 
 function sectionHeading(line) {

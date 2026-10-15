@@ -20,6 +20,7 @@ import {
 import CheckBlock from './CheckBlock';
 import ExplorableBlock from './ExplorableBlock';
 import FlashcardDeckBlock from './FlashcardDeckBlock';
+import LessonSlidesBlock from './LessonSlidesBlock';
 import TeachingVisualBlock from './TeachingVisualBlock';
 import { parseTeachingVisual } from '@/lib/teaching-activity.mjs';
 import { MermaidView, ChartView } from '@/components/classroom/BoardElementView';
@@ -494,6 +495,9 @@ export default function BlockRenderer({
             }
             if (block.subtype === 'studyPlan') {
               return <StudyPlanBlock key={block.id} block={block} />;
+            }
+            if (block.subtype === 'slides') {
+              return <LessonSlidesBlock key={block.id} block={block} />;
             }
             if (block.subtype === 'studyNotes') {
               return <StudyNotesBlock key={block.id} block={block} />;

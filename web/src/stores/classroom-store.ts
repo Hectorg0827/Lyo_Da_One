@@ -18,6 +18,7 @@ import { updateCourseProgress } from '@/lib/stack';
 import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.mjs';
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
 import { parseBoardDocument, presentationRoleFor, type BoardDocument, type PresentationRole } from '@/lib/board-presentation.mjs';
+import { resolveCommonsImage } from '@/lib/commons-image.mjs';
 import type {
   ClassroomContractConnection,
   ClassroomMode,
@@ -491,47 +492,6 @@ function classifyBoardContent(content: string): BoardElement {
   return { id, kind: 'chalk', text: trimmed };
 }
 
-/** Resolve an image query via Wikimedia Commons (free, keyless, CORS-open). */
-async function resolveImage(query: string): Promise<{
-  url: string;
-  attribution: string;
-  sourceUrl?: string;
-} | null> {
-  try {
-    const params = new URLSearchParams({
-      action: 'query',
-      generator: 'search',
-      gsrsearch: `filetype:bitmap ${query}`,
-      gsrlimit: '1',
-      gsrnamespace: '6',
-      prop: 'imageinfo|info',
-      inprop: 'url',
-      iiprop: 'url|extmetadata',
-      iiurlwidth: '760',
-      format: 'json',
-      origin: '*',
-    });
-    const res = await fetch(`https://commons.wikimedia.org/w/api.php?${params}`);
-    const data = await res.json();
-    const pages = data?.query?.pages;
-    if (!pages) return null;
-    const first = Object.values(pages)[0] as {
-      title?: string;
-      canonicalurl?: string;
-      imageinfo?: { thumburl?: string; url?: string }[];
-    };
-    const info = first?.imageinfo?.[0];
-    const url = info?.thumburl || info?.url;
-    return url ? {
-      url,
-      attribution: first.title || 'Wikimedia Commons',
-      sourceUrl: first.canonicalurl,
-    } : null;
-  } catch {
-    return null;
-  }
-}
-
 export const useClassroomStore = create<ClassroomStore>((set, get) => {
   // ── helpers ──
 
@@ -813,7 +773,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           const query = (turn.query || turn.content || '').trim();
           const el: BoardElement = { id: nextId(), kind: 'image', url: null, caption: turn.caption, query };
           addBoardElement(el);
-          void resolveImage(query).then((img) => {
+          void resolveCommonsImage(query).then((img) => {
             set((s) => ({
               board: img
                 ? s.board.map((b) => (
