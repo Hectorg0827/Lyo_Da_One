@@ -20,3 +20,6 @@ export function expandVisualBlocks(
   blocks: readonly ChatBlock[] | null | undefined,
   idPrefix?: string,
 ): ChatBlock[] | null;
+
+/** The thing the learner explicitly asked to see, or null. */
+export function imageAsk(userText: string | null | undefined): string | null;

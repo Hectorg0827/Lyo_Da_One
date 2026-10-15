@@ -28,7 +28,8 @@ import {
   moreCardsPrompt,
   parseMoreCards,
 } from '@/lib/study-material.mjs';
-import { expandVisualBlocks } from '@/lib/teaching-visuals.mjs';
+import { expandVisualBlocks, imageAsk } from '@/lib/teaching-visuals.mjs';
+import { resolveCommonsImage } from '@/lib/commons-image.mjs';
 
 export type GenerationActivity = 'thinking' | 'searching' | 'response' | 'course';
 
@@ -644,6 +645,59 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       patchAiMessage({ blocks: blocks as ChatBlock[] });
     };
 
+    /**
+     * Find a picture, but only when the learner asked to see one.
+     *
+     * The same Wikimedia Commons lookup the Classroom board uses. It runs in
+     * the browser, keyless, and is allowed to fail: an illustration is a
+     * nicety, so a miss is silence rather than an error.
+     *
+     * Gated on an explicit ask because the lookup returns the top search hit
+     * for a phrase. That is a good picture of a chloroplast and a poor one of
+     * "inflation", and nobody wants a stranger's photograph appearing in the
+     * middle of a lesson they did not ask to illustrate.
+     */
+    const attachLearnerImage = async () => {
+      const topic = imageAsk(userMessage.content);
+      if (!topic) return;
+
+      const message = get().conversations
+        .find((c) => c.id === convoId)?.messages
+        .find((m) => m.id === aiMessageId);
+      if (!message) return;
+
+      const existing = Array.isArray(message.blocks) ? message.blocks : [];
+      // The reply already illustrated itself — leave it be.
+      if (existing.some((block) => block?.type === 'media')) return;
+
+      const found = await resolveCommonsImage(topic);
+      if (!found) return;
+
+      // Re-read: the turn may have gained blocks while the lookup was away.
+      const current = get().conversations
+        .find((c) => c.id === convoId)?.messages
+        .find((m) => m.id === aiMessageId);
+      if (!current || current.blocks?.some((block) => block?.type === 'media')) return;
+
+      const blocks = Array.isArray(current.blocks) ? [...current.blocks] : [];
+      if (!blocks.length && current.content) {
+        blocks.push({
+          id: `image-${aiMessageId}-prose`,
+          type: 'text',
+          content: { text: current.content },
+        } as ChatBlock);
+      }
+      blocks.push({
+        id: `image-${aiMessageId}`,
+        type: 'media',
+        subtype: 'image',
+        content: { url: found.url, alt: topic, caption: found.attribution },
+        metadata: found.sourceUrl ? { source_url: found.sourceUrl } : undefined,
+      } as ChatBlock);
+
+      patchAiMessage({ blocks });
+    };
+
     const attachActionsToAiMessage = (labels: string[]) => {
       // Same reason as blocks: a turn that produced only follow-up chips is
       // still a real turn, and must not be wiped as an empty response.
@@ -1010,6 +1064,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           } else {
             attachStudyMaterialFallback();
             attachTeachingVisuals();
+            // Asynchronous on purpose: the turn is finished either way, and
+            // the picture drops in when Commons answers.
+            void attachLearnerImage();
             set((state) => ({
               isGenerating: false,
               generationProgress: 0,

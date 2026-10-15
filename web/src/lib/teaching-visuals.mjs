@@ -13,6 +13,40 @@
  * diagram out can never cost the learner a sentence.
  */
 
+// ─── Asking to see something ─────────────────────────────────────────────────
+
+/**
+ * Patterns that mean "show me what this looks like", and nothing looser.
+ *
+ * Deliberately narrow. Fetching a stranger's photograph into a lesson on the
+ * strength of a guess is worse than showing none, and a top search hit for an
+ * abstract topic is rarely the picture anyone wanted — so the learner has to
+ * actually ask. "Diagram" is absent on purpose: a diagram is drawn from the
+ * reply, not searched for.
+ */
+const IMAGE_ASKS = [
+  /\b(?:show|find|get|give)\s+(?:me\s+)?(?:an?\s+)?(?:picture|photo|photograph|image)s?\s+(?:of|for)\s+(.+)/i,
+  /\b(?:picture|photo|photograph|image)s?\s+of\s+(.+)/i,
+  /\bwhat\s+(?:does|do)\s+(.+?)\s+look\s+like\b/i,
+];
+
+/** The thing the learner asked to see, or null when they did not ask. */
+export function imageAsk(userText) {
+  const text = String(userText || '').trim();
+  if (!text) return null;
+
+  for (const pattern of IMAGE_ASKS) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    const topic = match[1]
+      .replace(/[\s"'?.!,;:]+$/g, '')
+      .replace(/^["']+/, '')
+      .trim();
+    if (topic.length >= 2 && topic.length <= 80) return topic;
+  }
+  return null;
+}
+
 /** Longest diagram source worth drawing; past this it is a code listing. */
 const MAX_DIAGRAM_CHARS = 4000;
 
