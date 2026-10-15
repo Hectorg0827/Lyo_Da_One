@@ -71,10 +71,12 @@ const PLAN_PHRASES = [
   'study plan', 'study schedule', 'revision plan', 'revision schedule',
   'study timetable', 'plan to study', 'schedule to study',
 ];
+// Every phrase names a slide or a presentation. "present this" alone did not,
+// and "present this argument fairly" is a request for prose — it would have
+// become a deck the moment the reply had two headings.
 const SLIDES_PHRASES = [
-  'in slides', 'as slides', 'slide deck', 'slideshow', 'slide show',
-  'make slides', 'build slides', 'present this', 'presentation on',
-  'presentation about', 'present it as', 'turn this into slides',
+  'slides', 'slide deck', 'slideshow', 'slide show',
+  'presentation on', 'presentation about', 'as a presentation',
 ];
 const NOTES_PHRASES = [
   'study material', 'study materials', 'study guide', 'study notes', 'study sheet',
@@ -782,6 +784,24 @@ function notesFromMarkdown(reply) {
       content: { title: firstHeading(reply) ?? 'Study notes', sections },
     },
   };
+}
+
+/**
+ * The slides in a block that are worth drawing.
+ *
+ * Shared by `LessonSlidesBlock` and `can-render`, deliberately: a block
+ * carrying `[{}]` is a non-empty array that renders nothing, and if the two
+ * disagree the turn hides its prose behind an empty bubble.
+ */
+export function slideRows(content) {
+  const rows = Array.isArray(content?.slides) ? content.slides : [];
+  return rows
+    .map((row) => (row ?? {}))
+    .map((row) => ({
+      title: typeof row.title === 'string' ? row.title : '',
+      body: typeof row.body === 'string' ? row.body : '',
+    }))
+    .filter((row) => row.title || row.body);
 }
 
 // ─── Slides from Markdown ────────────────────────────────────────────────────

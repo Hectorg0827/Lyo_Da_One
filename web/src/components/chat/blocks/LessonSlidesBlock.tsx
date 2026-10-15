@@ -12,6 +12,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { ChevronLeft, ChevronRight, Presentation } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { slideRows } from '@/lib/study-material.mjs';
 import type { ChatBlock } from '@/types';
 import {
   markdownComponents,
@@ -50,16 +51,8 @@ export default function LessonSlidesBlock({ block }: { block: ChatBlock }) {
   const content = (block.content ?? {}) as Record<string, unknown>;
   const title = typeof content.title === 'string' ? content.title : 'Slides';
 
-  const slides = useMemo<Slide[]>(() => {
-    const rows = Array.isArray(content.slides) ? content.slides : [];
-    return rows
-      .map((row) => (row ?? {}) as Record<string, unknown>)
-      .map((row) => ({
-        title: typeof row.title === 'string' ? row.title : '',
-        body: typeof row.body === 'string' ? row.body : '',
-      }))
-      .filter((row) => row.title || row.body);
-  }, [content.slides]);
+  // The same helper `can-render` consults, so what it promises is what is drawn.
+  const slides = useMemo<Slide[]>(() => slideRows(content), [content]);
 
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState(1);

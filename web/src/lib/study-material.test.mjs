@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   DECK_BATCH_SIZE,
+  STUDY_ASKS,
   DECK_MAX_CARDS,
   MIN_INLINE_CARDS,
   balancedObject,
@@ -14,6 +15,7 @@ import {
   mergeStudyBlocks,
   moreCardsPrompt,
   nextDeckStep,
+  slideRows,
   parseMoreCards,
 } from './study-material.mjs';
 
@@ -552,4 +554,54 @@ test('a heading above the slides does name the deck', () => {
     '## Where', 'Chloroplast.'].join('\n');
   const deck = slidesOf(extractStudyBlocks(reply, 'present this as slides'));
   assert.equal(deck.content.title, 'Photosynthesis');
+});
+
+test('asking for prose is never a slide deck', () => {
+  // "present this" alone matched before, so a fair-minded argument with two
+  // headings was silently replaced by a deck nobody asked for.
+  const reply = ['## For', 'One side.', '', '## Against', 'The other side.'].join('\n');
+  for (const ask of [
+    'present this argument fairly',
+    'present it as a report',
+    'present the findings',
+    'represent this data',
+  ]) {
+    assert.equal(classifyStudyAsk(ask), 'unrelated', ask);
+    assert.equal(extractStudyBlocks(reply, ask), null, ask);
+  }
+});
+
+test('the slide asks that should work still do', () => {
+  for (const ask of [
+    'present this as slides',
+    'make slides on the water cycle',
+    'turn this into a slideshow',
+    'give me a presentation on photosynthesis',
+    'show it as a presentation',
+  ]) {
+    assert.equal(classifyStudyAsk(ask), 'slides', ask);
+  }
+});
+
+test('slides is in the exported ask list', () => {
+  assert.ok(STUDY_ASKS.includes('slides'));
+});
+
+test('a block whose slides draw nothing is not renderable', () => {
+  // `[{}]` is a non-empty array. Accepting it hid the prose behind a bubble
+  // the renderer then drew nothing into.
+  assert.deepEqual(slideRows({ slides: [{}] }), []);
+  assert.deepEqual(slideRows({ slides: [null] }), []);
+  assert.deepEqual(slideRows({ slides: [] }), []);
+  assert.deepEqual(slideRows({}), []);
+  assert.deepEqual(slideRows(null), []);
+  assert.deepEqual(slideRows({ slides: [{ title: 7, body: {} }] }), []);
+});
+
+test('a slide with either a title or a body is drawable', () => {
+  assert.equal(slideRows({ slides: [{ title: 'A', body: '' }] }).length, 1);
+  assert.equal(slideRows({ slides: [{ body: 'just prose' }] }).length, 1);
+  assert.deepEqual(slideRows({ slides: [{}, { title: 'Keeps' }] }), [
+    { title: 'Keeps', body: '' },
+  ]);
 });

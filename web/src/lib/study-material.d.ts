@@ -1,6 +1,6 @@
 import type { ChatBlock } from '@/types';
 
-export type StudyAsk = 'flashcards' | 'studyPlan' | 'notes' | 'unrelated';
+export type StudyAsk = 'flashcards' | 'studyPlan' | 'notes' | 'slides' | 'unrelated';
 
 export interface StudyCard {
   front: string;
@@ -80,3 +80,11 @@ export function mergeStudyBlocks(
   extraction: StudyExtraction | null | undefined,
   reply: string | null | undefined,
 ): ChatBlock[] | null;
+
+export interface LessonSlide {
+  title: string;
+  body: string;
+}
+
+/** The slides in a block worth drawing. Shared by the renderer and can-render. */
+export function slideRows(content: unknown): LessonSlide[];
