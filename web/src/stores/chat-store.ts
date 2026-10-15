@@ -22,10 +22,14 @@ import {
 import {
   DECK_MAX_CARDS,
   extractStudyBlocks,
+  hasStudyBlock,
   mergeCards,
+  mergeStudyBlocks,
   moreCardsPrompt,
   parseMoreCards,
 } from '@/lib/study-material.mjs';
+import { expandVisualBlocks, imageAsk } from '@/lib/teaching-visuals.mjs';
+import { resolveCommonsImage } from '@/lib/commons-image.mjs';
 
 export type GenerationActivity = 'thinking' | 'searching' | 'response' | 'course';
 
@@ -588,14 +592,110 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const attachStudyMaterialFallback = () => {
       const conversation = get().conversations.find((c) => c.id === convoId);
       const message = conversation?.messages.find((m) => m.id === aiMessageId);
-      if (!message || (Array.isArray(message.blocks) && message.blocks.length > 0)) return;
+      if (!message) return;
+
+      // Only the backend's own study content wins. Bailing on *any* block was
+      // too strict: the backend sends a `smart_blocks` text block on ordinary
+      // turns, so a reply plainly describing a deck got none — which is what
+      // "I asked for flashcards and got nothing" looked like from outside.
+      const existing = Array.isArray(message.blocks) ? message.blocks : [];
+      if (hasStudyBlock(existing)) return;
 
       // Read the reply off the message, not the accumulator: a turn whose text
       // arrived through any path other than a delta still has it here.
       const reply = message.content || accumulated;
       const extracted = extractStudyBlocks(reply, userMessage.content, `study-${aiMessageId}`);
       if (!extracted) return;
-      patchAiMessage({ blocks: extracted.blocks as ChatBlock[] });
+
+      // The text block the deck was parsed from is replaced rather than kept:
+      // leaving it renders every card twice, once as the prose it came from.
+      const blocks = mergeStudyBlocks(existing, extracted, reply);
+      if (!blocks) return;
+
+      patchAiMessage({ blocks: blocks as ChatBlock[] });
+    };
+
+    /**
+     * Draw the diagrams, charts and images the reply wrote in Markdown.
+     *
+     * Additive and independent of the study pass: a diagram is a diagram
+     * whether or not the learner asked for flashcards, and every piece of
+     * prose around one is kept in place, so lifting a visual out can never
+     * cost a sentence.
+     */
+    const attachTeachingVisuals = () => {
+      const conversation = get().conversations.find((c) => c.id === convoId);
+      const message = conversation?.messages.find((m) => m.id === aiMessageId);
+      if (!message) return;
+
+      const existing = Array.isArray(message.blocks) ? message.blocks : [];
+      const reply = message.content || accumulated;
+      // With no blocks the prose lives in message.content, so hand the
+      // expander a block to split. It returns null when there is nothing
+      // to lift, and the plain bubble is left exactly as it was.
+      const source: ChatBlock[] = existing.length
+        ? existing
+        : reply
+          ? [{ id: `visual-${aiMessageId}-prose`, type: 'text', content: { text: reply } }]
+          : [];
+      if (!source.length) return;
+
+      const blocks = expandVisualBlocks(source, `visual-${aiMessageId}`);
+      if (!blocks) return;
+      patchAiMessage({ blocks: blocks as ChatBlock[] });
+    };
+
+    /**
+     * Find a picture, but only when the learner asked to see one.
+     *
+     * The same Wikimedia Commons lookup the Classroom board uses. It runs in
+     * the browser, keyless, and is allowed to fail: an illustration is a
+     * nicety, so a miss is silence rather than an error.
+     *
+     * Gated on an explicit ask because the lookup returns the top search hit
+     * for a phrase. That is a good picture of a chloroplast and a poor one of
+     * "inflation", and nobody wants a stranger's photograph appearing in the
+     * middle of a lesson they did not ask to illustrate.
+     */
+    const attachLearnerImage = async () => {
+      const topic = imageAsk(userMessage.content);
+      if (!topic) return;
+
+      const message = get().conversations
+        .find((c) => c.id === convoId)?.messages
+        .find((m) => m.id === aiMessageId);
+      if (!message) return;
+
+      const existing = Array.isArray(message.blocks) ? message.blocks : [];
+      // The reply already illustrated itself — leave it be.
+      if (existing.some((block) => block?.type === 'media')) return;
+
+      const found = await resolveCommonsImage(topic);
+      if (!found) return;
+
+      // Re-read: the turn may have gained blocks while the lookup was away.
+      const current = get().conversations
+        .find((c) => c.id === convoId)?.messages
+        .find((m) => m.id === aiMessageId);
+      if (!current || current.blocks?.some((block) => block?.type === 'media')) return;
+
+      const blocks = Array.isArray(current.blocks) ? [...current.blocks] : [];
+      if (!blocks.length && current.content) {
+        blocks.push({
+          id: `image-${aiMessageId}-prose`,
+          type: 'text',
+          content: { text: current.content },
+        } as ChatBlock);
+      }
+      blocks.push({
+        id: `image-${aiMessageId}`,
+        type: 'media',
+        subtype: 'image',
+        content: { url: found.url, alt: topic, caption: found.attribution },
+        metadata: found.sourceUrl ? { source_url: found.sourceUrl } : undefined,
+      } as ChatBlock);
+
+      patchAiMessage({ blocks });
     };
 
     const attachActionsToAiMessage = (labels: string[]) => {
@@ -963,6 +1063,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             recoverCanonicalConversation(convoId!);
           } else {
             attachStudyMaterialFallback();
+            attachTeachingVisuals();
+            // Asynchronous on purpose: the turn is finished either way, and
+            // the picture drops in when Commons answers.
+            void attachLearnerImage();
             set((state) => ({
               isGenerating: false,
               generationProgress: 0,

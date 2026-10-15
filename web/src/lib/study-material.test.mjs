@@ -3,14 +3,19 @@ import assert from 'node:assert/strict';
 
 import {
   DECK_BATCH_SIZE,
+  STUDY_ASKS,
   DECK_MAX_CARDS,
   MIN_INLINE_CARDS,
   balancedObject,
   classifyStudyAsk,
   extractStudyBlocks,
+  hasStudyBlock,
+  isStudyBlock,
   mergeCards,
+  mergeStudyBlocks,
   moreCardsPrompt,
   nextDeckStep,
+  slideRows,
   parseMoreCards,
 } from './study-material.mjs';
 
@@ -376,4 +381,227 @@ test('an empty deck asks for nothing', () => {
 test('batches continue after the first: card six asks again', () => {
   assert.equal(nextDeckStep({ index: 5, revealed: 6, total: 6 }), 'fetch');
   assert.equal(nextDeckStep({ index: 4, revealed: 6, total: 6 }), 'idle');
+});
+
+// ─── Whether a turn still needs study material ───────────────────────────────
+
+test('the backend\'s own study content suppresses the fallback', () => {
+  assert.ok(isStudyBlock({ type: 'flashcard', content: {} }));
+  assert.ok(isStudyBlock({ type: 'quiz', content: {} }));
+  assert.ok(isStudyBlock({ type: 'interactive', subtype: 'studyPlan', content: {} }));
+  assert.ok(isStudyBlock({ type: 'interactive', subtype: 'studyNotes', content: {} }));
+});
+
+test('an ordinary block does not', () => {
+  // This is the bug that made a deck never appear: the backend sends a text
+  // block on ordinary turns, and treating that as "already handled" left the
+  // learner with the paragraph they were trying to get away from.
+  assert.ok(!isStudyBlock({ type: 'text', content: { text: 'hello' } }));
+  assert.ok(!isStudyBlock({ type: 'dataViz', content: {} }));
+  assert.ok(!isStudyBlock({ type: 'interactive', subtype: 'explorable', content: {} }));
+  assert.ok(!isStudyBlock(null));
+});
+
+test('a turn carrying only text still needs its deck', () => {
+  assert.equal(hasStudyBlock([{ type: 'text', content: { text: 'Here are flashcards:' } }]), false);
+  assert.equal(hasStudyBlock([]), false);
+  assert.equal(hasStudyBlock(undefined), false);
+});
+
+test('a turn that already has a deck does not', () => {
+  assert.equal(
+    hasStudyBlock([
+      { type: 'text', content: { text: 'intro' } },
+      { type: 'flashcard', content: { cards: [] } },
+    ]),
+    true
+  );
+});
+
+// ─── Placing the deck among blocks the turn already has ──────────────────────
+
+const deckExtraction = {
+  displayText: 'Here you go!',
+  blocks: [
+    { id: 'study-lead', type: 'text', content: { text: 'Here you go!' } },
+    { id: 'study-deck', type: 'flashcard', subtype: 'deck', content: { cards: [] } },
+  ],
+};
+
+test('a turn with no blocks gets the lead and the deck', () => {
+  const merged = mergeStudyBlocks([], deckExtraction, 'anything');
+  assert.deepEqual(merged.map((block) => block.type), ['text', 'flashcard']);
+});
+
+test('the text block the deck came from is replaced, not kept beside it', () => {
+  // Keeping it renders every card twice: once as the prose the deck was parsed
+  // out of, once as the deck. That is the paragraph this feature removes.
+  const reply = 'Here you go!\n- Alpha: first\n- Beta: second\n- Gamma: third';
+  const existing = [{ id: 'b1', type: 'text', content: { text: reply } }];
+
+  const merged = mergeStudyBlocks(existing, deckExtraction, reply);
+
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].id, 'b1');
+  assert.equal(merged[0].content.text, 'Here you go!');
+  assert.ok(!merged[0].content.text.includes('Alpha'));
+  assert.equal(merged[1].type, 'flashcard');
+});
+
+test('with no leftover prose the original text block goes entirely', () => {
+  const reply = '- Alpha: first\n- Beta: second\n- Gamma: third';
+  const existing = [{ id: 'b1', type: 'text', content: { text: reply } }];
+  const bare = { displayText: '', blocks: [deckExtraction.blocks[1]] };
+
+  const merged = mergeStudyBlocks(existing, bare, reply);
+
+  assert.deepEqual(merged.map((block) => block.type), ['flashcard']);
+});
+
+test('blocks the deck did not come from are left alone', () => {
+  const reply = 'Here you go!';
+  const existing = [
+    { id: 'b1', type: 'dataViz', content: { source: 'x^2' } },
+    { id: 'b2', type: 'text', content: { text: 'a different paragraph' } },
+  ];
+
+  const merged = mergeStudyBlocks(existing, deckExtraction, reply);
+
+  assert.deepEqual(merged.map((block) => block.id), ['b1', 'b2', 'study-deck']);
+});
+
+test('an extraction with no study block adds nothing', () => {
+  const textOnly = { displayText: 'hi', blocks: [deckExtraction.blocks[0]] };
+  assert.equal(mergeStudyBlocks([], textOnly, 'hi'), null);
+  assert.equal(mergeStudyBlocks([], null, 'hi'), null);
+});
+
+// ─── Slides ──────────────────────────────────────────────────────────────────
+
+const slidesOf = (result) => result?.blocks.find((b) => b.subtype === 'slides');
+
+test('a headed walkthrough becomes slides when slides were asked for', () => {
+  const reply = [
+    '## What it is',
+    'Photosynthesis turns light into sugar.',
+    '',
+    '## Where it happens',
+    'Inside the chloroplast.',
+    '',
+    '## Why it matters',
+    'It feeds almost every food chain.',
+  ].join('\n');
+
+  const deck = slidesOf(extractStudyBlocks(reply, 'present this as slides'));
+  assert.equal(deck.content.slides.length, 3);
+  assert.equal(deck.content.slides[0].title, 'What it is');
+  assert.equal(deck.content.slides[2].body, 'It feeds almost every food chain.');
+});
+
+test('explicit --- breaks mean slides and keep their titles', () => {
+  const reply = ['# Intro', 'Light makes sugar.', '---', '# Where', 'The chloroplast.'].join('\n');
+  const deck = slidesOf(extractStudyBlocks(reply, 'make slides on photosynthesis'));
+  assert.deepEqual(deck.content.slides, [
+    { title: 'Intro', body: 'Light makes sugar.' },
+    { title: 'Where', body: 'The chloroplast.' },
+  ]);
+});
+
+test('the same reply is notes or slides depending on what was asked', () => {
+  // Both read a reply by its headings; the learner picks which they get.
+  const reply = ['## One', 'First point.', '', '## Two', 'Second point.'].join('\n');
+  assert.ok(slidesOf(extractStudyBlocks(reply, 'present this as slides')));
+  assert.equal(slidesOf(extractStudyBlocks(reply, 'give me study notes')), undefined);
+  assert.ok(extractStudyBlocks(reply, 'give me study notes').blocks.some(
+    (b) => b.subtype === 'studyNotes'));
+});
+
+test('one section is a paragraph, not a presentation', () => {
+  const reply = '## Only one\nA single point.';
+  assert.equal(extractStudyBlocks(reply, 'make slides'), null);
+});
+
+test('a reply with no structure is left alone', () => {
+  const reply = 'Photosynthesis turns light into sugar inside the chloroplast.';
+  assert.equal(extractStudyBlocks(reply, 'present this as slides'), null);
+});
+
+test('a wall of text per section is notes, not a slide', () => {
+  const wall = 'Light energy is captured and converted into chemical energy. '.repeat(20);
+  const reply = `## One\n${wall}\n\n## Two\n${wall}`;
+  assert.equal(extractStudyBlocks(reply, 'present this as slides'), null);
+});
+
+test('slides classification', () => {
+  assert.equal(classifyStudyAsk('present this as slides'), 'slides');
+  assert.equal(classifyStudyAsk('make slides on the water cycle'), 'slides');
+  assert.equal(classifyStudyAsk('turn this into slides'), 'slides');
+  // Still notes when notes were asked for.
+  assert.equal(classifyStudyAsk('give me study notes'), 'notes');
+  assert.equal(classifyStudyAsk('explain photosynthesis'), 'unrelated');
+});
+
+test('the deck is not headed with its own first slide title', () => {
+  // "What it is" above a slide headed "What it is" reads as a mistake.
+  const reply = ['## What it is', 'Light into sugar.', '', '## Where', 'Chloroplast.'].join('\n');
+  const deck = slidesOf(extractStudyBlocks(reply, 'present this as slides'));
+  assert.equal(deck.content.title, 'Slides');
+  assert.equal(deck.content.slides[0].title, 'What it is');
+});
+
+test('a heading above the slides does name the deck', () => {
+  const reply = ['# Photosynthesis', '', '## What it is', 'Light into sugar.', '',
+    '## Where', 'Chloroplast.'].join('\n');
+  const deck = slidesOf(extractStudyBlocks(reply, 'present this as slides'));
+  assert.equal(deck.content.title, 'Photosynthesis');
+});
+
+test('asking for prose is never a slide deck', () => {
+  // "present this" alone matched before, so a fair-minded argument with two
+  // headings was silently replaced by a deck nobody asked for.
+  const reply = ['## For', 'One side.', '', '## Against', 'The other side.'].join('\n');
+  for (const ask of [
+    'present this argument fairly',
+    'present it as a report',
+    'present the findings',
+    'represent this data',
+  ]) {
+    assert.equal(classifyStudyAsk(ask), 'unrelated', ask);
+    assert.equal(extractStudyBlocks(reply, ask), null, ask);
+  }
+});
+
+test('the slide asks that should work still do', () => {
+  for (const ask of [
+    'present this as slides',
+    'make slides on the water cycle',
+    'turn this into a slideshow',
+    'give me a presentation on photosynthesis',
+    'show it as a presentation',
+  ]) {
+    assert.equal(classifyStudyAsk(ask), 'slides', ask);
+  }
+});
+
+test('slides is in the exported ask list', () => {
+  assert.ok(STUDY_ASKS.includes('slides'));
+});
+
+test('a block whose slides draw nothing is not renderable', () => {
+  // `[{}]` is a non-empty array. Accepting it hid the prose behind a bubble
+  // the renderer then drew nothing into.
+  assert.deepEqual(slideRows({ slides: [{}] }), []);
+  assert.deepEqual(slideRows({ slides: [null] }), []);
+  assert.deepEqual(slideRows({ slides: [] }), []);
+  assert.deepEqual(slideRows({}), []);
+  assert.deepEqual(slideRows(null), []);
+  assert.deepEqual(slideRows({ slides: [{ title: 7, body: {} }] }), []);
+});
+
+test('a slide with either a title or a body is drawable', () => {
+  assert.equal(slideRows({ slides: [{ title: 'A', body: '' }] }).length, 1);
+  assert.equal(slideRows({ slides: [{ body: 'just prose' }] }).length, 1);
+  assert.deepEqual(slideRows({ slides: [{}, { title: 'Keeps' }] }), [
+    { title: 'Keeps', body: '' },
+  ]);
 });

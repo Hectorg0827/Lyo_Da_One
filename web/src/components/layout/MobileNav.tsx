@@ -10,6 +10,7 @@ import MascotAvatar from '@/components/chat/MascotAvatar';
 import CreateSheet from '@/components/create/CreateSheet';
 import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
 import { NAV, isActiveHref } from '@/lib/nav-items.mjs';
+import { COMMUNITY_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 // Mirrors iOS LivingHubTabBar (MainTabView.swift): two icon groups flanking
 // the center mascot FAB — Focus, Discover · Community, Create. Icon-only
@@ -25,7 +26,9 @@ const leftItems = [
   { href: NAV.discover.href, icon: Compass, label: NAV.discover.label },
 ];
 
-const rightItems = [{ href: NAV.community.href, icon: Users, label: NAV.community.label }];
+const rightItems = COMMUNITY_LAUNCH_ENABLED
+  ? [{ href: NAV.community.href, icon: Users, label: NAV.community.label }]
+  : [];
 
 function GhostTab({
   href,
@@ -73,7 +76,7 @@ export function MobileNav() {
 
   // The classroom has its own teacher presence and exit control. Keeping the
   // global mascot FAB here duplicates Lyo and occupies the answer area.
-  if (pathname.startsWith('/classroom')) {
+  if (isActiveHref('/classroom', pathname)) {
     return null;
   }
 
