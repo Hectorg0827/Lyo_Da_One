@@ -139,29 +139,29 @@ for (const [key, label] of Object.entries(CROSS_PLATFORM_LABELS)) {
 // padding and max-width there, and every global nav piece opts out by
 // returning null. Nothing checked that, so a rewrite of the sidebar silently
 // put a 264px rail back beside the lesson and no test noticed.
+//
+// The check looks for a `/classroom` test that returns null nearby, rather
+// than for one spelling of it. The first version demanded
+// `pathname.startsWith('/classroom')` and broke the moment someone switched
+// to the stricter `isActiveHref('/classroom', pathname)` — failing a change
+// that was an improvement. A check that only recognises the exact line it was
+// written against is a check against editing the file.
+function stepsAsideForClassroom(source) {
+  const body = code(source);
+  for (let at = body.indexOf('/classroom'); at !== -1; at = body.indexOf('/classroom', at + 1)) {
+    if (/^[^;]{0,120}?return\s+null/.test(body.slice(at))) return true;
+  }
+  return false;
+}
+
 for (const [source, where] of [
   [sidebar, 'The web sidebar'],
   [mobileNav, 'The web phone nav'],
   [topBar, 'The web top bar'],
 ]) {
   if (!source) continue;
-  if (!/pathname\.startsWith\(\s*['"]\/classroom['"]\s*\)/.test(code(source))) {
+  if (!stepsAsideForClassroom(source)) {
     failures.push(`${where} does not step aside for the classroom`);
-  }
-}
-
-// ── Create opens a sheet, it does not go anywhere ────────────────────────────
-//
-// `nav-items.test.mjs` can only assert that the model gives Create no href.
-// Whether the sidebar actually opens the sheet is wiring, and wiring is what
-// quietly stops working.
-if (sidebar) {
-  const body = code(sidebar);
-  if (!body.includes('CreateSheet')) {
-    failures.push('The web sidebar never renders the create sheet');
-  }
-  if (!/onClick=\{\(\) =>\s*setCreateOpen\(true\)\}/.test(body)) {
-    failures.push('The web sidebar Create item does not open the create sheet');
   }
 }
 

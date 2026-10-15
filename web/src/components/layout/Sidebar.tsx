@@ -73,23 +73,16 @@ export function Sidebar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
-  // Keep the active lesson in its own focused layout.
+  // Keep the active lesson in its own focused layout. `MainContent` treats
+  // the classroom as immersive and both `TopBar` and `MobileNav` hide
+  // themselves there, so a 264px rail beside a lesson is exactly the chrome
+  // the rest of the shell suppresses. After the hooks, never before: every
+  // hook above still runs on every route, so this only skips the markup.
   if (isActiveHref('/classroom', pathname)) return null;
 
   const open = !collapsed;
   const profileActive = isActiveHref(NAV.profile.href, pathname);
   const settingsActive = isActiveHref(NAV.settings.href, pathname);
-
-  // The classroom owns a focused layout. `MainContent` treats it as immersive
-  // and both `TopBar` and `MobileNav` hide themselves there, so a 264px rail
-  // beside an active lesson is exactly the chrome the rest of the shell
-  // deliberately suppresses. The rewrite of this file lost that opt-out.
-  //
-  // After the hooks, never before: every hook above still runs on every route,
-  // so this only skips the markup.
-  if (pathname.startsWith('/classroom')) {
-    return null;
-  }
 
   return (
     <>
