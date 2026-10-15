@@ -9,6 +9,7 @@ import { canResumeClassroom } from './classroom-contract.mjs';
 import * as learner from './learner-model.mjs';
 import * as visuals from './teaching-activity.mjs';
 import * as boardPresentation from './board-presentation.mjs';
+import * as commonsImage from './commons-image.mjs';
 
 function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' } } = {}) {
   const sockets = [], timers = [], canceled = [], intervals = [];
@@ -33,6 +34,10 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     '@/lib/classroom-contract.mjs': contract, '@/lib/learner-model.mjs': learner,
     '@/lib/teaching-activity.mjs': visuals, '@/lib/board-presentation.mjs': boardPresentation, '@/lib/classroom-sounds': { playSound() {} },
     '@/lib/stack': { updateCourseProgress: async () => {} },
+    // The Commons lookup the board shares with Chat. The real module, not a
+    // stub: no test drives a board image, so it is never called, and a stub
+    // would hide the day one does.
+    '@/lib/commons-image.mjs': commonsImage,
   };
   // A real key/value store, not a stub that answers every key with a token:
   // the classroom now reads the session it last started out of the same
