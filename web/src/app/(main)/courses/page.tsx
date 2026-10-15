@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, BookOpen, Sparkles, X, Loader2, AlertCircle } from 'lucide-react';
 import { Course } from '@/types';
@@ -99,7 +98,6 @@ const DIFFICULTY_FILTERS: { id: DifficultyFilter; label: string }[] = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CoursesPage() {
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabId>('browse');
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
@@ -141,10 +139,6 @@ export default function CoursesPage() {
       return matchesSearch;
     });
   }, [tabCourses, searchQuery]);
-
-  const handleCourseClick = (course: Course) => {
-    router.push(`/courses/${course.id}`);
-  };
 
   const inProgressCount = courses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100).length;
   const completedCount = courses.filter((c) => c.progress === 100).length;
@@ -309,7 +303,6 @@ export default function CoursesPage() {
                   >
                     <CourseCard
                       course={course}
-                      onClick={() => handleCourseClick(course)}
                     />
                   </motion.div>
                 ))}
