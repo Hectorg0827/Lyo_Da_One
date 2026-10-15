@@ -1,221 +1,325 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  Home,
-  MessageSquare,
-  BookOpen,
-  Users,
-  Compass,
-  Target,
-  User,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
 import { cn } from '@/lib/utils';
-import { Avatar } from '@/components/ui/Avatar';
 import { useAuthStore } from '@/stores/auth-store';
 import { COMMUNITY_LAUNCH_ENABLED } from '@/lib/launch-features';
+import CreateSheet from '@/components/create/CreateSheet';
+import {
+  NAV,
+  SIDEBAR_ITEMS,
+  isActiveHref,
+  isRailShortcut,
+  readCollapsed,
+  safeStorage,
+  writeCollapsed,
+} from '@/lib/nav-items.mjs';
+import { NAV_ICONS, RailToggleIcon } from './NavIcons';
 
-/* ============================================================
-   Nav item definitions
-   ============================================================ */
-const navItems = [
-  { href: '/', icon: Home, label: 'Home' },
-  { href: '/chat', icon: MessageSquare, label: 'LYO Tutor', isAI: true },
-  { href: '/courses', icon: BookOpen, label: 'My Courses' },
-  // Test prep is a distinct job from browsing courses: a learner with a date
-  // in mind needs their readiness and today's sessions, not the catalogue.
-  { href: '/test-prep', icon: Target, label: 'Test Prep' },
-  ...(COMMUNITY_LAUNCH_ENABLED ? [{ href: '/community', icon: Users, label: 'Community' }] : []),
-  { href: '/discover', icon: Compass, label: 'Discover' },
-  { href: '/profile', icon: User, label: 'Profile' },
-] as { href: string; icon: typeof Home; label: string; isAI?: boolean }[];
+/**
+ * The desktop rail.
+ *
+ * Three things were wrong with it. It set the wordmark in a gradient font
+ * instead of using the logo, and shipped the internal name "DA ONE" to
+ * learners. It ran on stock icons — the same house and speech bubble as every
+ * other AI product. And it said "Home" and "LYO Tutor" when iOS, Android and
+ * this site's own phone nav all say Focus, and reach the AI by tapping the
+ * mascot.
+ *
+ * So: the real mark, the drawn set in `NavIcons`, the mascot carrying Ask Lyo
+ * exactly as it does on the phone, and labels read from `nav-items.mjs` —
+ * which the phone nav reads too, so the two cannot disagree again.
+ *
+ * The rail also already collapsed; it just forgot, reopening on every page
+ * load, which is what made it feel broken. It remembers now.
+ */
 
+const ACCENT = '#ff8c00';
 
-/* ============================================================
-   Sidebar Component
-   ============================================================ */
 export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
-  // The classroom owns a focused, distraction-free layout of its own —
-  // global nav chrome (search, notifications, course browsing) has no
-  // place alongside an active lesson. Hidden here, not in the shared
-  // layout, so this stays a single-file opt-out per shell piece.
-  if (pathname.startsWith('/classroom')) {
-    return null;
-  }
+  // Read after mount, never during render: the server has no localStorage, and
+  // seeding state from it directly would hydrate a closed rail into an open
+  // one and warn about the mismatch.
+  useEffect(() => {
+    setCollapsed(readCollapsed(safeStorage(typeof window === 'undefined' ? null : window)));
+  }, []);
+
+  const toggle = () =>
+    setCollapsed((was) => {
+      const next = !was;
+      writeCollapsed(safeStorage(typeof window === 'undefined' ? null : window), next);
+      return next;
+    });
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (isActiveHref('/classroom', pathname) || !isRailShortcut(event)) return;
+      event.preventDefault();
+      toggle();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  // Keep the active lesson in its own focused layout. `MainContent` treats
+  // the classroom as immersive and both `TopBar` and `MobileNav` hide
+  // themselves there, so a 264px rail beside a lesson is exactly the chrome
+  // the rest of the shell suppresses. After the hooks, never before: every
+  // hook above still runs on every route, so this only skips the markup.
+  if (isActiveHref('/classroom', pathname)) return null;
+
+  const open = !collapsed;
+  const profileActive = isActiveHref(NAV.profile.href, pathname);
+  const settingsActive = isActiveHref(NAV.settings.href, pathname);
 
   return (
-    <motion.aside
-      animate={{ width: collapsed ? 72 : 240 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 40 }}
-      className={cn(
-        'hidden md:flex flex-col h-screen bg-[#0d0f18]/60 backdrop-blur-2xl border-r border-white/[0.06]',
-        'overflow-hidden shrink-0 relative z-20',
-      )}
-    >
-      {/* ---- Logo ---- */}
-      <div className="flex items-center justify-between px-4 py-5 shrink-0">
-        <AnimatePresence mode="wait">
-          {!collapsed ? (
-            <motion.div
-              key="logo-full"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="flex flex-col leading-none"
-            >
-              <span className="text-xl font-black bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] bg-clip-text text-transparent">
-                LYO
-              </span>
-              <span className="text-[10px] font-semibold text-[var(--text-secondary)] tracking-wider uppercase">
-                Da ONE
-              </span>
-            </motion.div>
-          ) : (
-            <motion.div
-              key="logo-icon"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15 }}
-              className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center shadow-lg shadow-[#6366f1]/20"
-            >
-              <span className="text-white text-xs font-black">L</span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <button
-          onClick={() => setCollapsed((c) => !c)}
+    <>
+      <motion.aside
+        animate={{ width: open ? 264 : 76 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 40 }}
+        className={cn(
+          'hidden md:flex flex-col h-screen bg-[#0d0f18]/60 backdrop-blur-2xl',
+          'border-r border-white/[0.06] overflow-hidden shrink-0 relative z-20',
+        )}
+      >
+        {/* ---- Brand ---- */}
+        {/* The mark stays at both widths. Hiding it on collapse left the rail
+            with no brand on it at all — just a toggle floating at the top. */}
+        <div
           className={cn(
-            'p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
-            'hover:bg-white/5 transition-colors',
+            'flex shrink-0 px-3.5',
+            open ? 'h-[76px] flex-row items-center gap-2.5' : 'flex-col items-center gap-2.5 py-4',
           )}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </button>
-      </div>
+          <Link href={NAV.focus.href} aria-label="Lyo — go to Focus" className="block shrink-0">
+            {/* The declared size is the drawn size, not the file's 512x463:
+                Next builds its srcset from these numbers, so naming the file's
+                dimensions made every visit fetch a ~500px mark to paint 33 of
+                them. 34x31 keeps the 512:463 ratio, and the 2x candidate Next
+                adds on top stays crisp on a retina screen.
 
-      {/* ---- Nav Items ---- */}
-      <nav className="flex flex-col gap-0.5 px-2 flex-1 overflow-y-auto no-scrollbar">
-        {navItems.map(({ href, icon: Icon, label, isAI }) => {
-          const isActive = href === '/' ? pathname === '/' : pathname.startsWith(href);
+                No `priority` either. This rail is only CSS-hidden on a phone —
+                it still mounts — so a priority preload here jumped the queue
+                ahead of the actual page on the devices that never show it. */}
+            <Image
+              src="/brand/lyo-logo.png"
+              alt="Lyo"
+              width={34}
+              height={31}
+              className="h-[30px] w-auto object-contain"
+            />
+          </Link>
 
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/60',
-                isActive
-                  ? 'bg-[#6366f1]/10 text-[#a78bfa] border-l-2 border-[#6366f1] pl-[10px]'
-                  : 'text-[var(--text-secondary)] hover:bg-white/5 hover:text-[var(--text-primary)]',
-                isAI && !isActive && 'hover:text-[#a78bfa]',
-              )}
-              title={collapsed ? label : undefined}
-            >
-              <span className={cn('shrink-0', isAI && 'relative')}>
-                {isAI && !collapsed ? (
-                  <span className="relative">
-                    <span className="absolute inset-0 rounded-lg bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] opacity-20 blur-[2px]" />
-                    <Icon
-                      className={cn(
-                        'w-5 h-5 relative',
-                        isActive ? 'text-[#a78bfa]' : 'text-[var(--text-secondary)] group-hover:text-[#a78bfa]',
-                      )}
+          {open && <span className="flex-1" />}
+
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label={open ? 'Collapse the menu' : 'Expand the menu'}
+            aria-expanded={open}
+            title={open ? 'Collapse the menu  [' : 'Expand the menu  ['}
+            className={cn(
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px]',
+              'bg-white/5 text-white/55 transition-colors hover:bg-white/10 hover:text-white',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/60',
+            )}
+          >
+            <RailToggleIcon className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* ---- Nav ---- */}
+        <nav aria-label="Main" className="flex flex-1 flex-col gap-[3px] overflow-y-auto px-2.5 no-scrollbar">
+          {SIDEBAR_ITEMS.filter((item) => item.key !== 'community' || COMMUNITY_LAUNCH_ENABLED).map((item) => {
+            const active = item.action === 'create' ? false : isActiveHref(item.href, pathname);
+            const Icon = NAV_ICONS[item.key as keyof typeof NAV_ICONS];
+            const isLyo = item.key === 'askLyo';
+
+            const body = (
+              <>
+                {active && (
+                  <span
+                    aria-hidden
+                    className="absolute -left-[6px] top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-[#ff8c00]"
+                  />
+                )}
+
+                {isLyo ? (
+                  // The mascot is the icon. Tapping it is already how the
+                  // phone reaches Lyo; this makes the desktop the same gesture.
+                  <span className="relative flex h-[26px] w-[26px] shrink-0 items-center justify-center">
+                    <span
+                      aria-hidden
+                      className="absolute -inset-[5px] rounded-full bg-[radial-gradient(circle,rgba(255,140,0,0.45)_0%,transparent_70%)]"
+                    />
+                    <Image
+                      src="/mascot/mascot_standing.png"
+                      alt=""
+                      width={46}
+                      height={46}
+                      aria-hidden
+                      className="relative h-[26px] w-[26px] object-contain animate-breathe"
                     />
                   </span>
                 ) : (
-                  <Icon className="w-5 h-5" />
+                  Icon && (
+                    <Icon
+                      className="h-[21px] w-[21px] shrink-0"
+                      accent={active ? ACCENT : undefined}
+                    />
+                  )
                 )}
-              </span>
 
-              <AnimatePresence>
-                {!collapsed && (
-                  <motion.span
-                    initial={{ opacity: 0, width: 0 }}
-                    animate={{ opacity: 1, width: 'auto' }}
-                    exit={{ opacity: 0, width: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className={cn(
-                      'text-sm font-medium whitespace-nowrap overflow-hidden',
-                      isAI && 'bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] bg-clip-text',
-                      isAI ? 'text-transparent' : '',
-                    )}
-                  >
-                    {label}
-                  </motion.span>
+                <AnimatePresence initial={false}>
+                  {open && (
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.12 }}
+                      className="whitespace-nowrap text-sm"
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+
+                {isLyo && open && (
+                  <span className="ml-auto rounded-md bg-[#ff8c00]/[0.18] px-[7px] py-0.5 text-[9px] font-bold tracking-[0.08em] text-[#ffb766]">
+                    AI
+                  </span>
                 )}
-              </AnimatePresence>
-            </Link>
-          );
-        })}
+              </>
+            );
 
-      </nav>
+            const shell = cn(
+              'relative flex min-h-[44px] items-center gap-3 rounded-[14px] transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/60',
+              open ? 'px-3' : 'justify-center px-0',
+              active
+                ? 'bg-white/[0.07] font-semibold text-white'
+                : 'text-white/[0.62] hover:bg-white/5 hover:text-white',
+            );
 
-      {/* ---- Bottom: User + Settings ---- */}
-      <div className="px-2 py-3 border-t border-[var(--border)] shrink-0">
+            // Create is the one item that is not a place: it opens the same
+            // sheet the phone nav opens, so it has to be a button.
+            if (item.action === 'create') {
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  title={open ? undefined : item.label}
+                  className={shell}
+                >
+                  {body}
+                </button>
+              );
+            }
+
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                aria-current={active ? 'page' : undefined}
+                title={open ? undefined : item.label}
+                className={shell}
+              >
+                {body}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* ---- The learner ---- */}
+        {/* Two destinations, so two links. The cog used to sit inside the
+            profile link, which meant clicking it opened /profile — the one
+            place a settings button should never go. */}
         <div
           className={cn(
-            'flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-colors',
-            collapsed && 'justify-center',
+            'flex shrink-0 items-center gap-1 border-t border-white/[0.07] p-2.5',
+            open ? 'flex-row' : 'flex-col',
           )}
         >
-          <Avatar name={user?.displayName ?? 'User'} size="sm" online={true} className="shrink-0" />
-
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.div
-                initial={{ opacity: 0, width: 0 }}
-                animate={{ opacity: 1, width: 'auto' }}
-                exit={{ opacity: 0, width: 0 }}
-                transition={{ duration: 0.15 }}
-                className="flex-1 min-w-0 overflow-hidden"
-              >
-                <p className="text-xs font-semibold text-[var(--text-primary)] truncate">
-                  {user?.displayName ?? 'User'}
-                </p>
-                <p className="text-[10px] text-[var(--text-secondary)] truncate">
-                  {user ? `Level ${user.level ?? 1} · ${(user.xp ?? 0).toLocaleString()} XP` : 'Explore LYO'}
-                </p>
-              </motion.div>
+          <Link
+            href={NAV.profile.href}
+            aria-current={profileActive ? 'page' : undefined}
+            title={open ? undefined : NAV.profile.label}
+            className={cn(
+              'relative flex min-h-[44px] items-center gap-3 rounded-[14px] transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/60',
+              open ? 'min-w-0 flex-1 px-3' : 'w-full justify-center px-0',
+              profileActive
+                ? 'bg-white/[0.07] text-white'
+                : 'text-white/[0.62] hover:bg-white/5 hover:text-white',
             )}
-          </AnimatePresence>
+          >
+            {profileActive && (
+              <span
+                aria-hidden
+                className="absolute -left-[6px] top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-full bg-[#ff8c00]"
+              />
+            )}
 
-          <AnimatePresence>
-            {!collapsed && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-              >
-                <Link
-                  href="/settings"
-                  className="p-1.5 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/5 transition-colors"
-                  aria-label="Settings"
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] text-[11px] font-bold text-white">
+              {(user?.displayName ?? 'You').slice(0, 2).toUpperCase()}
+            </span>
+
+            <AnimatePresence initial={false}>
+              {open && (
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.12 }}
+                  className="min-w-0 flex-1 overflow-hidden"
                 >
-                  <Settings className="w-4 h-4" />
-                </Link>
-              </motion.div>
+                  <span className="block truncate text-xs font-semibold text-white">
+                    {user?.displayName ?? 'You'}
+                  </span>
+                  <span className="block truncate text-[10px] text-white/50">
+                    Level {user?.level ?? 1} · {(user?.xp ?? 0).toLocaleString()} XP
+                  </span>
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </Link>
+
+          {/* Shown collapsed too, stacked under the avatar. The old rail
+              dropped it on collapse, which put the only route to Settings
+              behind reopening the menu first. */}
+          <Link
+            href={NAV.settings.href}
+            aria-label={NAV.settings.label}
+            aria-current={settingsActive ? 'page' : undefined}
+            title={NAV.settings.label}
+            className={cn(
+              'flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] transition-colors',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#6366f1]/60',
+              settingsActive
+                ? 'bg-white/[0.07] text-white'
+                : 'text-white/40 hover:bg-white/5 hover:text-white',
             )}
-          </AnimatePresence>
+          >
+            <Settings className="h-4 w-4" aria-hidden />
+          </Link>
         </div>
-      </div>
-    </motion.aside>
+
+      </motion.aside>
+
+      <CreateSheet isOpen={createOpen} onClose={() => setCreateOpen(false)} />
+    </>
   );
 }
-
-export default Sidebar;
