@@ -76,6 +76,8 @@ export function setTokens(access: string, refresh?: string | null) {
   if (typeof window === 'undefined') return;
   localStorage.setItem('lyo_token', access);
   if (refresh) localStorage.setItem('lyo_refresh_token', refresh);
+  else localStorage.removeItem('lyo_refresh_token'); // never inherit another account's refresh token
+  window.dispatchEvent(new Event('lyo:auth-token-updated'));
 }
 
 export function clearTokens() {
@@ -140,9 +142,10 @@ async function request<T>(
     ...(fetchOptions.headers as Record<string, string>),
   };
 
+  let requestAccessToken: string | null = null;
   if (!skipAuth) {
-    const token = getAccessToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    requestAccessToken = getAccessToken();
+    if (requestAccessToken) headers['Authorization'] = `Bearer ${requestAccessToken}`;
   }
 
   const res = await fetch(resolveApiEndpoint(API_URL, endpoint), {
@@ -151,6 +154,11 @@ async function request<T>(
   });
 
   if (res.status === 401 && !skipAuth) {
+    // An old request must never evict a new account that has logged in since
+    // it was dispatched, or replace its credentials with a stale refresh.
+    if (getAccessToken() !== requestAccessToken) {
+      throw new ApiError('Session changed during request', 401);
+    }
     // The refresh runs for every call, optional ones included: a learner with
     // a merely *expired* access token must not have their Home sections sit
     // empty for the visit because `useApi` never retries.
@@ -158,7 +166,8 @@ async function request<T>(
 
     let retry: Response | null = null;
     if (refreshed) {
-      headers['Authorization'] = `Bearer ${getAccessToken()}`;
+      requestAccessToken = getAccessToken();
+      headers['Authorization'] = `Bearer ${requestAccessToken}`;
       retry = await fetch(resolveApiEndpoint(API_URL, endpoint), { ...fetchOptions, headers });
     }
 
@@ -192,6 +201,9 @@ async function request<T>(
         throw new ApiError('Not signed in', 401);
 
       default:
+        if (getAccessToken() !== requestAccessToken) {
+          throw new ApiError('Session changed during request', 401);
+        }
         clearTokens();
         if (typeof window !== 'undefined') window.location.href = '/auth/login';
         throw new ApiError('Session expired', 401);
@@ -218,11 +230,18 @@ async function tryRefreshToken(): Promise<boolean> {
     });
     if (!res.ok) return false;
     const data = await res.json();
-    setTokens(data.access_token, data.refresh_token);
+    if (getRefreshToken() !== refresh) return false; // logout/account switch
+    if (!data?.access_token) return false;
+    setTokens(data.access_token, data.refresh_token || refresh);
     return true;
   } catch {
     return false;
   }
+}
+
+/** Refresh the stored access token for long-lived authenticated transports. */
+export async function refreshAccessToken(): Promise<boolean> {
+  return tryRefreshToken();
 }
 
 // ── Adapters (backend → frontend types) ──────────────────────────────────────

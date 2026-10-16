@@ -45,7 +45,8 @@ export function buildClassroomWsUrl(apiUrl, connection, token) {
   if (connection.reviewConceptId) params.set('review_concept_id', connection.reviewConceptId);
   if (connection.objective) params.set('objective', connection.objective);
   if (connection.difficulty) params.set('difficulty', connection.difficulty);
-  if (token) params.set('token', token);
+  // JWT is sent in the authenticated first WebSocket message, never in URL.
+  void token;
   return `${base}/api/v1/classroom/ws/connect?${params}`;
 }
 

@@ -4,6 +4,7 @@
  * context. No client-side LLM, assessment, or evidence mutations.
  */
 import { missionEntryHref } from './coach.mjs';
+import { sessionEntryHref } from './test-prep.mjs';
 
 const CLASSROOM_PATH = /^\/classroom(?:\?|$)/;
 
@@ -18,9 +19,11 @@ export function withJourneyId(href, journeyId) {
 export function returnFromJourney(journey) {
   if (journey?.origin_surface === 'test_prep') {
     const profileId = journey.context?.test_profile_id;
-    return typeof profileId === 'string' && profileId.length > 0
-      ? '/test-prep?profileId=' + encodeURIComponent(profileId)
-      : '/test-prep';
+    if (typeof profileId !== 'string' || !profileId) return '/test-prep';
+    const sessionId = journey.context?.study_session_id;
+    const suffix = typeof sessionId === 'string' && /^[a-zA-Z0-9-]{1,36}$/.test(sessionId)
+      ? '&sessionId=' + encodeURIComponent(sessionId) : '';
+    return '/test-prep?profileId=' + encodeURIComponent(profileId) + suffix;
   }
   if (journey?.origin_surface === 'chat') return '/chat';
   return '/'; // Coach/Home — no untrusted redirect URL
@@ -55,6 +58,36 @@ export function missionJourneyPlan(item, goal, originSurface = 'coach', profileI
       expected_revision: 0,
       target_surface: 'classroom',
       target_ref: context.concept_id || null,
+      context: {},
+    },
+  };
+}
+
+/** A scheduled study block is a real Test Prep record, not a fabricated quiz.
+ * Backend rechecks the session against the selected learner-owned exam.
+ */
+export function studySessionJourneyPlan(session, goal, profileId) {
+  const linkedExam = goal?.source_ref_type === 'test_profile' ? goal.source_ref_id : null;
+  if (!linkedExam || linkedExam !== profileId || !goal?.id ||
+      !session || typeof session.id !== 'string' ||
+      !/^[a-zA-Z0-9-]{1,36}$/.test(session.id)) return null;
+  const href = sessionEntryHref(session);
+  if (!href || !CLASSROOM_PATH.test(href)) return null;
+  return {
+    href,
+    start: {
+      goal_id: goal.id,
+      origin_surface: 'test_prep',
+      origin_ref: linkedExam,
+      context: {
+        test_profile_id: linkedExam,
+        study_session_id: session.id,
+      },
+    },
+    handoff: {
+      expected_revision: 0,
+      target_surface: 'classroom',
+      target_ref: session.id,
       context: {},
     },
   };

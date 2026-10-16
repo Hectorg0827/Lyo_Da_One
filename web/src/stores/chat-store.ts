@@ -402,6 +402,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     attachments: ChatAttachment[] = [],
     options: SendMessageOptions = {}
   ) => {
+    // A fresh Chat mount fetches the conversation list and resets the active
+    // thread. Sending before that load completes creates a conversation whose
+    // first user message can be discarded from the visible UI. This applies
+    // to typed, voice, and seeded turns — not just the prefilled Home prompt.
+    if (hydrationInFlight) {
+      await hydrationInFlight;
+    } else if (!hasHydratedThisSession) {
+      await get().hydrate();
+    }
     const state = get();
     let convoId = state.activeConversationId;
     const trimmedContent = content.trim();

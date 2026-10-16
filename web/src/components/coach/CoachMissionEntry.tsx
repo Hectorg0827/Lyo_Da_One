@@ -1,20 +1,27 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { CoachGoal, CoachMissionItem } from '@/lib/coach-api';
+import type { StudySessionRow } from '@/types';
 import { missionEntryHref } from '@/lib/coach.mjs';
-import { beginMissionJourney, missionJourneyPlan } from '@/lib/journey-handoff.mjs';
+import { sessionEntryHref } from '@/lib/test-prep.mjs';
+import { beginMissionJourney, missionJourneyPlan, studySessionJourneyPlan } from '@/lib/journey-handoff.mjs';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
 
 type Props = {
-  mission: CoachMissionItem;
+  mission?: CoachMissionItem;
+  /** Existing scheduled session, not a generated Coach mission. */
+  session?: StudySessionRow;
   goal?: CoachGoal | null;
   origin: 'coach' | 'test_prep' | 'chat';
   profileId?: string | null;
   className: string;
+  wrapperClassName?: string;
+  style?: CSSProperties;
+  title?: string;
   children: ReactNode;
 };
 
@@ -25,7 +32,7 @@ type Props = {
  * With the flag ON and a valid goal, save the journey and its handoff
  * before navigation. Failures do not silently claim state persistence.
  */
-export default function CoachMissionEntry({ mission, goal, origin, profileId, className, children }: Props) {
+export default function CoachMissionEntry({ mission, session, goal, origin, profileId, className, wrapperClassName, style, title, children }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
@@ -39,11 +46,13 @@ export default function CoachMissionEntry({ mission, goal, origin, profileId, cl
     return () => { mounted.current = false; };
   }, []);
 
-  const href = missionEntryHref(mission);
+  const href = session ? sessionEntryHref(session) : mission ? missionEntryHref(mission) : null;
   if (!href) return <div className={className}>{children}</div>;
 
   const enabled = process.env.NEXT_PUBLIC_LYO_JOURNEYS_ENABLED === '1';
-  const plan = enabled ? missionJourneyPlan(mission, goal, origin, profileId) : null;
+  const plan = enabled
+    ? session ? studySessionJourneyPlan(session, goal, profileId) : mission ? missionJourneyPlan(mission, goal, origin, profileId) : null
+    : null;
 
   if (!plan || !isAuthenticated) {
     // Visible contract marker for staging QA: why an entry did not persist.
@@ -52,7 +61,8 @@ export default function CoachMissionEntry({ mission, goal, origin, profileId, cl
       : !isAuthenticated ? 'signed-out'
       : !goal ? 'missing-goal'
       : 'unlinked-goal';
-    return <Link href={href} className={className} data-journey-fallback={fallback}>{children}</Link>;
+    return <Link href={href} className={className} style={style} title={title}
+      data-study-session-id={session?.id} data-journey-fallback={fallback}>{children}</Link>;
   }
 
   const begin = async () => {
@@ -83,9 +93,10 @@ export default function CoachMissionEntry({ mission, goal, origin, profileId, cl
   };
 
   return (
-    <div>
+    <div className={wrapperClassName}>
       <button type="button" onClick={() => void begin()} disabled={pending}
-        className={className} aria-busy={pending}>
+        className={className} style={style} title={title} aria-busy={pending}
+        data-study-session-id={session?.id}>
         {children}
         {pending && <span className="text-xs text-white/55">Saving your place…</span>}
       </button>

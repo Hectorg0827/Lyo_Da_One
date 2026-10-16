@@ -1288,7 +1288,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
       const socket = new WebSocket(wsUrl({ ...connection, sessionId }, token));
       ws = socket;
-      socket.onopen = () => { if (ws === socket) set({ status: 'live' }); };
+      socket.onopen = () => {
+        if (ws !== socket) return;
+        // Browser WebSocket APIs cannot attach Authorization headers.
+        // Authenticate in the first frame; no learner scene is sent before
+        // the backend verifies this token.
+        socket.send(JSON.stringify({ type: 'classroom_auth', token }));
+        set({ status: 'live' });
+      };
       socket.onmessage = (e) => { if (ws === socket) handleMessage(String(e.data)); };
       socket.onerror = () => {
         if (ws === socket) set({ status: 'error', error: 'Connection to the classroom failed.' });
