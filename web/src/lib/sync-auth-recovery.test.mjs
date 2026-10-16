@@ -47,7 +47,7 @@ function installBrowser() {
     addEventListener: (name, callback) => listeners.set(name, callback),
     dispatchEvent: (event) => { listeners.get(event.type)?.(event); },
   };
-  globalThis.navigator = { userAgent: 'Lyo test browser' };
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { userAgent: 'Lyo test browser' } });
   globalThis.WebSocket = FakeWebSocket;
   FakeWebSocket.instances = [];
 }
