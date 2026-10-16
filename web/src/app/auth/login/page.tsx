@@ -215,9 +215,14 @@ export default function LoginPage() {
             </Link>
           </p>
 
-          <p className="text-center text-xs leading-relaxed text-secondary">
-            Password recovery and social sign-in will appear only after their backend flows are available.
-          </p>
+          <div className="text-center">
+            <Link
+              href="/auth/forgot-password"
+              className="text-sm font-medium text-[#a78bfa] underline-offset-4 hover:underline"
+            >
+              Forgot your password?
+            </Link>
+          </div>
         </div>
       </motion.div>
     </div>
