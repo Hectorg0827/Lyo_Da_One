@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { AlertCircle, Lock } from 'lucide-react';
 import { api, clearTokens } from '@/lib/api';
 
 export default function ResetPasswordPage() {
+  const initialized = useRef(false);
   const [token, setToken] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [password, setPassword] = useState('');
@@ -15,6 +16,9 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    // StrictMode can repeat effects; do not re-read an already scrubbed URL.
+    if (initialized.current) return;
+    initialized.current = true;
     const value = new URLSearchParams(window.location.search).get('token');
     setToken(value && value.length >= 40 && value.length <= 1024 ? value : null);
     setLoaded(true);
