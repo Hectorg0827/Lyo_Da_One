@@ -77,6 +77,7 @@ export function setTokens(access: string, refresh?: string | null) {
   localStorage.setItem('lyo_token', access);
   if (refresh) localStorage.setItem('lyo_refresh_token', refresh);
   else localStorage.removeItem('lyo_refresh_token'); // never inherit another account's refresh token
+  window.dispatchEvent(new Event('lyo:auth-token-updated'));
 }
 
 export function clearTokens() {
@@ -236,6 +237,11 @@ async function tryRefreshToken(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Refresh the stored access token for long-lived authenticated transports. */
+export async function refreshAccessToken(): Promise<boolean> {
+  return tryRefreshToken();
 }
 
 // ── Adapters (backend → frontend types) ──────────────────────────────────────
