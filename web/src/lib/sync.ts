@@ -48,7 +48,7 @@ function wsUrl(token: string): string {
   return `${base}/api/v1/sync/ws?${params.toString()}`;
 }
 
-class SyncClient {
+export class SyncClient {
   private socket: WebSocket | null = null;
   private listeners = new Set<SyncListener>();
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
