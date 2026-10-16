@@ -90,6 +90,7 @@ export class SyncClient {
   /** Stop syncing (e.g. on logout). */
   disconnect() {
     this.shouldRun = false;
+    this.authPaused = false;
     this.cleanup();
   }
 
