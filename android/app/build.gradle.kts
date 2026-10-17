@@ -52,6 +52,7 @@ dependencies {
 
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     // Screen state that survives opening a detail page (Community map, filters).
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     implementation("androidx.activity:activity-compose:1.9.2")
@@ -68,6 +69,10 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
 
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    // Decode and prebuffer adjacent Discover reels; VideoView cannot do this.
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-ui:1.4.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 

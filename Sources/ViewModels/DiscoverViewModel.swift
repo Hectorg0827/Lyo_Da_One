@@ -12,7 +12,11 @@ final class DiscoverViewModel: ObservableObject {
     @Published var items: [DiscoverItem] = []
     @Published var searchQuery: String = ""
     @Published var isLoading: Bool = false
+    @Published var isLoadingMore: Bool = false
+    @Published var hasMore: Bool = false
     @Published var errorMessage: String?
+    private var nextOffset = 0
+    private var feedGeneration = 0
     
     // UI State for Context Sheet
     @Published var showVideoContextSheet: Bool = false
@@ -234,13 +238,22 @@ final class DiscoverViewModel: ObservableObject {
     
     /// Load items from backend or demo data
     func loadItems() async {
+        feedGeneration += 1
+        let generation = feedGeneration
         isLoading = true
+        isLoadingMore = false
+        nextOffset = 0
+        hasMore = false
         errorMessage = nil
         
         // Use DataService for unified data fetching
         // Note: DataService internally handles some fallbacks, but we should be aware of the auth state
-        self.items = await DataService.shared.fetchDiscoverFeed()
-        
+        let firstPage = await DataService.shared.fetchDiscoverFeed(limit: 20, offset: 0)
+        guard generation == feedGeneration else { return }
+        self.items = firstPage
+        nextOffset = 20
+        hasMore = !AuthService.shared.isDemoMode && firstPage.count == 20
+
         if AuthService.shared.isDemoMode {
             Log.ui.info("DiscoverViewModel: Loaded \(self.items.count) items (Demo Mode)")
         } else {
@@ -254,6 +267,21 @@ final class DiscoverViewModel: ObservableObject {
         isLoading = false
     }
     
+    /// Append the next batch before the current reel reaches the feed boundary.
+    func loadMore() async {
+        guard hasMore && !isLoading && !isLoadingMore else { return }
+        isLoadingMore = true
+        let generation = feedGeneration
+        let offset = nextOffset
+        let next = await DataService.shared.fetchDiscoverFeed(limit: 20, offset: offset)
+        guard generation == feedGeneration else { return }
+        let known = Set(items.map(\.id))
+        items.append(contentsOf: next.filter { !known.contains($0.id) })
+        nextOffset += 20
+        hasMore = next.count == 20
+        isLoadingMore = false
+    }
+
     /// Refresh items from backend
     func refresh() async {
         await loadItems()
