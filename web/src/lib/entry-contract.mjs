@@ -117,6 +117,13 @@ export function normalizeSessionMinutes(minutes) {
   return SESSION_LENGTHS.includes(value) ? value : null;
 }
 
+/** Coach may offer a precise 3–60 minute task outside the Home presets. */
+export function normalizeServerSessionMinutes(minutes) {
+  const value = Number(minutes);
+  if (!Number.isInteger(value) || value < 3 || value > 60) return null;
+  return value;
+}
+
 /**
  * Open the Classroom on a topic.
  *
@@ -129,7 +136,7 @@ export function normalizeSessionMinutes(minutes) {
  * the URL it always did and the Classroom's own defaults still apply.
  */
 export function classroomEntryHref({
-  topic, mode, objective, courseId, lessonId, reviewConceptId, level, minutes, language, recordScope,
+  topic, mode, objective, courseId, lessonId, reviewConceptId, level, minutes, serverMinutes, language, recordScope,
   resume,
 } = {}) {
   const cleanTopic = (topic ?? '').trim();
@@ -155,7 +162,9 @@ export function classroomEntryHref({
   const cleanLevel = normalizeLevel(level);
   if (cleanLevel) params.set('difficulty', cleanLevel);
 
-  const cleanMinutes = normalizeSessionMinutes(minutes);
+  const cleanMinutes = serverMinutes != null
+    ? normalizeServerSessionMinutes(serverMinutes)
+    : normalizeSessionMinutes(minutes);
   if (cleanMinutes) params.set('duration', String(cleanMinutes));
 
   const cleanLanguage = normalizeLanguage(language);

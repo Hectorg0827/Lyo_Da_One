@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildLearnerStats, streakFrom } from './learner-stats.mjs';
+import { buildLearnerStats, streakFrom, mergeGamificationProfile } from './learner-stats.mjs';
 
 const byKey = (result) => Object.fromEntries(result.stats.map((s) => [s.key, s]));
 
@@ -28,11 +28,11 @@ test('a learner with evidence but nothing named falls back to activity', () => {
   assert.equal(byKey(result).xp.value, '800');
 });
 
-test('no payloads at all still yields four stats, all honest zeroes', () => {
+test('unrecorded study time stays unknown while counts start at zero', () => {
   const result = buildLearnerStats();
   assert.equal(result.kind, 'activity');
   assert.equal(result.stats.length, 4);
-  assert.deepEqual(result.stats.map((s) => s.value), ['0', '0', '0', '0d']);
+  assert.deepEqual(result.stats.map((s) => s.value), ['—', '0', '0', '0d']);
 });
 
 test('server-reported hours are used, not silently replaced by the XP estimate', () => {
@@ -44,9 +44,9 @@ test('server-reported hours are used, not silently replaced by the XP estimate',
   assert.equal(byKey(result).hours.value, '40');
 });
 
-test('hours fall back to the XP estimate only when the server sends none', () => {
+test('XP never fabricates study hours', () => {
   const result = buildLearnerStats({ gamification: { xp_summary: { total: 1250 } } });
-  assert.equal(byKey(result).hours.value, '13');
+  assert.equal(byKey(result).hours.value, '—');
 });
 
 test('XP and level fall back to the user profile', () => {
@@ -98,8 +98,7 @@ test('an explicit null is no reading, not a reading of zero', () => {
     gamification: { user_level: { total_hours: null }, xp_summary: { total: 1250 } },
     user: { xp: 1250 },
   });
-  // Null hours must fall through to the XP estimate, not display "0".
-  assert.equal(byKey(result).hours.value, '13');
+  assert.equal(byKey(result).hours.value, '—');
 });
 
 test('blank and non-numeric shapes are no reading either', () => {
@@ -133,6 +132,19 @@ test('garbage readings do not become numbers', () => {
   });
   const stats = byKey(result);
   assert.equal(stats.xp.value, '0');
+  assert.equal(stats.hours.value, '—');
+});
+
+test('profile refresh accepts real zeroes and keeps courses separate from achievements', () => {
+  const profile = { level: 4, xp: 1000, streak: 7, coursesCompleted: 2 };
+  const refreshed = mergeGamificationProfile(profile, {
+    user_level: { level: 1 }, xp_summary: { total: 0 }, streaks: { current: 0 },
+    achievements: { completed: 15 }, learning: { courses_completed: 0 },
+  });
+  assert.deepEqual(refreshed, { level: 1, xp: 0, streak: 0, coursesCompleted: 0 });
+  assert.equal(mergeGamificationProfile(profile, { achievements: { completed: 15 } }).coursesCompleted, 2);
+  const stats = byKey(buildLearnerStats({ gamification: { achievements: { completed: 15 }, learning: { courses_completed: 2, total_hours: 0 } } }));
+  assert.equal(stats.courses.value, '2');
   assert.equal(stats.hours.value, '0');
 });
 

@@ -20,6 +20,8 @@ const mocks = {
   '@/lib/api': { api },
   '@/stores/auth-store': { useAuthStore: () => ({ isAuthenticated: true, isLoading: false }) },
   'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
+  'next/navigation': { useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {} }) },
+  'next/navigation': { useRouter: () => ({ push: () => {}, replace: () => {}, back: () => {} }) },
 };
 const modules = new Map();
 // Render the actual page, reducer, controls and schedule. Only network and
@@ -355,4 +357,84 @@ test('switching exams closes a details form bound to the old revision', async t 
   await choose(view, 'biology');
   assert.equal(title(view), 'Biology');
   assert.ok(!view.container.textContent.includes('Topics — one per line'));
+});
+
+test('calendar sessions retain the exact exam even when two exams share a subject', async t => {
+  const { exams } = setup();
+  exams.biology.profile.subject = 'Algebra';
+  for (const id of ['algebra', 'biology']) exams[id].sessions[0].scheduled_at = new Date().toISOString();
+  const goals = ['algebra', 'biology'].map(id => ({
+    id: `goal-${id}`, goal_type: 'test', subject: 'Algebra',
+    source_ref_type: 'test_profile', source_ref_id: id,
+  }));
+  api.coach.today = async () => ({ active_goals: goals, mission: [], readiness: {} });
+  const starts = [];
+  const destinations = [];
+  api.coach.journeys = {
+    start: async body => { starts.push(body); return { id: `journey-${starts.length}`, revision: 0 }; },
+    handoff: async () => ({ revision: 1 }),
+  };
+  const auth = mocks['@/stores/auth-store'];
+  const originalAuth = auth.useAuthStore;
+  const originalRouter = mocks['next/navigation'].useRouter;
+  const enabled = process.env.NEXT_PUBLIC_LYO_JOURNEYS_ENABLED;
+  const signedIn = () => ({ isAuthenticated: true, isLoading: false, user: { id: 7 } });
+  signedIn.getState = signedIn;
+  auth.useAuthStore = signedIn;
+  mocks['next/navigation'].useRouter = () => ({ push: url => destinations.push(url) });
+  process.env.NEXT_PUBLIC_LYO_JOURNEYS_ENABLED = '1';
+  t.after(() => {
+    auth.useAuthStore = originalAuth;
+    mocks['next/navigation'].useRouter = originalRouter;
+    if (enabled === undefined) delete process.env.NEXT_PUBLIC_LYO_JOURNEYS_ENABLED;
+    else process.env.NEXT_PUBLIC_LYO_JOURNEYS_ENABLED = enabled;
+  });
+  const view = await mount(t);
+  for (const id of ['algebra', 'biology']) {
+    if (id === 'biology') await choose(view, id);
+    const entry = view.container.querySelector(`[aria-label="Full study schedule"] button[data-study-session-id="${id}-session"]`);
+    assert.ok(entry, 'the actual calendar must use the saved-journey button');
+    await act(async () => entry.click());
+    assert.equal(starts.at(-1).goal_id, `goal-${id}`);
+    assert.deepEqual(starts.at(-1).context, { test_profile_id: id, study_session_id: `${id}-session` });
+    assert.match(destinations.at(-1), /journeyId=journey-/);
+  }
+});
+
+test('a Classroom return reopens the exact Test Prep study session', async t => {
+  const { calls } = setup();
+  window.history.replaceState({}, '', '/test-prep?profileId=biology&sessionId=biology-session');
+  const view = await mount(t);
+  assert.equal(title(view), 'Biology');
+  assert.equal(calls.state[0], 'biology');
+  assert.match(view.container.textContent, /Returned to study session: Biology practice/);
+  const selected = view.container.querySelector('#test-prep-session-biology-session');
+  assert.ok(selected, 'returned session must be present and highlighted');
+  assert.match(selected.className, /ring-violet/);
+  await choose(view, 'algebra');
+  assert.equal(new URL(window.location.href).searchParams.get('sessionId'), null);
+  assert.equal(title(view), 'Algebra');
+  assert.ok(!view.container.textContent.includes('Returned to study session:'));
+});
+
+test('a temporary /auth/me failure offers verification retry without claiming sign-out', async t => {
+  setup();
+  let retries = 0;
+  const auth = mocks['@/stores/auth-store'];
+  const original = auth.useAuthStore;
+  auth.useAuthStore = () => ({
+    isAuthenticated: false, isLoading: false, authVerificationError: true,
+    hydrate: async () => { retries += 1; },
+  });
+  t.after(() => { auth.useAuthStore = original; });
+  window.history.replaceState({}, '', '/test-prep?profileId=biology');
+  const view = await mount(t);
+  assert.match(view.container.textContent, /Session verification unavailable/);
+  assert.ok(!view.container.textContent.includes('Create account'));
+  const retry = [...view.container.querySelectorAll('button')]
+    .find(button => button.textContent === 'Retry verification');
+  assert.ok(retry);
+  await act(async () => retry.click());
+  assert.equal(retries, 1);
+  assert.equal(new URL(window.location.href).searchParams.get('profileId'), 'biology');
 });

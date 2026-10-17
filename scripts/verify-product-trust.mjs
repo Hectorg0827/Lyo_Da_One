@@ -116,8 +116,11 @@ rejectText(nodePreview, 'key={node.key}', 'Community preview key is trapped insi
 
 // ── 2. The front door ────────────────────────────────────────────────────────
 
-requireText(frontDoor, 'What do you want to learn?', 'Front door question');
-requireText(frontDoor, 'Enter Classroom', 'Front door classroom CTA');
+requireText(frontDoor, 'What would you like to explore today?', 'Unified Lyo front door question');
+requireText(frontDoor, 'Continue with Lyo', 'Unified intent-based entry');
+requireText(frontDoor, 'routeLearningRequest', 'Front door routes by learner intent');
+requireText(frontDoor, 'AI Chat', 'Chat direct shortcut');
+requireText(frontDoor, 'Classroom', 'Classroom direct shortcut');
 requireText(frontDoor, 'I have a test', 'Front door test-prep CTA');
 // Both CTAs route through the shared entry contract, so Home, Chat, Courses
 // and Test Prep cannot drift into opening the Classroom four different ways.

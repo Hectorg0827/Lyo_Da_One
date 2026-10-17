@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, BookOpen, Sparkles, X, Loader2, AlertCircle } from 'lucide-react';
@@ -9,6 +9,8 @@ import { cn } from '@/lib/utils';
 import CourseCard from '@/components/courses/CourseCard';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/stores/auth-store';
+import { courseLessonBlocks, courseLessonMinutes } from '@/lib/course-durable-content.mjs';
 
 // ── Adapter: backend course → frontend Course type ──────────────────────────
 
@@ -25,16 +27,16 @@ function adaptCourse(raw: Record<string, unknown>): Course {
               id: String(l.id ?? `l_${li}`),
               title: String(l.title ?? ''),
               type: (l.type as 'text') ?? 'text',
-              duration: (l.duration as number) ?? 10,
+              duration: courseLessonMinutes(l),
               order: (l.order as number) ?? li + 1,
               isCompleted: (l.is_completed as boolean) ?? false,
-              content: Array.isArray(l.content) ? (l.content as Course['modules'][0]['lessons'][0]['content']) : [],
+              content: courseLessonBlocks(l.content, String(l.id ?? `l_${li}`)) as Course['modules'][0]['lessons'][0]['content'],
             }))
           : [],
       }))
     : [];
 
-  const lessonsCount = (raw.lessons_count as number) ?? modules.reduce((acc, m) => acc + m.lessons.length, 0);
+  const lessonsCount = (raw.lesson_count as number) ?? (raw.lessons_count as number) ?? modules.reduce((acc, m) => acc + m.lessons.length, 0);
   const durationHours = (raw.estimated_duration_hours as number) ?? 0;
 
   return {
@@ -61,7 +63,7 @@ function adaptCourse(raw: Record<string, unknown>): Course {
       createdAt: '',
       isPremium: false,
     },
-    category: String(raw.subject ?? raw.category ?? 'General'),
+    category: String(raw.subject ?? raw.topic ?? raw.category ?? 'General'),
     tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : [],
     difficulty: (['beginner', 'intermediate', 'advanced'].includes(String(raw.difficulty_level ?? raw.difficulty ?? ''))
       ? String(raw.difficulty_level ?? raw.difficulty) as Course['difficulty']
@@ -71,7 +73,7 @@ function adaptCourse(raw: Record<string, unknown>): Course {
     rating: (raw.rating as number) ?? (raw.average_rating as number) ?? 0,
     reviewCount: (raw.review_count as number) ?? (raw.reviews_count as number) ?? 0,
     progress: raw.progress != null ? (raw.progress as number) : undefined,
-    isAIGenerated: (raw.is_ai_generated as boolean) ?? false,
+    isAIGenerated: (raw.is_ai_generated as boolean) ?? (raw.generation_metadata != null),
     createdAt: String(raw.created_at ?? new Date().toISOString()),
     modules,
   };
@@ -79,10 +81,11 @@ function adaptCourse(raw: Record<string, unknown>): Course {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type TabId = 'inProgress' | 'completed' | 'browse';
+type TabId = 'saved' | 'inProgress' | 'completed' | 'browse';
 type DifficultyFilter = 'all' | 'beginner' | 'intermediate' | 'advanced';
 
 const TABS: { id: TabId; label: string }[] = [
+  { id: 'saved', label: 'Saved' },
   { id: 'inProgress', label: 'In Progress' },
   { id: 'completed', label: 'Completed' },
   { id: 'browse', label: 'Browse' },
@@ -98,7 +101,11 @@ const DIFFICULTY_FILTERS: { id: DifficultyFilter; label: string }[] = [
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CoursesPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('browse');
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<TabId>('saved');
+  useEffect(() => {
+    if (!authLoading) setActiveTab(isAuthenticated ? 'saved' : 'browse');
+  }, [authLoading, isAuthenticated]);
   const [searchQuery, setSearchQuery] = useState('');
   const [difficultyFilter, setDifficultyFilter] = useState<DifficultyFilter>('all');
 
@@ -109,24 +116,35 @@ export default function CoursesPage() {
   );
   const { data: rawCourses, isLoading, error, refetch } = useApi<Record<string, unknown>[]>(fetcher, [difficultyFilter]);
 
+  const fetchSaved = useCallback(
+    () => isAuthenticated ? api.courses.mine() : Promise.resolve([] as Record<string, unknown>[]),
+    [isAuthenticated],
+  );
+  const { data: rawSaved, isLoading: savedLoading, error: savedError, refetch: refetchSaved } =
+    useApi<Record<string, unknown>[]>(fetchSaved, [isAuthenticated]);
+
   // Adapt raw API data to frontend Course type
   const courses = useMemo<Course[]>(() => {
     if (!rawCourses) return [];
     return rawCourses.map(adaptCourse);
   }, [rawCourses]);
 
+  const savedCourses = useMemo<Course[]>(() => (rawSaved ?? []).map(adaptCourse), [rawSaved]);
+
   // Derive tab-specific lists
   const tabCourses = useMemo<Course[]>(() => {
     switch (activeTab) {
+      case 'saved':
+        return savedCourses;
       case 'inProgress':
-        return courses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100);
+        return savedCourses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100);
       case 'completed':
-        return courses.filter((c) => c.progress === 100);
+        return savedCourses.filter((c) => c.progress === 100);
       case 'browse':
       default:
         return courses;
     }
-  }, [activeTab, courses]);
+  }, [activeTab, courses, savedCourses]);
 
   // Apply search filter
   const filteredCourses = useMemo<Course[]>(() => {
@@ -136,12 +154,15 @@ export default function CoursesPage() {
         c.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesSearch;
+      return matchesSearch && (difficultyFilter === 'all' || c.difficulty === difficultyFilter);
     });
-  }, [tabCourses, searchQuery]);
+  }, [tabCourses, searchQuery, difficultyFilter]);
 
-  const inProgressCount = courses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100).length;
-  const completedCount = courses.filter((c) => c.progress === 100).length;
+  const inProgressCount = savedCourses.filter((c) => c.progress !== undefined && c.progress > 0 && c.progress < 100).length;
+  const completedCount = savedCourses.filter((c) => c.progress === 100).length;
+  const pageLoading = activeTab === 'browse' ? isLoading : savedLoading;
+  const pageError = activeTab === 'browse' ? error : savedError;
+  const retryPage = activeTab === 'browse' ? refetch : refetchSaved;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
@@ -181,7 +202,7 @@ export default function CoursesPage() {
           transition={{ duration: 0.3, delay: 0.05 }}
           className="flex items-center gap-2 mb-6"
         >
-          {TABS.map((tab) => (
+          {TABS.filter(tab => isAuthenticated || tab.id === 'browse').map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -248,7 +269,7 @@ export default function CoursesPage() {
         </motion.div>
 
         {/* ── Loading State ── */}
-        {isLoading && (
+        {pageLoading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -260,7 +281,7 @@ export default function CoursesPage() {
         )}
 
         {/* ── Error State ── */}
-        {error && !isLoading && (
+        {pageError && !pageLoading && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -271,10 +292,10 @@ export default function CoursesPage() {
             </div>
             <div className="text-center">
               <p className="text-white/60 font-medium">Failed to load courses</p>
-              <p className="text-white/30 text-sm mt-1">{error}</p>
+              <p className="text-white/30 text-sm mt-1">{pageError}</p>
             </div>
             <button
-              onClick={refetch}
+              onClick={retryPage}
               className="text-lyo-400 text-sm hover:text-lyo-300 transition-colors"
             >
               Try again
@@ -283,7 +304,7 @@ export default function CoursesPage() {
         )}
 
         {/* ── Course Grid ── */}
-        {!isLoading && !error && (
+        {!pageLoading && !pageError && (
           <AnimatePresence mode="wait">
             {filteredCourses.length > 0 ? (
               <motion.div
@@ -324,6 +345,8 @@ export default function CoursesPage() {
                   <p className="text-white/30 text-sm mt-1">
                     {searchQuery
                       ? `No results for "${searchQuery}"`
+                      : activeTab === 'saved'
+                      ? 'No saved courses yet. Create a course with LYO and it will appear here after it is saved.'
                       : activeTab === 'inProgress'
                       ? 'You have no courses in progress yet.'
                       : activeTab === 'completed'

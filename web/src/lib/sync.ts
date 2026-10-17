@@ -1,4 +1,4 @@
-import { getAccessToken } from '@/lib/api';
+import { getAccessToken, refreshAccessToken } from '@/lib/api';
 
 /**
  * Cross-device sync client for the backend's Multi-Device Sync service
@@ -48,13 +48,35 @@ function wsUrl(token: string): string {
   return `${base}/api/v1/sync/ws?${params.toString()}`;
 }
 
-class SyncClient {
+export class SyncClient {
   private socket: WebSocket | null = null;
   private listeners = new Set<SyncListener>();
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
   private shouldRun = false;
+  private authPaused = false;
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('lyo:auth-token-updated', this.resumeAfterAuthUpdate);
+    }
+  }
+
+  private resumeAfterAuthUpdate = () => {
+    if (!this.shouldRun || !this.authPaused) return;
+    this.authPaused = false;
+    this.reconnectAttempt = 0;
+    this.open();
+  };
+
+  private async refreshAfterAuthClose() {
+    const refreshed = await refreshAccessToken().catch(() => false);
+    if (!this.shouldRun || !refreshed) return;
+    this.authPaused = false;
+    this.reconnectAttempt = 0;
+    this.open();
+  }
 
   /** This browser's device id, assigned by the server on connect. */
   deviceId: string | null = null;
@@ -68,6 +90,7 @@ class SyncClient {
   /** Stop syncing (e.g. on logout). */
   disconnect() {
     this.shouldRun = false;
+    this.authPaused = false;
     this.cleanup();
   }
 
@@ -84,7 +107,7 @@ class SyncClient {
 
   private open() {
     if (typeof window === 'undefined') return;
-    if (!this.shouldRun) return;
+    if (!this.shouldRun || this.authPaused) return;
     const token = getAccessToken();
     if (!token) {
       // Auth state can flip before the token is persisted; retry with
@@ -102,7 +125,6 @@ class SyncClient {
     }
 
     this.socket.onopen = () => {
-      this.reconnectAttempt = 0;
       this.heartbeatTimer = setInterval(
         () => this.send({ type: 'heartbeat' }),
         HEARTBEAT_MS
@@ -116,8 +138,9 @@ class SyncClient {
       } catch {
         return;
       }
-      if (event.event_type === 'connected' && event.device_id) {
-        this.deviceId = event.device_id;
+      if (event.event_type === 'connected') {
+        this.reconnectAttempt = 0;
+        if (event.device_id) this.deviceId = event.device_id;
       }
       this.listeners.forEach((l) => {
         try {
@@ -128,8 +151,16 @@ class SyncClient {
       });
     };
 
-    this.socket.onclose = () => {
+    this.socket.onclose = (event) => {
       this.cleanup(false);
+      if (event.code === 4001) {
+        // The backend closes rejected sync auth with 4001. Refresh once and
+        // pause reconnects if refresh is unavailable; never resend the same
+        // expired JWT on a tight loop.
+        this.authPaused = true;
+        void this.refreshAfterAuthClose();
+        return;
+      }
       this.scheduleReconnect();
     };
 

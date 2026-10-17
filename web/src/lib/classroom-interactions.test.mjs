@@ -301,7 +301,10 @@ test('a paused class is not accused of stalling', () => {
   store.getState().togglePause();
   tick(60);
   assert.equal(store.getState().stallPhase, 'none');
-  assert.equal(sockets[0].sent.length, 0);
+  // Opening the secure WebSocket sends one auth frame before any learner action.
+  assert.equal(sockets[0].sent.length, 1);
+  assert.equal(sockets[0].sent[0].type, 'classroom_auth');
+  assert.equal(sockets[0].sent.filter(m => m.action_intent).length, 0);
   store.getState().disconnect();
 });
 

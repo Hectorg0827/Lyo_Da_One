@@ -244,9 +244,9 @@ export default function SignupPage() {
               </button>
               <span className="text-xs text-secondary leading-relaxed">
                 I agree to LYO&apos;s{' '}
-                <a href="https://lyo.app/terms" target="_blank" rel="noreferrer" className="text-[#a78bfa] hover:underline">Terms of Service</a>
+                <a href="/terms" target="_blank" rel="noreferrer" className="text-[#a78bfa] hover:underline">Terms of Service</a>
                 {' '}and{' '}
-                <a href="https://lyo.app/privacy" target="_blank" rel="noreferrer" className="text-[#a78bfa] hover:underline">Privacy Policy</a>
+                <a href="/privacy" target="_blank" rel="noreferrer" className="text-[#a78bfa] hover:underline">Privacy Policy</a>
               </span>
             </div>
 

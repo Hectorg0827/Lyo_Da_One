@@ -34,6 +34,10 @@ import {
 import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 import SurfaceLoading from '@/components/ui/SurfaceLoading';
+import { api } from '@/lib/api';
+import type { LearningJourney } from '@/lib/journey-api';
+import { returnFromJourney } from '@/lib/journey-handoff.mjs';
+import { useAuthStore } from '@/stores/auth-store';
 
 // ─── The cast ─────────────────────────────────────────────────────────────────
 
@@ -67,6 +71,8 @@ export default function ClassroomPage() {
 function ClassroomStage() {
   const router = useRouter();
   const params = useSearchParams();
+  const journeyId = process.env.NEXT_PUBLIC_LYO_JOURNEYS_ENABLED === '1'
+    ? params.get('journeyId') : null;
   const topic = params.get('topic') || 'General Learning';
   const courseId = params.get('courseId') || topic;
   const lessonId = params.get('lessonId') || undefined;
@@ -151,6 +157,12 @@ function ClassroomStage() {
   const [engagedPromptId, setEngagedPromptId] = useState<string | null>(null);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [visualHeight, setVisualHeight] = useState<number | null>(null);
+  const [journey, setJourney] = useState<LearningJourney | null>(null);
+  const [journeyLoading, setJourneyLoading] = useState(false);
+  const [journeyReload, setJourneyReload] = useState(0);
+  const [journeyError, setJourneyError] = useState<string | null>(null);
+  const [journeyLeaving, setJourneyLeaving] = useState(false);
+  const journeyLeaveId = useRef<string | null>(null);
   const boardScrollRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
@@ -162,6 +174,61 @@ function ClassroomStage() {
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topic, courseId, lessonId, reviewConceptId, objective, recordScope, difficulty, mode, durationMinutes, animationsOff, language, resume]);
+
+  // Authenticated journey lookup, not URL trust. This only adds an optional
+  // return destination; the teaching/assessment flow remains server-owned.
+  useEffect(() => {
+    let cancelled = false;
+    setJourney(null);
+    setJourneyError(null);
+    journeyLeaveId.current = null;
+    if (!journeyId) return () => { cancelled = true; };
+    const owner = useAuthStore.getState().user?.id;
+    setJourneyLoading(true);
+    api.coach.journeys.get(journeyId).then((record) => {
+      const now = useAuthStore.getState();
+      if (cancelled || !now.isAuthenticated || !owner || now.user?.id !== owner) return;
+      if (record.active_surface !== 'classroom' || record.status !== 'active') {
+        setJourneyError('This learning journey has already moved. Open it again from your learning plan.');
+      } else {
+        setJourney(record);
+      }
+    }).catch(() => {
+      if (!cancelled) setJourneyError('Could not load your saved learning journey.');
+    }).finally(() => {
+      if (!cancelled) setJourneyLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [journeyId, journeyReload]);
+
+  const leaveClassroom = async () => {
+    if (!journeyId) {
+      router.back();
+      return;
+    }
+    if (!journey) {
+      setJourneyError('Saved learning context is unavailable. Reload it or leave without recording.');
+      return;
+    }
+    if (journeyLeaving) return;
+    setJourneyLeaving(true);
+    setJourneyError(null);
+    if (!journeyLeaveId.current) journeyLeaveId.current = crypto.randomUUID();
+    try {
+      await api.coach.journeys.handoff(journey.id, {
+        request_id: journeyLeaveId.current,
+        expected_revision: journey.revision,
+        target_surface: journey.origin_surface,
+        target_ref: journey.origin_ref ?? null,
+        context: {},
+      });
+      router.push(returnFromJourney(journey));
+    } catch {
+      setJourneyError('Could not save your return. Retry or leave without recording the transition.');
+    } finally {
+      setJourneyLeaving(false);
+    }
+  };
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
@@ -396,13 +463,26 @@ function ClassroomStage() {
       style={visualHeight ? { height: visualHeight } : undefined}
     >
 
+      {journeyLoading && <p role="status" className="px-4 py-1 text-xs text-white/60">Loading saved learning context…</p>}
+      {journeyError && (
+        <div role="alert" className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/10 p-3 text-xs text-amber-100">
+          <span>{journeyError}</span>
+          <button type="button" className="underline underline-offset-2"
+            onClick={() => journey ? void leaveClassroom() : setJourneyReload((revision) => revision + 1)}>
+            {journey ? 'Retry return' : 'Reload context'}
+          </button>
+          <button type="button" className="underline underline-offset-2"
+            onClick={() => router.back()}>Leave without recording</button>
+        </div>
+      )}
       {/* ── Top bar ── */}
       <div className="flex items-start gap-3 px-3 py-2.5 sm:px-4">
         <button
-          onClick={() => router.back()}
-          aria-label="Leave classroom"
+          onClick={() => void leaveClassroom()}
+          disabled={journeyLeaving || journeyLoading}
+          aria-label={journey?.origin_surface === 'test_prep' ? 'Return to your exam' : 'Leave classroom'}
           className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-          title="Leave classroom"
+          title={journey?.origin_surface === 'test_prep' ? 'Return to exam plan' : 'Leave classroom'}
         >
           <ArrowLeft className="h-5 w-5" />
         </button>

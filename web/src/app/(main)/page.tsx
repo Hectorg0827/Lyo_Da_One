@@ -22,20 +22,21 @@ import NextForYou from '@/components/home/NextForYou';
 import CourseStack from '@/components/home/CourseStack';
 import HomeTestPrepCard from '@/components/home/HomeTestPrepCard';
 import FrontDoor from '@/components/home/FrontDoor';
+import CoachNextStep from '@/components/home/CoachNextStep';
 import LearnerStats from '@/components/stats/LearnerStats';
 import { shouldShowLearnerDashboard } from '@/lib/entry-contract.mjs';
 import { streakFrom } from '@/lib/learner-stats.mjs';
 import { hasConceptEvidence } from '@/lib/learner-model.mjs';
-import { COMMUNITY_LAUNCH_ENABLED } from '@/lib/launch-features';
+import { COMMUNITY_LAUNCH_ENABLED, DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 const activityColors = ['#6366f1', '#22c55e', '#ec4899', '#3b82f6', '#f59e0b'];
 
 // iOS FocusView.DiscoverStrip — pill chips injected into the feed
 const discoverChips = [
   ...(COMMUNITY_LAUNCH_ENABLED ? [{ label: 'People', color: '#a855f7', href: '/community' }] : []),
-  { label: 'Content', color: '#22d3ee', href: '/clips' },
+  ...(DISCOVER_LAUNCH_ENABLED ? [{ label: 'Content', color: '#22d3ee', href: '/clips' }] : []),
   { label: 'Courses', color: '#f59e0b', href: '/courses' },
-  { label: 'Search', color: '#6366f1', href: '/discover' },
+  ...(DISCOVER_LAUNCH_ENABLED ? [{ label: 'Search', color: '#6366f1', href: '/discover' }] : []),
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -411,6 +412,9 @@ export default function HomePage() {
           (see FrontDoor's `compact`). */}
       <FrontDoor knownLearner={showLearnerDashboard} />
 
+      {/* Next step comes from real Learning OS evidence, never mock progress. */}
+      <CoachNextStep key={String(user?.id ?? 'guest')} enabled={isAuthenticated && !authLoading} learnerKey={String(user?.id ?? '')} />
+
       {showLearnerDashboard && (
         /* ── The test you have coming up ────────────────────────────
             Answered in place: readiness, days remaining and the next session,
@@ -534,6 +538,12 @@ export default function HomePage() {
         )}
       </motion.div>
       )}
+
+      <footer className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-white/10 pt-6 text-xs text-white/55">
+        <Link href="/terms" className="hover:text-white">Terms</Link>
+        <Link href="/privacy" className="hover:text-white">Privacy</Link>
+        <a href="mailto:support@lyo.app" className="hover:text-white">Support</a>
+      </footer>
 
       {/* ── Bottom spacer for mobile nav ─────────────────────── */}
       <div className="h-2 md:h-4" />

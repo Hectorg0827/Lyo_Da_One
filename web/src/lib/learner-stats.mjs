@@ -62,6 +62,24 @@ export function streakFrom(gamification, user) {
   return { current, best: Math.max(best, current) };
 }
 
+/** Keep real zeroes and never substitute achievement counts for courses. */
+export function mergeGamificationProfile(user, overview) {
+  const count = (fallback, ...values) => {
+    for (const value of values) {
+      const n = num(value);
+      if (n !== null && n >= 0) return n;
+    }
+    return fallback;
+  };
+  return {
+    ...user,
+    level: Math.max(1, count(user.level, overview?.user_level?.level)),
+    xp: count(user.xp, overview?.xp_summary?.total, overview?.user_level?.total_xp),
+    streak: count(user.streak, overview?.streaks?.current),
+    coursesCompleted: count(user.coursesCompleted, overview?.learning?.courses_completed),
+  };
+}
+
 /**
  * Build the four stats, and say which kind they are.
  *
@@ -132,16 +150,12 @@ export function buildLearnerStats({ conceptSummary, gamification, user } = {}) {
 
   const xpSummary = gamification?.xp_summary ?? {};
   const userLevel = gamification?.user_level ?? {};
-  const achievements = gamification?.achievements ?? {};
+  const learning = gamification?.learning ?? {};
 
   const xp = firstCount(xpSummary.total, user?.xp);
   const level = firstCount(userLevel.level, user?.level, 1) || 1;
-  // The server's own hours when it sends them. This used to read
-  // `(total_hours || xp) ? round(xp / 100) : 0`, where `||` binds tighter than
-  // `?:` — so `total_hours` only ever decided *whether* to show a figure, and
-  // the figure shown was always the XP-derived one. A backend reporting 40
-  // hours against 0 XP displayed "0 Hours Learned".
-  const hours = num(userLevel.total_hours) ?? Math.round(xp / 100);
+  // XP is not elapsed study time. Missing duration remains unrecorded.
+  const hours = num(learning.total_hours) ?? num(userLevel.total_hours);
 
   return {
     kind: 'activity',
@@ -150,8 +164,8 @@ export function buildLearnerStats({ conceptSummary, gamification, user } = {}) {
         key: 'hours',
         label: 'Hours Learned',
         short: 'Hours',
-        value: String(Math.max(0, hours)),
-        sub: 'total',
+        value: hours === null ? '—' : String(Math.max(0, hours)),
+        sub: hours === null ? 'not recorded' : 'recorded',
         icon: 'clock',
         color: '#6366f1',
         trend: '',
@@ -160,7 +174,7 @@ export function buildLearnerStats({ conceptSummary, gamification, user } = {}) {
         key: 'courses',
         label: 'Courses Done',
         short: 'Courses',
-        value: String(firstCount(achievements.completed, user?.coursesCompleted)),
+        value: String(firstCount(learning.courses_completed, user?.coursesCompleted)),
         sub: 'total completed',
         icon: 'book',
         color: '#22c55e',

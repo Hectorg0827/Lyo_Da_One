@@ -1,0 +1,47 @@
+name: LYO public production acceptance
+
+# A push can race Railway and accidentally certify the previous deployment.
+on:
+  workflow_dispatch:
+    inputs:
+      web_sha:
+        description: Exact deployed client commit (40 characters)
+        required: true
+        type: string
+      backend_sha:
+        description: Exact deployed backend commit (40 characters)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  production-public:
+    name: Check selected live revisions and public contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      SITE_URL: https://www.lyoai.app
+      API_URL: https://api.lyoai.app
+      EXPECTED_WEB_SHA: ${{ inputs.web_sha }}
+      EXPECTED_BACKEND_SHA: ${{ inputs.backend_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.web_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify both deployed revisions before acceptance
+        working-directory: web
+        run: node scripts/verify-release-revisions.mjs
+      - name: Verify canonical web and public files live
+        working-directory: web
+        run: node scripts/verify-public-release.mjs
+      - name: Verify required production API routes
+        working-directory: web
+        run: node scripts/probe-production-contract.mjs
+      - name: Verify neither deployment changed during acceptance
+        working-directory: web
+        run: node scripts/verify-release-revisions.mjs
