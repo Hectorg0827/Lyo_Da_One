@@ -175,7 +175,10 @@ def run():
                          "subject": "Music",
                          "skills": [{"name": "Harmonic intervals", "concept_id": "harmonic-intervals"}]}, expected=201)
     goal_id = goal["goal"]["id"]
-    print("PASS synthetic learner, authenticated goal and isolated API", flush=True)
+    expected_coach = request("/api/v1/me/coach/today", token=token)
+    if not any(item.get("goal_id") == goal_id for item in expected_coach.get("mission", [])):
+        raise AssertionError("Staging Coach API provided no actionable mission for the saved test goal")
+    print("PASS synthetic learner, authenticated goal and actionable Coach API", flush=True)
 
     # Use an actual Chromium browser with the real Next.js JS bundle.
     with sync_playwright() as playwright:
@@ -185,7 +188,24 @@ def run():
         context.add_init_script(f"window.localStorage.setItem('lyo_token', {json.dumps(token)});")
         page = context.new_page()
         failures = []
+        api_calls = []
         page.on("pageerror", lambda exc: failures.append(str(exc)[:250]))
+        # Synthetic staging credentials must never reach a production API.
+        def guard_api_origin(route):
+            parsed = urllib.parse.urlparse(route.request.url)
+            if parsed.hostname not in {
+                urllib.parse.urlparse(API).hostname,
+                urllib.parse.urlparse(WEB).hostname,
+            }:
+                print(f"DIAGNOSTIC blocked non-staging API host={parsed.hostname}", flush=True)
+                route.abort()
+            else:
+                route.continue_()
+        page.route("**/api/v1/**", guard_api_origin)
+        page.on("response", lambda response: api_calls.append(
+            (urllib.parse.urlparse(response.url).hostname,
+             urllib.parse.urlparse(response.url).path, response.status)
+        ) if "/api/v1/auth/me" in response.url or "/api/v1/me/coach/today" in response.url else None)
         try:
             page.goto(WEB + "/", wait_until="domcontentloaded", timeout=60000)
             expect(page.get_by_role("heading", name="What would you like to explore today?")).to_be_visible(timeout=35000)
@@ -193,7 +213,18 @@ def run():
             print("PASS unified Home loads with direct capability shortcuts", flush=True)
 
             coach = page.get_by_role("region", name="Lyo Coach next learning step")
-            expect(coach).to_be_visible(timeout=45000)
+            try:
+                expect(coach).to_be_visible(timeout=45000)
+            except Exception:
+                excerpt = page.locator("body").inner_text(timeout=7000)[:650]
+                token_present = page.evaluate("Boolean(localStorage.getItem('lyo_token'))")
+                print(
+                    f"DIAGNOSTIC missing Coach region: api_calls={api_calls[-20:]!r}"
+                    f" token_present={token_present}"
+                    f" url={page.url!r} visible_text={excerpt!r}"
+                    f" JS_errors={failures[-6:]!r}", flush=True
+                )
+                raise
             start = coach.get_by_text("Start this step")
             tag = start.evaluate("(node) => node.closest('button,a')?.tagName || 'unknown'")
             if tag != "BUTTON":
