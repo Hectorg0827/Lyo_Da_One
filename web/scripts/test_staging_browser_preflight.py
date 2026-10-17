@@ -14,6 +14,13 @@ spec.loader.exec_module(runner)
 
 
 class BrowserPreflightTests(unittest.TestCase):
+    def test_production_or_lookalike_origins_are_rejected_before_network_access(self):
+        for origin in ("https://api.lyoai.app", "https://lyolaunchbackend-staging.up.railway.app.evil.test"):
+            with patch.object(runner, "API", origin), patch.object(runner, "request") as request, \
+                    self.assertRaisesRegex(RuntimeError, "non-isolated"):
+                runner.verify_deployed_pair()
+            request.assert_not_called()
+
     def setUp(self):
         env = patch.dict(os.environ, {
             "LYO_ONE_STAGING_BROWSER": "1",

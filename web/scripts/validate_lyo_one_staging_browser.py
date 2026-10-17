@@ -20,9 +20,18 @@ from datetime import date, timedelta
 
 from playwright.sync_api import expect, sync_playwright
 
-WEB = "https://lyoonestagingweb-staging.up.railway.app"
-API = "https://lyojourneystagingbackend-staging.up.railway.app"
+WEB = os.getenv("LYO_ONE_STAGING_WEB_URL", "https://lyoonestagingweb-staging.up.railway.app")
+API = os.getenv("LYO_ONE_STAGING_BACKEND_URL", "https://lyojourneystagingbackend-staging.up.railway.app")
 ARTIFACTS = Path(os.environ.get("LYO_STAGING_SCREENSHOT_DIR", "/tmp/lyo-one-browser-evidence"))
+
+
+def require_safe_origins():
+    allowed = (
+        (WEB, {"https://lyoonestagingweb-staging.up.railway.app", "https://lyolaunchweb-staging.up.railway.app"}),
+        (API, {"https://lyojourneystagingbackend-staging.up.railway.app", "https://lyolaunchbackend-staging.up.railway.app"}),
+    )
+    if any(origin not in approved for origin, approved in allowed):
+        raise RuntimeError("Refusing a non-isolated browser target")
 
 
 def request(path, *, method="GET", data=None, token=None, expected=200, timeout=40):
@@ -55,6 +64,7 @@ def request(path, *, method="GET", data=None, token=None, expected=200, timeout=
 
 
 def verify_deployed_pair():
+    require_safe_origins()
     expected = {name: os.environ.get(name, "") for name in
                 ("LYO_ONE_EXPECTED_BACKEND_SHA", "LYO_ONE_EXPECTED_CLIENT_SHA")}
     if any(not re.fullmatch(r"[0-9a-f]{40}", value) for value in expected.values()):
@@ -148,8 +158,7 @@ def new_learner():
 def run():
     if os.environ.get("LYO_ONE_STAGING_BROWSER") != "1":
         raise RuntimeError("Browser test may only run with LYO_ONE_STAGING_BROWSER=1")
-    assert urllib.parse.urlparse(WEB).hostname == "lyoonestagingweb-staging.up.railway.app"
-    assert urllib.parse.urlparse(API).hostname == "lyojourneystagingbackend-staging.up.railway.app"
+    require_safe_origins()
     for attempt in range(30):
         try:
             before = verify_deployed_pair()
