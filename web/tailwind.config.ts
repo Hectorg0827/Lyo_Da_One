@@ -32,7 +32,7 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['var(--font-inter)', 'system-ui', '-apple-system', 'sans-serif'],
         // iOS `.rounded` (SF Pro Rounded); ui-rounded on Apple, Nunito elsewhere
         display: ['ui-rounded', 'SF Pro Rounded', 'var(--font-nunito)', 'Inter', 'system-ui', 'sans-serif'],
       },

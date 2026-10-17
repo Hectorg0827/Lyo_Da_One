@@ -4,10 +4,8 @@
  * Discover — the learning reel, and the only one.
  *
  * Mirrors iOS `Sources/Views/Main/DiscoverView.swift`: a full-bleed,
- * vertically paged video feed with a floating search overlay, top/bottom
- * scrims, an info overlay on the left and an action strip on the right.
- * Client-side search filters title + subtitle + tags, same as the iOS
- * DiscoverViewModel.
+ * vertically paged video feed with dynamic topic tabs and top/bottom scrims.
+ * The single global TopBar search filters the entire library via URL state.
  *
  * There used to be a second reel at `/clips`, on the same clips API. Discover
  * was what everything pointed at — the mobile nav, the search bar, the empty
@@ -28,6 +26,9 @@ import {
   Users,
   ArrowRight,
   Play,
+  Pause,
+  Volume2,
+  VolumeX,
   MessageCircle,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
@@ -38,6 +39,8 @@ import { api } from '@/lib/api';
 import ClipCommentsDrawer from '@/components/clips/ClipCommentsDrawer';
 import CreateClipModal from '@/components/clips/CreateClipModal';
 import { draftSubject, draftTitle } from '@/lib/teach-it.mjs';
+import { DiscoverPlaybackController, DiscoverPageCursor, mergeClipPage, nextClipIndex } from '@/lib/discover-playback.mjs';
+import { normalizeDiscoverFeed, discoverFilterHref, discoverSubjects } from '@/lib/discover-filters.mjs';
 
 interface Reel {
   id: string;
@@ -145,7 +148,7 @@ function ActionStrip({
   onShare: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center gap-4 shrink-0">
+    <div className="flex flex-col items-center gap-3 shrink-0">
       <ActionButton label="Ask Lio" onClick={onAsk}>
         <span
           className="w-[38px] h-[38px] rounded-full flex items-center justify-center"
@@ -264,6 +267,12 @@ function InfoOverlay({ reel }: { reel: Reel }) {
 function ReelSlide({
   reel,
   isActive,
+  shouldLoad,
+  foreground,
+  muted,
+  onMutedChange,
+  onInteraction,
+  onEnded,
   onAsk,
   onCourse,
   onComment,
@@ -273,6 +282,12 @@ function ReelSlide({
 }: {
   reel: Reel;
   isActive: boolean;
+  shouldLoad: boolean;
+  foreground: boolean;
+  muted: boolean;
+  onMutedChange: (muted: boolean) => void;
+  onInteraction: () => void;
+  onEnded: () => void;
   onAsk: () => void;
   onCourse: () => void;
   onComment: () => void;
@@ -282,36 +297,99 @@ function ReelSlide({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
+  const [scrubbing, setScrubbing] = useState(false);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [ended, setEnded] = useState(false);
+  const controllerRef = useRef<DiscoverPlaybackController | null>(null);
+  const intent = { selected: isActive, foreground, paused, scrubbing, failed: loadFailed, ended };
 
-  // Only the slide in view plays — matches the iOS paged TabView behaviour.
+  // One owner per element; pause/dispose invalidates outstanding play promises.
   useEffect(() => {
-    const el = videoRef.current;
-    if (!el) return;
-    if (isActive && !paused) {
-      el.play().catch(() => {});
-    } else {
-      el.pause();
+    const video = videoRef.current;
+    if (!video) return;
+    const controller = new DiscoverPlaybackController(video, {
+      onBlocked: () => setAutoplayBlocked(true),
+      onError: () => setLoadFailed(true),
+    });
+    controllerRef.current = controller;
+    return () => { controller.dispose(); controllerRef.current = null; };
+  }, [retryKey, shouldLoad, reel.videoUrl]);
+
+  useEffect(() => {
+    controllerRef.current?.update({ selected: isActive, foreground, paused, scrubbing, failed: loadFailed, ended });
+  }, [isActive, foreground, paused, scrubbing, loadFailed, ended, retryKey, shouldLoad, reel.videoUrl, muted]);
+
+  useEffect(() => {
+    if (!isActive) {
+      setPaused(false);
+      setScrubbing(false);
+      setAutoplayBlocked(false);
+      if (videoRef.current?.ended) { controllerRef.current?.seek(0); setEnded(false); }
     }
-  }, [isActive, paused]);
+  }, [isActive]);
 
   useEffect(() => {
-    if (!isActive) setPaused(false);
-  }, [isActive]);
+    setLoadFailed(false);
+    setRetryKey(0);
+    setDuration(0);
+    setPosition(0);
+    setEnded(false);
+  }, [reel.videoUrl]);
+
+  const retry = () => {
+    onInteraction();
+    setLoadFailed(false);
+    setPaused(false);
+    setAutoplayBlocked(false);
+    setEnded(false);
+    setRetryKey((key) => key + 1);
+  };
+
+  const togglePlayback = () => {
+    if (!isActive || !foreground || loadFailed) return;
+    onInteraction();
+    const nextPaused = !(paused || autoplayBlocked || ended);
+    if (ended) controllerRef.current?.seek(0);
+    setEnded(false);
+    setPaused(nextPaused);
+    setAutoplayBlocked(false);
+    // Invoke play inside the gesture for browsers requiring user activation.
+    controllerRef.current?.update({ ...intent, paused: nextPaused, ended: false });
+  };
+  const setSeeking = (value: boolean) => {
+    if (value) onInteraction();
+    setScrubbing(value);
+    controllerRef.current?.update({ ...intent, scrubbing: value });
+  };
+  const timeLabel = (seconds: number) => `${Math.floor(seconds / 60)}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
 
   return (
     <section
       className="relative w-full h-full shrink-0 snap-start snap-always overflow-hidden bg-black"
-      onClick={() => reel.videoUrl && setPaused((p) => !p)}
+      aria-label={reel.title}
+      onClick={togglePlayback}
     >
       {/* Media */}
-      {reel.videoUrl ? (
+      {reel.videoUrl && shouldLoad ? (
         <video
+          key={retryKey}
           ref={videoRef}
           src={reel.videoUrl}
           poster={reel.posterUrl || undefined}
-          loop
+          preload="auto"
           playsInline
-          muted
+          muted={muted}
+          onError={() => setLoadFailed(true)}
+          onLoadedData={() => setLoadFailed(false)}
+          onLoadedMetadata={(event) => { const value = event.currentTarget.duration; setDuration(Number.isFinite(value) ? value : 0); }}
+          onDurationChange={(event) => { const value = event.currentTarget.duration; setDuration(Number.isFinite(value) ? value : 0); }}
+          onTimeUpdate={(event) => { if (!scrubbing) setPosition(event.currentTarget.currentTime); }}
+          onPlaying={() => { setAutoplayBlocked(false); setEnded(false); }}
+          onEnded={() => { if (controllerRef.current?.canAdvance()) onEnded(); setEnded(true); }}
           className="absolute inset-0 w-full h-full object-cover"
         />
       ) : reel.posterUrl ? (
@@ -327,8 +405,29 @@ function ReelSlide({
         />
       )}
 
+      {autoplayBlocked && isActive && !loadFailed && (
+        <button className="absolute inset-0 z-[1] m-auto h-12 w-36 rounded-lg bg-black/70 text-white" onClick={(event) => { event.stopPropagation(); togglePlayback(); }}>
+          Tap to play
+        </button>
+      )}
+
+      {/* Playback errors must offer a way out even when the media URL is dead. */}
+      {loadFailed && isActive && reel.videoUrl && (
+        <div className="absolute inset-0 z-[2] flex items-center justify-center bg-black/50">
+          <div className="flex flex-col items-center gap-3 p-5 rounded-xl bg-black/80 text-white">
+            <span className="text-sm font-semibold">Video couldn't load</span>
+            <button className="rounded-lg border border-white/40 px-4 py-2 text-sm" onClick={(e) => { e.stopPropagation(); retry(); }}>
+              Retry video
+            </button>
+            <button className="text-sm underline" onClick={(e) => { e.stopPropagation(); onEnded(); }}>
+              Next clip
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Paused affordance */}
-      {paused && reel.videoUrl && (
+      {paused && reel.videoUrl && !loadFailed && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <span className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center">
             <Play className="w-7 h-7 text-white" fill="white" />
@@ -347,7 +446,7 @@ function ReelSlide({
       />
 
       {/* Bottom content */}
-      <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 px-4 pb-[110px] md:pb-8">
+      <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 px-4 pb-[calc(9.5rem+env(safe-area-inset-bottom))] md:pb-20">
         <InfoOverlay reel={reel} />
         <ActionStrip
           reel={reel}
@@ -359,6 +458,24 @@ function ReelSlide({
           onShare={onShare}
         />
       </div>
+      {reel.videoUrl && isActive && !loadFailed && (
+        <div className="absolute inset-x-4 bottom-[76px] md:bottom-3 flex items-center gap-3 text-white" onClick={(event) => event.stopPropagation()}>
+          <button aria-label={paused || autoplayBlocked || ended ? 'Play video' : 'Pause video'} onClick={togglePlayback} className="p-2">
+            {paused || autoplayBlocked || ended ? <Play size={20} /> : <Pause size={20} />}
+          </button>
+          <input type="range" aria-label="Seek video" className="min-w-0 flex-1 accent-white touch-none" min={0} max={duration || 1} step={0.1} value={Math.min(position, duration || 0)} disabled={duration <= 0}
+            onPointerDown={() => setSeeking(true)} onPointerUp={() => setSeeking(false)} onPointerCancel={() => setSeeking(false)} onBlur={() => setSeeking(false)}
+            onKeyDown={(event) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) setSeeking(true); }} onKeyUp={() => setSeeking(false)}
+            onChange={(event) => { const value = Number(event.target.value); setPosition(value); controllerRef.current?.seek(value); }} />
+          <span className="text-xs tabular-nums">{timeLabel(position)} / {timeLabel(duration)}</span>
+          <button aria-label={muted ? 'Unmute video' : 'Mute video'} className="p-2" onClick={() => {
+            const video = videoRef.current;
+            if (video) video.muted = !muted;
+            onMutedChange(!muted);
+            controllerRef.current?.update(intent);
+          }}>{muted ? <VolumeX size={20} /> : <Volume2 size={20} />}</button>
+        </div>
+      )}
     </section>
   );
 }
@@ -400,13 +517,27 @@ function DiscoverContent() {
   // shared clip opened whatever happened to be first in the feed.
   const clipParam = searchParams.get('clip');
   const [composing, setComposing] = useState(composeParam === 'clip');
-  const [query, setQuery] = useState(queryParam);
+  const query = queryParam;
+  const feedMode: 'for_you' | 'latest' | 'popular' | 'saved' = normalizeDiscoverFeed(searchParams.get('feed'));
+  const subject = searchParams.get('subject')?.trim() ?? '';
+  const filterKey = `${feedMode}::${subject}::${query}`;
   const [activeIndex, setActiveIndex] = useState(0);
+  const [foreground, setForeground] = useState(true);
+  const [muted, setMuted] = useState(true);
+  const [pendingAdvanceId, setPendingAdvanceId] = useState<string | null>(null);
+  const activeIndexRef = useRef(0);
+  activeIndexRef.current = activeIndex;
 
   useEffect(() => {
-    setQuery(queryParam);
+    const update = () => setForeground(!document.hidden);
+    update();
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
+
+  useEffect(() => {
     setActiveIndex(0);
-  }, [queryParam]);
+  }, [filterKey]);
 
   useEffect(() => {
     setComposing(composeParam === 'clip');
@@ -416,7 +547,36 @@ function DiscoverContent() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const viewed = useRef<Set<string>>(new Set());
 
-  const { data, isLoading } = useApi(() => api.clips.discover(), []);
+  const requestOptions = { q: query || undefined, subject: subject || undefined };
+  const { data, isLoading, error: feedError, refetch } = useApi(
+    () => feedMode === 'saved'
+      ? api.clips.saved(1, 20, requestOptions)
+      : api.clips.discover(1, 20, { ...requestOptions, sort: feedMode }),
+    [filterKey],
+  );
+  const { data: availableFilters } = useApi(() => api.clips.discoverFilters(), []);
+  const [moreClips, setMoreClips] = useState<Record<string, unknown>[]>([]);
+  const pageCursor = useRef(new DiscoverPageCursor());
+
+  const subjectChoices = useMemo(
+    () => discoverSubjects(availableFilters?.subjects || [], (data?.clips || []) as Record<string, unknown>[], subject),
+    [availableFilters, data, subject],
+  );
+
+  const chooseFilter = (mode: 'for_you' | 'latest' | 'popular' | 'saved', nextSubject = '') => {
+    if (mode === feedMode && nextSubject === subject) return;
+    router.replace(discoverFilterHref(searchParams.toString(), mode, nextSubject), { scroll: false });
+  };
+
+  // Load subsequent pages before the user reaches the end. Discover is a
+  // continuous feed, not a reel that silently stops after 20 clips.
+  useEffect(() => {
+    pageCursor.current.reset();
+    setMoreClips([]);
+    setPendingAdvanceId(null);
+    setActiveIndex(0);
+    scrollerRef.current?.scrollTo({ top: 0 });
+  }, [data, filterKey]);
 
   // A named clip need not be on the first page of Discover. When it is not,
   // it is fetched by id and put at the front, so the link lands on the clip
@@ -444,25 +604,58 @@ function DiscoverContent() {
   }, [clipParam]);
 
   const reels = useMemo(() => {
-    const list = ((data?.clips as Record<string, unknown>[]) || []).map(adaptReel);
+    const list = mergeClipPage((data?.clips as Record<string, unknown>[]) || [], moreClips).map(adaptReel);
     // The named clip leads, and is not repeated further down the feed.
-    const ordered = namedReel
+    const ordered = namedReel && feedMode === 'for_you' && !subject && !query
       ? [namedReel, ...list.filter((r) => r.id !== namedReel.id)]
       : list;
     return ordered.map((r) => ({ ...r, ...overrides[r.id] }));
-  }, [data, overrides, namedReel]);
+  }, [data, overrides, namedReel, moreClips, feedMode, subject, query]);
 
-  // Client-side filter over title + subtitle + tags (iOS DiscoverViewModel)
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return reels;
-    return reels.filter(
-      (r) =>
-        r.title.toLowerCase().includes(q) ||
-        r.subtitle.toLowerCase().includes(q) ||
-        r.tags.some((t) => t.toLowerCase().includes(q))
-    );
-  }, [reels, query]);
+  useEffect(() => {
+    if (isLoading || !data) return;
+    const loadedCount = (data.clips?.length || 0) + moreClips.length;
+    if (activeIndex < reels.length - 4 || loadedCount >= (data.total || 0)) return;
+    const request = pageCursor.current.begin();
+    if (!request) return;
+    const page = request.page;
+    const load = feedMode === 'saved'
+      ? api.clips.saved(page, 20, requestOptions)
+      : api.clips.discover(page, 20, { ...requestOptions, sort: feedMode });
+    load.then((result) => {
+      if (!pageCursor.current.complete(request)) return;
+      setMoreClips((current) => mergeClipPage(current, result.clips || []));
+    }).catch(() => {
+      pageCursor.current.fail(request);
+    });
+  }, [activeIndex, isLoading, data, moreClips.length, reels.length, filterKey]);
+
+  // Search and topic filters run on the server before pagination.
+  const filtered = reels;
+
+  // Snap instantly to the next ready clip on natural completion. The last
+  // clip stays paused when there is no subsequent item to advance into.
+  const advanceFrom = useCallback((index: number) => {
+    const finished = filtered[index]?.id;
+    if (!finished || index !== activeIndexRef.current || !foreground || composing || commentsFor) return;
+    const next = nextClipIndex(filtered.map((reel) => reel.id), filtered[activeIndexRef.current]?.id, finished);
+    if (next === null) { setPendingAdvanceId(finished); return; }
+    setPendingAdvanceId(null);
+    activeIndexRef.current = next;
+    setActiveIndex(next);
+    const scroller = scrollerRef.current;
+    if (scroller) scroller.scrollTo({ top: next * scroller.clientHeight, behavior: 'auto' });
+  }, [filtered, foreground, composing, commentsFor]);
+
+  useEffect(() => {
+    if (pendingAdvanceId && filtered[activeIndex]?.id === pendingAdvanceId && activeIndex + 1 < filtered.length) advanceFrom(activeIndex);
+  }, [pendingAdvanceId, filtered, activeIndex, advanceFrom]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+    setPendingAdvanceId(null);
+    scrollerRef.current?.scrollTo({ top: 0 });
+  }, [filterKey]);
 
   // Track which slide is in view so only it plays
   useEffect(() => {
@@ -470,11 +663,14 @@ function DiscoverContent() {
     if (!scroller) return;
     const onScroll = () => {
       if (!scroller.clientHeight) return;
-      setActiveIndex(Math.round(scroller.scrollTop / scroller.clientHeight));
+      const next = Math.round(scroller.scrollTop / scroller.clientHeight);
+      activeIndexRef.current = next;
+      setActiveIndex(next);
+      setPendingAdvanceId(null);
     };
     scroller.addEventListener('scroll', onScroll, { passive: true });
     return () => scroller.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [isLoading, filtered.length]);
 
   // The named clip is put at the front, so the feed has to be looking at the
   // front for that to mean anything — it can arrive after the first page has
@@ -503,9 +699,14 @@ function DiscoverContent() {
   const handleSave = useCallback(
     (reel: Reel) => {
       patch(reel.id, { isSaved: !reel.isSaved });
-      api.clips.save(reel.id).catch(() => {});
+      api.clips.save(reel.id).then((result) => {
+        patch(reel.id, { isSaved: result.isSaved });
+        // An unsaved clip should immediately leave the Saved tab after the
+        // server confirms it. No stale items or fake client-side membership.
+        if (feedMode === 'saved') refetch();
+      }).catch(() => patch(reel.id, { isSaved: reel.isSaved }));
     },
-    [patch]
+    [patch, feedMode, refetch]
   );
 
   const handleAsk = useCallback((reel: Reel) => {
@@ -559,12 +760,19 @@ function DiscoverContent() {
               />
             ))}
           </div>
+        ) : feedError && !data ? (
+          <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center text-white">
+            <p>Discover couldn't load. Check your connection and try again.</p>
+            <button className="rounded-lg border border-white/40 px-5 py-2" onClick={refetch}>Retry Discover</button>
+          </div>
         ) : filtered.length === 0 ? (
           <EmptyState
             message={
-              query
-                ? 'Try a different search term or check back later for new discoveries.'
-                : 'New discoveries will appear here as clips are published.'
+              feedMode === 'saved'
+                ? 'No saved videos match this selection. Save a clip to find it here.'
+                : query || subject
+                  ? 'No videos match this search or topic. Try For You or another subject.'
+                  : 'New discoveries will appear here as clips are published.'
             }
           />
         ) : (
@@ -573,6 +781,12 @@ function DiscoverContent() {
               key={reel.id}
               reel={reel}
               isActive={i === activeIndex}
+              shouldLoad={Math.abs(i - activeIndex) <= 1}
+              foreground={foreground && !composing && !commentsFor}
+              muted={muted}
+              onMutedChange={setMuted}
+              onInteraction={() => setPendingAdvanceId(null)}
+              onEnded={() => advanceFrom(i)}
               onAsk={() => handleAsk(reel)}
               onCourse={() => handleCourse(reel)}
               onComment={() => setCommentsFor(reel.id)}
@@ -584,24 +798,57 @@ function DiscoverContent() {
         )}
       </div>
 
-      {/* Floating search header */}
-      <div
-        className="absolute inset-x-0 top-0 z-10 px-4 pt-6 pb-4"
-        style={{
-          background: 'linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0.4), transparent)',
-        }}
+      {/* Search lives in the global TopBar. Filters are navigable with touch,
+          trackpad, keyboard and buttons; the gradient protects readability. */}
+      <nav
+        aria-label="Discover video filters"
+        className="absolute inset-x-0 top-0 z-20 overflow-hidden bg-gradient-to-b from-[#10101c]/95 via-black/60 to-transparent pt-2 pb-5"
       >
-        <label className="flex items-center gap-3 p-3.5 rounded-2xl bg-black/40 border border-white/20">
-          <Search className="w-[17px] h-[17px] text-white/80 shrink-0" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search discoveries…"
-            aria-label="Search discoveries"
-            className="flex-1 bg-transparent text-white placeholder-white/70 text-[15px] focus:outline-none"
-          />
-        </label>
-      </div>
+        <div className="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar px-4 snap-x snap-proximity [scrollbar-width:none]">
+          {([
+            { id: 'for_you', label: 'For You', mode: 'for_you' },
+            { id: 'latest', label: 'Latest', mode: 'latest' },
+            { id: 'popular', label: 'Popular', mode: 'popular' },
+            { id: 'saved', label: 'Saved', mode: 'saved' },
+          ] as const).map((tab) => {
+            const active = !subject && feedMode === tab.mode;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                aria-pressed={active}
+                onClick={(event) => {
+                  chooseFilter(tab.mode);
+                  event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                }}
+                className={`relative snap-center shrink-0 whitespace-nowrap px-3.5 pt-2 pb-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-t-md ${active ? 'text-white' : 'text-white/60 hover:text-white'}`}
+              >
+                {tab.label}
+                {active && <span className="absolute inset-x-3.5 bottom-1 h-[3px] rounded-full bg-gradient-to-r from-[#5f7bff] to-[#ac67ff]" />}
+              </button>
+            );
+          })}
+          {subjectChoices.map((name) => {
+            const active = subject === name;
+            return (
+              <button
+                key={`subject:${name}`}
+                type="button"
+                aria-pressed={active}
+                onClick={(event) => {
+                  chooseFilter('for_you', name);
+                  event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                }}
+                className={`relative snap-center shrink-0 whitespace-nowrap px-3.5 pt-2 pb-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-t-md ${active ? 'text-white' : 'text-white/60 hover:text-white'}`}
+              >
+                {name}
+                {active && <span className="absolute inset-x-3.5 bottom-1 h-[3px] rounded-full bg-gradient-to-r from-[#5f7bff] to-[#ac67ff]" />}
+              </button>
+            );
+          })}
+        </div>
+        <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-9 bg-gradient-to-l from-[#10101c]/95 to-transparent" />
+      </nav>
 
       {composing && (
         <CreateClipModal
