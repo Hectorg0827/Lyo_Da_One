@@ -1,0 +1,46 @@
+name: Lyo One isolated browser smoke
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    branches: [main, feature/lyo-one-chat-coach-current]
+    paths:
+      - web/scripts/validate_lyo_one_staging_browser.py
+      - .github/workflows/lyo-one-staging-browser.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  staging-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    env:
+      LYO_ONE_STAGING_BACKEND_URL: https://lyolaunchbackend-staging.up.railway.app
+      LYO_ONE_STAGING_WEB_URL: https://lyolaunchweb-staging.up.railway.app
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install browser runner
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.55.0
+          python3 -m playwright install --with-deps chromium
+      - name: Validate isolated Lyo One UI in real Chromium
+        env:
+          LYO_ONE_STAGING_BROWSER: "1"
+          LYO_ONE_EXPECTED_CLIENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          LYO_ONE_TEST_PREP_PROVIDER_READY: ${{ github.event_name == 'pull_request' && github.event.action == 'labeled' && github.event.label.name == 'lyo-provider-ready' && github.event.pull_request.number == 140 && github.event.pull_request.head.repo.full_name == github.repository && 'yes' || 'no' }}
+          LYO_STAGING_SCREENSHOT_DIR: "${{ runner.temp }}/lyo-one-screenshots"
+        run: |
+          python3 -m unittest discover -s web/scripts -p test_staging_browser_preflight.py
+          LYO_ONE_EXPECTED_BACKEND_SHA=$(git ls-remote https://github.com/Hectorg0827/LyoBackendJune.git refs/heads/release/launch-readiness-20261017 | awk 'NR == 1 { print $1 }')
+          export LYO_ONE_EXPECTED_BACKEND_SHA
+          python3 web/scripts/validate_lyo_one_staging_browser.py
+      - name: Upload failure-only evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-one-browser-failure
+          path: ${{ runner.temp }}/lyo-one-screenshots
+          if-no-files-found: ignore
+          retention-days: 3

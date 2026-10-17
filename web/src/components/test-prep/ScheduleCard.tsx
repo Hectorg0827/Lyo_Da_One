@@ -1,13 +1,14 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
 import { CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { sessionEntryHref } from '@/lib/test-prep.mjs';
 import { hourLabel, milestoneForWeek, planProgress, sessionDate, weekTimeline } from '@/lib/test-prep-view.mjs';
 import type { PrepSnapshot } from '@/lib/test-prep-api';
+import type { CoachGoal } from '@/lib/coach-api';
+import CoachMissionEntry from '@/components/coach/CoachMissionEntry';
 
 /**
  * The full study schedule, as a week.
@@ -31,7 +32,12 @@ import type { PrepSnapshot } from '@/lib/test-prep-api';
 const PX_PER_MINUTE = 48 / 60;
 const MIN_BLOCK_PX = 22;
 
-export function ScheduleCard({ snapshot }: { snapshot: PrepSnapshot }) {
+export function ScheduleCard({ snapshot, goal, profileId, returnedSessionId }: {
+  snapshot: PrepSnapshot;
+  goal?: CoachGoal | null;
+  profileId?: string | null;
+  returnedSessionId?: string | null;
+}) {
   const [open, setOpen] = useState(true);
   const [weekOffset, setWeekOffset] = useState(0);
   const [showAll, setShowAll] = useState(false);
@@ -55,7 +61,7 @@ export function ScheduleCard({ snapshot }: { snapshot: PrepSnapshot }) {
   const gridHeight = timeline.hours.length * 48;
 
   return (
-    <section className="rounded-[22px] border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.025] p-5 shadow-[0_6px_12px_rgba(0,0,0,0.18)] sm:p-[22px]">
+    <section aria-label="Full study schedule" className="rounded-[22px] border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.025] p-5 shadow-[0_6px_12px_rgba(0,0,0,0.18)] sm:p-[22px]">
       <div className="flex flex-wrap items-center gap-2.5">
         <button
           type="button"
@@ -196,9 +202,11 @@ export function ScheduleCard({ snapshot }: { snapshot: PrepSnapshot }) {
                     height: Math.max(MIN_BLOCK_PX, block.durationMinutes * PX_PER_MINUTE),
                   };
                   return href ? (
-                    <Link key={block.id} href={href} title={title} className={cn(className, 'transition hover:brightness-125')} style={style}>
+                    <CoachMissionEntry key={block.id} session={block.session} goal={goal}
+                      origin="test_prep" profileId={profileId} title={title} wrapperClassName="contents"
+                      className={cn(className, 'text-left transition hover:brightness-125', returnedSessionId === block.id && 'ring-2 ring-violet-400/70')} style={style}>
                       {inner}
-                    </Link>
+                    </CoachMissionEntry>
                   ) : (
                     <span key={block.id} title={title} className={className} style={style}>
                       {inner}
@@ -288,12 +296,15 @@ export function ScheduleCard({ snapshot }: { snapshot: PrepSnapshot }) {
                       </p>
                     </div>
                     {!historical && session.status === 'scheduled' && href ? (
-                      <Link
-                        href={href}
+                      <CoachMissionEntry
+                        session={session}
+                        goal={goal}
+                        profileId={profileId}
+                        origin="test_prep"
                         className="shrink-0 rounded-xl bg-lyo-400/25 px-3 py-2 text-[13px] font-semibold text-lyo-100 transition hover:bg-lyo-400/35"
                       >
                         Start session
-                      </Link>
+                      </CoachMissionEntry>
                     ) : (
                       <span className="shrink-0 text-[13px] text-white/55">{session.status}</span>
                     )}

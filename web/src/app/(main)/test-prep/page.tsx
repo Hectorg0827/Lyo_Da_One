@@ -35,7 +35,8 @@ import type { ReadinessPayload, StudySessionRow } from '@/types';
 import { PrepManagement } from '@/components/test-prep/PrepManagement';
 import type { PrepMaterial, PrepProfile, PrepSnapshot } from '@/lib/test-prep-api';
 import type { CoachToday } from '@/lib/coach-api';
-import { actionLabel, missionEntryHref, readinessExplanation, readinessLabel } from '@/lib/coach.mjs';
+import { goalForTestProfile } from '@/lib/coach.mjs';
+import CoachMissionEntry from '@/components/coach/CoachMissionEntry';
 
 /**
  * Test Prep — the face on a learner loop that had none.
@@ -65,7 +66,7 @@ import { actionLabel, missionEntryHref, readinessExplanation, readinessLabel } f
 type Turn = { role: 'coach' | 'learner'; text: string };
 
 export default function TestPrepPage() {
-  const { isAuthenticated, isLoading: authLoading, user } = useAuthStore();
+  const { isAuthenticated, isLoading: authLoading, user, authVerificationError, hydrate } = useAuthStore();
   // The streak is the one KPI this page does not already fetch. It waits for
   // authentication to settle, because `/gamification/overview` is a
   // required-auth call: a signed-out visitor's 401 takes `request()`'s
@@ -102,6 +103,7 @@ export default function TestPrepPage() {
   const [uploading, setUploading] = useState(false);
   const [intakeError, setIntakeError] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<PrepProfile[]>([]);
+  const [returnedSessionId, setReturnedSessionId] = useState<string | null>(null);
   const [startingNew, setStartingNew] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   // The details form is revealed by the workspace header's pencil, so the
@@ -132,6 +134,10 @@ export default function TestPrepPage() {
 
   const selectProfile = (id: string) => {
     selectedProfileIdRef.current = id;
+    setReturnedSessionId(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('sessionId');
+    window.history.replaceState(window.history.state, '', url.toString());
     const version = ++selectionVersionRef.current;
     loadVersionRef.current++;
     dispatch({ type: 'profile_selected' });
@@ -228,7 +234,9 @@ export default function TestPrepPage() {
     }
     // Read the selected profile before the first state request. Without this
     // deep-link restoration a refresh silently switches to the newest exam.
-    selectedProfileIdRef.current = new URLSearchParams(window.location.search).get('profileId');
+    const query = new URLSearchParams(window.location.search);
+    selectedProfileIdRef.current = query.get('profileId');
+    setReturnedSessionId(query.get('sessionId'));
     void loadPlan();
   }, [authLoading, isAuthenticated, loadPlan]);
 
@@ -394,6 +402,17 @@ export default function TestPrepPage() {
     );
   }
 
+  if (!isAuthenticated && authVerificationError) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-16" role="status">
+        <h1 className="text-2xl font-semibold text-white">Session verification unavailable</h1>
+        <p className="mt-3 text-white/70">Your session could not be verified right now. Retry to reopen your selected exam.</p>
+        <button type="button" onClick={() => void hydrate()} className="mt-6 rounded-xl bg-white px-5 py-3 font-medium text-black">
+          Retry verification
+        </button>
+      </main>
+    );
+  }
   if (!isAuthenticated) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-16">
@@ -564,14 +583,7 @@ export default function TestPrepPage() {
   // overstate one failed call, and saying nothing understates it — badly, in
   // the moment right after finishing a session.
   const readinessStale = readinessNote(state);
-  const testGoals = coach?.active_goals.filter(goal =>
-    goal.goal_type === 'test' &&
-    goal.subject === snapshot?.profile?.subject
-  ) ?? [];
-  // Subject alone cannot distinguish two Algebra exams. Show a mission only
-  // when it can be tied unambiguously to the selected test.
-  const testGoal = testGoals.length === 1 && profiles.filter(p =>
-    p.subject === snapshot?.profile?.subject).length <= 1 ? testGoals[0] : null;
+  const testGoal = goalForTestProfile(coach?.active_goals, profileId);
   const coachReadiness = testGoal ? coach?.readiness[testGoal.id] : undefined;
   const coachMission = testGoal
     ? (coach?.mission ?? []).filter(item => item.goal_id === testGoal.id)
@@ -630,6 +642,13 @@ export default function TestPrepPage() {
       />
 
       {countdown && <p className="sr-only">{countdown}</p>}
+      {returnedSessionId && snapshot?.profile?.id === profileId &&
+        snapshot?.sessions.some(session => session.id === returnedSessionId) && (
+        <p role="status" className="rounded-xl border border-violet-400/40 bg-violet-500/10 px-4 py-3 text-sm text-white/85">
+          Returned to study session: <strong>{snapshot.sessions.find(session => session.id === returnedSessionId)?.topic}</strong>.
+          {' '}Your exam and session are saved.
+        </p>
+      )}
 
       {stale && (
         <p className="rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm text-amber-200">
@@ -660,6 +679,8 @@ export default function TestPrepPage() {
             <CoachHero
               coachReadiness={coachReadiness}
               mission={coachMission}
+              goal={testGoal}
+              profileId={profileId}
               sessions={snapshot?.sessions ?? []}
               coachFailed={coachFailed}
             />
@@ -678,14 +699,17 @@ export default function TestPrepPage() {
                 show. Start the first session and this page fills in as you go.
               </p>
 
-              {firstSessionHref && (
-                <Link
-                  href={firstSessionHref}
+              {firstSessionHref && firstSession && (
+                <CoachMissionEntry
+                  session={firstSession}
+                  goal={testGoal}
+                  profileId={profileId}
+                  origin="test_prep"
                   className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-2xl bg-gradient-to-b from-white to-sky-50 px-5 py-3 text-sm font-bold text-violet-700 shadow-[0_5px_12px_rgba(0,0,0,0.2)] transition hover:to-white"
                 >
                   <Play className="h-4 w-4 fill-current" aria-hidden />
                   Start your first session
-                </Link>
+                </CoachMissionEntry>
               )}
 
               <div className="mt-6 border-t border-white/10 pt-5">
@@ -716,7 +740,7 @@ export default function TestPrepPage() {
         </div>
 
         <div className={cn(RIGHT, 'flex flex-col gap-[18px]')}>
-          {snapshot && <ScheduleCard snapshot={snapshot} />}
+          {snapshot && <ScheduleCard snapshot={snapshot} goal={testGoal} profileId={profileId} returnedSessionId={returnedSessionId} />}
           {snapshot && <MaterialsCard snapshot={snapshot} onSaved={loadPlan} />}
         </div>
       </div>
@@ -850,14 +874,19 @@ export default function TestPrepPage() {
                   </>
                 );
                 return (
-                  <li key={session.id} className="flex items-stretch gap-2.5">
+                  <li key={session.id} id={`test-prep-session-${session.id}`}
+                    className={cn('flex items-stretch gap-2.5', returnedSessionId === session.id && 'rounded-xl ring-2 ring-violet-400/70')}>
                     {href ? (
-                      <Link
-                        href={href}
+                      <CoachMissionEntry
+                        session={session}
+                        goal={testGoal}
+                        origin="test_prep"
+                        profileId={profileId}
+                        wrapperClassName="min-w-0 flex-1"
                         className="flex min-w-0 flex-1 items-center gap-3 rounded-[15px] border border-white/10 bg-white/[0.05] p-3.5 transition hover:bg-white/[0.08]"
                       >
                         {body}
-                      </Link>
+                      </CoachMissionEntry>
                     ) : (
                       // No topic means nothing to teach. A dead link into an
                       // empty Classroom is worse than a row that plainly is

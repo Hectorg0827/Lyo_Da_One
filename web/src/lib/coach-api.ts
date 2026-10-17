@@ -15,6 +15,8 @@ export interface CoachGoal {
   title: string;
   subject?: string | null;
   status: string;
+  source_ref_type?: string | null;
+  source_ref_id?: string | null;
   deadline?: string | null;
   desired_outcome: Record<string, unknown>;
   constraints: Record<string, unknown>;

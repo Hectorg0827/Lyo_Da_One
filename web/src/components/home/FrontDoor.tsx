@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import {
   GraduationCap, CalendarClock, ArrowRight, SlidersHorizontal, ChevronDown,
-  Check, Gauge, Timer, Languages, Target,
+  Check, Gauge, Timer, Languages, Target, MessageCircle, Sparkles,
 } from 'lucide-react';
 import {
   classroomEntryHref,
@@ -14,6 +14,7 @@ import {
   SESSION_LENGTHS,
   CLASSROOM_LANGUAGES,
 } from '@/lib/entry-contract.mjs';
+import { routeLearningRequest, directLearningHref } from '@/lib/unified-entry.mjs';
 
 /**
  * LYO's front door.
@@ -126,6 +127,20 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
     router.push(testPrepEntryHref());
   };
 
+  // One input, one journey. A quick question stays in Chat; explicit teaching
+  // opens Classroom; exam intake preserves the learner's complete wording.
+  // The authoritative server interaction contract still handles the turn.
+  const startWithLyo = () => {
+    const route = routeLearningRequest(trimmed, {
+      goal,
+      level: level || undefined,
+      minutes: minutes === '' ? undefined : minutes,
+      language,
+      objective: chosenObjective ? chosenObjective(trimmed) : undefined,
+    });
+    if (route) router.push(route.href);
+  };
+
   return (
     <motion.section
       initial={reduceMotion ? false : { opacity: 0, y: 16 }}
@@ -184,7 +199,7 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
             )}
             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent-teal" />
           </span>
-          {compact ? 'Start a new course' : 'A live teacher, not a playlist'}
+          {compact ? 'Explore with Lyo' : 'Your AI learning companion'}
         </div>
 
         <h1
@@ -196,13 +211,12 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
               : 'mt-3 text-[30px] sm:text-[44px]',
           ].join(' ')}
         >
-          {compact ? 'What do you want to learn next?' : 'What do you want to learn?'}
+          {compact ? 'What would you like to do next?' : 'What would you like to explore today?'}
         </h1>
 
         {!compact && (
           <p className="mt-3 max-w-xl text-sm sm:text-base font-medium text-white/75">
-            LYO teaches you live, checks what you understand, adapts when you&apos;re stuck,
-            and remembers what you&apos;ve mastered.
+            Ask anything, learn any subject, or prepare for your next exam. Lyo chooses the right tools while you stay in control.
           </p>
         )}
 
@@ -213,11 +227,11 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
           ].join(' ')}
           onSubmit={(e) => {
             e.preventDefault();
-            enterClassroom();
+            startWithLyo();
           }}
         >
           <label htmlFor="front-door-topic" className="sr-only">
-            What do you want to learn?
+            What would you like to ask or learn?
           </label>
           <div className="relative flex-1 min-w-0">
             <input
@@ -225,8 +239,8 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               placeholder={compact
-                ? 'A subject, a skill, a chapter you\u2019re stuck on'
-                : 'Anything \u2014 a subject, a skill, a chapter you\u2019re stuck on'}
+                ? 'Ask, learn, or prepare for a test'
+                : 'Ask anything, learn a skill, or tell Lyo about your exam'}
               autoComplete="off"
               className={[
                 'peer w-full rounded-2xl bg-black/30 border border-white/20',
@@ -261,8 +275,8 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
                 : 'cursor-not-allowed border border-white/25 bg-white/[0.07] text-white/55',
             ].join(' ')}
           >
-            <GraduationCap size={18} />
-            Enter Classroom
+            <Sparkles size={18} />
+            Continue with Lyo
             {trimmed && (
               <ArrowRight
                 size={16}
@@ -273,16 +287,8 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
           </button>
         </form>
         <p className="mt-3 text-xs leading-relaxed text-white/60">
-          <span className="font-semibold text-white/80">Live Classroom</span> is a guided lesson with
-          teacher narration, a visual board and check-ins. Prefer asking questions at your own pace?
-          {' '}
-          <button
-            type="button"
-            onClick={() => router.push(trimmed ? `/chat?prompt=${encodeURIComponent(trimmed)}` : '/chat')}
-            className="font-semibold text-violet-200 underline underline-offset-2 hover:text-white"
-          >
-            Ask LYO Tutor in chat
-          </button>.
+          Questions stay conversational. Lessons open the live Classroom. Exam requests use your
+          study-planning tools. You can always choose a capability directly below.
         </p>
 
         {/* ── Suggestions ──
@@ -428,46 +434,38 @@ export default function FrontDoor({ knownLearner = false }: { knownLearner?: boo
           )}
         </AnimatePresence>
 
-        {/* ── The second door ──
-            A test with a date on it is a different request from "teach me
-            this", and it is the one people arrive with. It used to be an
-            outline button with a caption stranded under it after a rule —
-            shaped like a footnote, so it read like leftover text from the
-            card above.
-
-            It is a tile now: the whole thing is the target, the amber is the
-            same amber the test-prep card and the Test Prep page already use,
-            so this is visibly the way in to *that*, and the two lines say
-            what it does instead of leaving a caption to explain the button.
-            Equal in form to the classroom CTA, distinct in colour, second in
-            reading order. ── */}
+        {/* Direct entry is a real choice, never an obligation. Avoid a second
+            search/input or a second Test Prep prompt on the same screen. */}
         <div className={['border-t border-white/15', compact ? 'mt-4 pt-4' : 'mt-6 pt-5'].join(' ')}>
-          <button
-            type="button"
-            onClick={startTestPrep}
-            className="group/test flex w-full items-center gap-3 rounded-2xl border border-[#F59E0B]/35
-              bg-[#F59E0B]/[0.13] p-3.5 text-left backdrop-blur-md
-              transition-all duration-200 hover:border-[#F59E0B]/60 hover:bg-[#F59E0B]/[0.22]
-              active:scale-[0.99]"
-          >
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#F59E0B]/30 bg-[#F59E0B]/20">
-              <CalendarClock size={18} className="text-[#FBBF24]" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block font-rounded text-[15px] font-bold leading-tight text-white">
-                I have a test
-              </span>
-              <span className="mt-0.5 block text-[11.5px] font-medium leading-snug text-white/60">
-                {knownLearner
-                  ? 'The date and your notes \u2014 LYO plans around what you know'
-                  : 'Bring the date and your notes \u2014 LYO plans it with you'}
-              </span>
-            </span>
-            <ArrowRight
-              size={16}
-              className="shrink-0 text-[#FBBF24] transition-transform duration-200 group-hover/test:translate-x-0.5"
-            />
-          </button>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/60">
+            Or jump directly into
+          </p>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <button type="button"
+              onClick={() => router.push(directLearningHref('chat', trimmed) || '/chat')}
+              className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-white/20 bg-white/[0.08] p-3 text-left transition hover:bg-white/[0.16] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <MessageCircle size={19} className="text-violet-200" aria-hidden="true" />
+              <span className="font-semibold text-sm text-white">AI Chat</span>
+              <span className="text-[11px] leading-snug text-white/60">Ask anything</span>
+            </button>
+            <button type="button"
+              onClick={() => trimmed ? enterClassroom() : router.push('/classroom')}
+              className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-white/20 bg-white/[0.08] p-3 text-left transition hover:bg-white/[0.16] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <GraduationCap size={19} className="text-violet-200" aria-hidden="true" />
+              <span className="font-semibold text-sm text-white">Classroom</span>
+              <span className="text-[11px] leading-snug text-white/60">Learn deeply</span>
+            </button>
+            <button type="button"
+              onClick={startTestPrep}
+              className="flex min-w-0 flex-col items-start gap-2 rounded-2xl border border-[#F59E0B]/35 bg-[#F59E0B]/[0.12] p-3 text-left transition hover:bg-[#F59E0B]/[0.20] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <CalendarClock size={19} className="text-[#FBBF24]" aria-hidden="true" />
+              <span className="font-semibold text-sm text-white">I have a test</span>
+              <span className="text-[11px] leading-snug text-white/60">Get exam-ready</span>
+            </button>
+          </div>
         </div>
       </div>
     </motion.section>

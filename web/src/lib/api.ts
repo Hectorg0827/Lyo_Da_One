@@ -1,3 +1,4 @@
+import { resolveApiEndpoint } from '@/lib/api-url.mjs';
 import {
   classifyAuthFailure,
   NOT_SIGNED_IN,
@@ -75,6 +76,8 @@ export function setTokens(access: string, refresh?: string | null) {
   if (typeof window === 'undefined') return;
   localStorage.setItem('lyo_token', access);
   if (refresh) localStorage.setItem('lyo_refresh_token', refresh);
+  else localStorage.removeItem('lyo_refresh_token'); // never inherit another account's refresh token
+  window.dispatchEvent(new Event('lyo:auth-token-updated'));
 }
 
 export function clearTokens() {
@@ -139,17 +142,23 @@ async function request<T>(
     ...(fetchOptions.headers as Record<string, string>),
   };
 
+  let requestAccessToken: string | null = null;
   if (!skipAuth) {
-    const token = getAccessToken();
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    requestAccessToken = getAccessToken();
+    if (requestAccessToken) headers['Authorization'] = `Bearer ${requestAccessToken}`;
   }
 
-  const res = await fetch(`${API_URL}${endpoint}`, {
+  const res = await fetch(resolveApiEndpoint(API_URL, endpoint), {
     ...fetchOptions,
     headers,
   });
 
   if (res.status === 401 && !skipAuth) {
+    // An old request must never evict a new account that has logged in since
+    // it was dispatched, or replace its credentials with a stale refresh.
+    if (getAccessToken() !== requestAccessToken) {
+      throw new ApiError('Session changed during request', 401);
+    }
     // The refresh runs for every call, optional ones included: a learner with
     // a merely *expired* access token must not have their Home sections sit
     // empty for the visit because `useApi` never retries.
@@ -157,8 +166,9 @@ async function request<T>(
 
     let retry: Response | null = null;
     if (refreshed) {
-      headers['Authorization'] = `Bearer ${getAccessToken()}`;
-      retry = await fetch(`${API_URL}${endpoint}`, { ...fetchOptions, headers });
+      requestAccessToken = getAccessToken();
+      headers['Authorization'] = `Bearer ${requestAccessToken}`;
+      retry = await fetch(resolveApiEndpoint(API_URL, endpoint), { ...fetchOptions, headers });
     }
 
     // The decision lives in `auth-failure.mjs`, where it can be tested. This
@@ -191,6 +201,9 @@ async function request<T>(
         throw new ApiError('Not signed in', 401);
 
       default:
+        if (getAccessToken() !== requestAccessToken) {
+          throw new ApiError('Session changed during request', 401);
+        }
         clearTokens();
         if (typeof window !== 'undefined') window.location.href = '/auth/login';
         throw new ApiError('Session expired', 401);
@@ -210,18 +223,25 @@ async function tryRefreshToken(): Promise<boolean> {
   const refresh = getRefreshToken();
   if (!refresh) return false;
   try {
-    const res = await fetch(`${API_URL}/auth/refresh`, {
+    const res = await fetch(resolveApiEndpoint(API_URL, '/auth/refresh'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: refresh }),
     });
     if (!res.ok) return false;
     const data = await res.json();
-    setTokens(data.access_token, data.refresh_token);
+    if (getRefreshToken() !== refresh) return false; // logout/account switch
+    if (!data?.access_token) return false;
+    setTokens(data.access_token, data.refresh_token || refresh);
     return true;
   } catch {
     return false;
   }
+}
+
+/** Refresh the stored access token for long-lived authenticated transports. */
+export async function refreshAccessToken(): Promise<boolean> {
+  return tryRefreshToken();
 }
 
 // ── Adapters (backend → frontend types) ──────────────────────────────────────
@@ -260,16 +280,28 @@ export const api = {
   auth: {
     async login(email: string, password: string) {
       const data = await request<{
-        user: Record<string, unknown>;
-        access_token: string;
+        user?: Record<string, unknown>;
+        access_token?: string;
         refresh_token?: string;
       }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
         skipAuth: true,
       });
+      if (!data?.access_token) throw new ApiError('Sign in did not return an access token', 502);
       setTokens(data.access_token, data.refresh_token);
-      return { user: adaptUser(data.user), accessToken: data.access_token };
+      // The v1 mobile-compatible login returns only an access token.
+      // Fetch the authenticated user rather than inventing an identity.
+      let rawUser = data.user;
+      if (!rawUser) {
+        try {
+          rawUser = await request<Record<string, unknown>>('/auth/me');
+        } catch (error) {
+          clearTokens();
+          throw error;
+        }
+      }
+      return { user: adaptUser(rawUser), accessToken: data.access_token };
     },
 
     async register(params: {
@@ -281,8 +313,9 @@ export const api = {
       lastName?: string;
     }) {
       const data = await request<{
-        user: Record<string, unknown>;
-        access_token: string;
+        user?: Record<string, unknown>;
+        user_id?: number | string;
+        access_token?: string;
         refresh_token?: string;
       }>('/auth/register', {
         method: 'POST',
@@ -293,11 +326,23 @@ export const api = {
           confirm_password: params.confirmPassword,
           first_name: params.firstName,
           last_name: params.lastName,
+          full_name: [params.firstName, params.lastName].filter(Boolean).join(' '),
         }),
         skipAuth: true,
       });
+      // v1 registration returns {message, user_id}. Only tokens issued by
+      // /auth/login authenticate a new learner; never use user_id as proof.
+      if (!data?.access_token) {
+        if (!data?.user_id) throw new ApiError('Registration did not create a learner', 502);
+        return api.auth.login(params.email, params.password);
+      }
       setTokens(data.access_token, data.refresh_token);
-      return { user: adaptUser(data.user), accessToken: data.access_token };
+      let rawUser = data.user;
+      if (!rawUser) {
+        try { rawUser = await request<Record<string, unknown>>('/auth/me'); }
+        catch (error) { clearTokens(); throw error; }
+      }
+      return { user: adaptUser(rawUser), accessToken: data.access_token };
     },
 
     async me() {
@@ -311,6 +356,26 @@ export const api = {
         body: JSON.stringify(updates),
       });
       return adaptUser(data);
+    },
+
+    async requestPasswordReset(email: string) {
+      return request<{ message: string }>('/api/v1/auth/password-reset/request', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({ email }),
+      });
+    },
+
+    async confirmPasswordReset(token: string, newPassword: string, confirmPassword: string) {
+      return request<{ message: string }>('/api/v1/auth/password-reset/confirm', {
+        method: 'POST',
+        skipAuth: true,
+        body: JSON.stringify({
+          token,
+          new_password: newPassword,
+          confirm_password: confirmPassword,
+        }),
+      });
     },
 
     async logout() {
@@ -478,7 +543,7 @@ export const api = {
       const controller = new AbortController();
 
       const doFetch = (authToken: string | null) =>
-        fetch(`${API_URL}/api/v1/lyo2/chat/stream`, {
+        fetch(resolveApiEndpoint(API_URL, '/api/v1/lyo2/chat/stream'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -646,6 +711,10 @@ export const api = {
 
   // ── Courses ──
   courses: {
+    async mine() {
+      return request<Record<string, unknown>[]>('/api/v1/learning/courses/mine');
+    },
+
     async list(skip = 0, limit = 20, subject?: string, difficulty?: string) {
       const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
       if (subject) params.set('subject', subject);
@@ -761,7 +830,7 @@ export const api = {
         const headers: Record<string, string> = {};
         const token = getAccessToken();
         if (token) headers['Authorization'] = `Bearer ${token}`;
-        return fetch(`${API_URL}/api/v1/media/upload`, {
+        return fetch(resolveApiEndpoint(API_URL, '/api/v1/media/upload'), {
           method: 'POST',
           headers, // no Content-Type — the browser sets the multipart boundary
           body: form,
@@ -908,6 +977,25 @@ export const api = {
     /** Receding-horizon mission derived from canonical evidence across active goals. */
     async today() {
       return request<import('./coach-api').CoachToday>('/api/v1/me/coach/today');
+    },
+    /** Navigation continuity only: no scoring or lesson generation. */
+    journeys: {
+      async start(payload: import('./journey-api').JourneyStartPayload) {
+        return request<import('./journey-api').LearningJourney>('/api/v1/me/coach/journeys', {
+          method: 'POST', body: JSON.stringify(payload),
+        });
+      },
+      async get(id: string) {
+        return request<import('./journey-api').LearningJourney>(
+          `/api/v1/me/coach/journeys/${encodeURIComponent(id)}`
+        );
+      },
+      async handoff(id: string, payload: import('./journey-api').JourneyHandoffPayload) {
+        return request<import('./journey-api').JourneyHandoff>(
+          `/api/v1/me/coach/journeys/${encodeURIComponent(id)}/handoffs`,
+          { method: 'POST', body: JSON.stringify(payload) }
+        );
+      },
     },
   },
 
@@ -1427,7 +1515,7 @@ export const api = {
       formData.append('file', file);
       formData.append('folder', folder);
 
-      const res = await fetch(`${API_URL}/api/v1/storage/upload`, {
+      const res = await fetch(resolveApiEndpoint(API_URL, '/api/v1/storage/upload'), {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: formData,
@@ -1456,7 +1544,7 @@ export const api = {
       options: { language?: string; speed?: number; signal?: AbortSignal } = {}
     ): Promise<Blob> {
       const token = getAccessToken();
-      const res = await fetch(`${API_URL}/api/v1/tts/synthesize/stream`, {
+      const res = await fetch(resolveApiEndpoint(API_URL, '/api/v1/tts/synthesize/stream'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

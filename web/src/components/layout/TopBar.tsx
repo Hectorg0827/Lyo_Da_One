@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { useAuthStore } from '@/stores/auth-store';
 import { authSwitchHref } from '@/lib/auth-return.mjs';
 import { UNREAD_CHANGED_EVENT, totalUnread, unreadBadge, unreadLabel } from '@/lib/unread.mjs';
+import { DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 const UNREAD_REFRESH_MS = 60_000;
 
@@ -123,7 +124,7 @@ export function TopBar() {
       </div>
 
       {/* Center: Search — a real navigation action, not a decorative field. */}
-      <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-auto" role="search">
+      {DISCOVER_LAUNCH_ENABLED && <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-auto" role="search">
         <div className="relative">
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)] pointer-events-none"
@@ -144,7 +145,7 @@ export function TopBar() {
             aria-label="Search discoveries"
           />
         </div>
-      </form>
+      </form>}
 
       {/* Right: account actions. Signed out, there is nothing personal to show. */}
       {isLoading ? (
