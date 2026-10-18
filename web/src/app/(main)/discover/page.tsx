@@ -495,7 +495,11 @@ function DiscoverContent() {
         isLiked: !reel.isLiked,
         likes: reel.likes + (reel.isLiked ? -1 : 1),
       });
-      api.clips.like(reel.id).catch(() => {});
+      api.clips.like(reel.id).then((result) => {
+        patch(reel.id, { isLiked: result.isLiked, likes: result.likeCount });
+      }).catch(() => {
+        patch(reel.id, { isLiked: reel.isLiked, likes: reel.likes });
+      });
     },
     [patch]
   );
@@ -503,7 +507,11 @@ function DiscoverContent() {
   const handleSave = useCallback(
     (reel: Reel) => {
       patch(reel.id, { isSaved: !reel.isSaved });
-      api.clips.save(reel.id).catch(() => {});
+      api.clips.save(reel.id).then((result) => {
+        patch(reel.id, { isSaved: result.isSaved });
+      }).catch(() => {
+        patch(reel.id, { isSaved: reel.isSaved });
+      });
     },
     [patch]
   );
