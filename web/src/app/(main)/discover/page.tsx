@@ -146,7 +146,7 @@ function ActionStrip({
 }) {
   return (
     <div className="flex flex-col items-center gap-4 shrink-0">
-      <ActionButton label="Ask Lio" onClick={onAsk}>
+      <ActionButton label="Learn with Lyo" onClick={onAsk}>
         <span
           className="w-[38px] h-[38px] rounded-full flex items-center justify-center"
           style={{ background: 'linear-gradient(135deg, #007aff, #af52de)' }}
@@ -509,7 +509,7 @@ function DiscoverContent() {
   );
 
   const handleAsk = useCallback((reel: Reel) => {
-    router.push(`/chat?prompt=${encodeURIComponent(`Explain ${reel.title} and help me understand it.`)}`);
+    router.push(`/chat?prompt=${encodeURIComponent(`I discovered a video titled "${reel.title}". ${reel.subtitle ? `Description: ${reel.subtitle}. ` : ""}Help me learn this topic interactively. Start with a clear explanation, connect it to what I saw, and let me choose to explore further, practice, or enter the AI Classroom. Do not start a quiz unless I ask.`)}`);
   }, [router]);
 
   const handleCourse = useCallback((reel: Reel) => {
@@ -583,6 +583,16 @@ function DiscoverContent() {
           ))
         )}
       </div>
+
+      {/* In-feed creation entry point; preserves the existing camera/upload composer. */}
+      <button
+        type="button"
+        aria-label="Create or upload a Discover video"
+        onClick={() => setComposing(true)}
+        className="absolute right-4 top-24 z-20 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-bold text-white shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+      >
+        + Create video
+      </button>
 
       {/* Floating search header */}
       <div
