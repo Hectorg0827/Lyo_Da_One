@@ -7,6 +7,7 @@ export class DiscoverPlaybackController {
     this.version = 0;
     this.disposed = false;
     this.intent = {};
+    this.pendingPlay = null;
   }
 
   update(intent) {
@@ -20,7 +21,7 @@ export class DiscoverPlaybackController {
     // Avoid repeatedly invoking play() while the same element is already playing.
     // A redundant play() can interrupt an earlier pending promise during rapid
     // swipes or mute-state updates on Chromium and mobile browsers.
-    if (!this.video.paused) return;
+    if (!this.video.paused || this.pendingPlay) return;
     let playRequest;
     try {
       playRequest = this.video.play();
@@ -30,10 +31,14 @@ export class DiscoverPlaybackController {
       else this.onError();
       return;
     }
-    Promise.resolve(playRequest).catch((error) => {
+    const pending = Promise.resolve(playRequest);
+    this.pendingPlay = pending;
+    pending.catch((error) => {
       if (this.disposed || version !== this.version || error?.name === 'AbortError') return;
       if (error?.name === 'NotAllowedError') this.onBlocked();
       else this.onError();
+    }).finally(() => {
+      if (this.pendingPlay === pending) this.pendingPlay = null;
     });
   }
 
