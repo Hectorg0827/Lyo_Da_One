@@ -21,14 +21,19 @@ import { COMMUNITY_LAUNCH_ENABLED } from '@/lib/launch-features';
 // They used to be written out here and in the sidebar separately, which is
 // how the two navs on this one site ended up calling the home screen
 // different things.
-const leftItems = [
-  { href: NAV.focus.href, icon: Target, label: NAV.focus.label },
-  { href: NAV.discover.href, icon: Compass, label: NAV.discover.label },
-];
+//
+// While Community is held back from launch its slot on the right would sit
+// empty, leaving Focus and Discover crowded together on one side of the
+// mascot. Discover moves into that slot instead, and Focus keeps the left on
+// its own. When the flag turns on, Community takes its slot back and Discover
+// returns to the left, which is the arrangement iOS and Android ship.
+const focusItem = { href: NAV.focus.href, icon: Target, label: NAV.focus.label };
+const discoverItem = { href: NAV.discover.href, icon: Compass, label: NAV.discover.label };
+const communityItem = { href: NAV.community.href, icon: Users, label: NAV.community.label };
 
-const rightItems = COMMUNITY_LAUNCH_ENABLED
-  ? [{ href: NAV.community.href, icon: Users, label: NAV.community.label }]
-  : [];
+const leftItems = COMMUNITY_LAUNCH_ENABLED ? [focusItem, discoverItem] : [focusItem];
+
+const rightItems = COMMUNITY_LAUNCH_ENABLED ? [communityItem] : [discoverItem];
 
 function GhostTab({
   href,

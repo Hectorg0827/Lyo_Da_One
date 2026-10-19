@@ -78,6 +78,29 @@ test('both real navigation components preserve the Community launch gate', async
   assert.equal(enabled.container.querySelectorAll('a[href="/community"]').length, 2);
 });
 
+// Hiding Community left its slot on the right of the mascot empty, so the
+// phone bar carried Focus and Discover bunched on the left and nothing but
+// Create on the right. Discover fills that slot while Community is held back,
+// and steps back to the left when it ships — so this asserts both states, not
+// just the one we launch with.
+test('Discover holds Community\'s slot on the phone bar while Community is hidden', async t => {
+  const groups = container => {
+    const bar = container.querySelector('nav[aria-label="Mobile navigation"]');
+    const [left, right] = [...bar.firstElementChild.children].filter(el => el.tagName === 'DIV');
+    const hrefs = group => [...group.querySelectorAll('a')].map(a => a.getAttribute('href'));
+    return { left: hrefs(left), right: hrefs(right), createOnRight: right.querySelector('button[aria-label="Create"]') };
+  };
+
+  const hidden = groups((await mount(t)).container);
+  assert.deepEqual(hidden.left, ['/'], 'Focus keeps the left on its own');
+  assert.deepEqual(hidden.right, ['/discover'], 'Discover sits where Community would');
+  assert.ok(hidden.createOnRight, 'Create stays on the right beside it');
+
+  const shipped = groups((await mount(t, '/chat', true)).container);
+  assert.deepEqual(shipped.left, ['/', '/discover'], 'Discover returns to the left');
+  assert.deepEqual(shipped.right, ['/community'], 'Community takes its slot back');
+});
+
 test('entering Classroom removes both navs and releases the rail keyboard shortcut', async t => {
   const view = await mount(t);
   assert.ok(view.container.querySelector('aside'));
