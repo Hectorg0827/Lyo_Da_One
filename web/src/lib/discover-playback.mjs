@@ -15,6 +15,9 @@ export class DiscoverPlaybackController {
     const version = ++this.version;
     const shouldPlay = this.canAdvance();
     if (this.disposed || !shouldPlay) {
+      // A paused/obsolete play attempt must not prevent a newly selected reel
+      // from starting if its previous promise remains unresolved.
+      this.pendingPlay = null;
       this.video.pause();
       return;
     }
