@@ -17,7 +17,20 @@ export class DiscoverPlaybackController {
       this.video.pause();
       return;
     }
-    Promise.resolve(this.video.play()).catch((error) => {
+    // Avoid repeatedly invoking play() while the same element is already playing.
+    // A redundant play() can interrupt an earlier pending promise during rapid
+    // swipes or mute-state updates on Chromium and mobile browsers.
+    if (!this.video.paused) return;
+    let playRequest;
+    try {
+      playRequest = this.video.play();
+    } catch (error) {
+      if (this.disposed || version !== this.version) return;
+      if (error?.name === 'NotAllowedError') this.onBlocked();
+      else this.onError();
+      return;
+    }
+    Promise.resolve(playRequest).catch((error) => {
       if (this.disposed || version !== this.version || error?.name === 'AbortError') return;
       if (error?.name === 'NotAllowedError') this.onBlocked();
       else this.onError();
