@@ -72,6 +72,7 @@ const learningProgress = readCode('web/src/lib/learning-progress.ts');
 const classroomStore = readCode('web/src/stores/classroom-store.ts');
 const evidenceRecord = readCode('web/src/components/classroom/EvidenceRecord.tsx');
 const chatStore = readCode('web/src/stores/chat-store.ts');
+const discoverPage = readCode('web/src/app/(main)/discover/page.tsx');
 const surfaceLoading = readCode('web/src/components/ui/SurfaceLoading.tsx');
 const courseCard = readCode('web/src/components/courses/CourseCard.tsx');
 const communityPage = readCode('web/src/app/(main)/community/page.tsx');
@@ -113,6 +114,12 @@ requireText(courseCard, 'title={course.title}', 'Course artwork uses the canonic
 rejectText(courseCard, 'course.category} ${course.title}', 'Course artwork drifts from the canonical title seed');
 requireText(communityPage, 'key={selectedNode.key}', 'Community preview is keyed at the call site');
 rejectText(nodePreview, 'key={node.key}', 'Community preview key is trapped inside the component');
+
+
+// ── 1c. Active discovery fallbacks carry Lyo identity ────────────────────────
+requireText(discoverPage, 'CourseArtwork title={reel.title}', 'Discover uses content-derived artwork');
+requireText(discoverPage, 'SurfaceLoading label="Opening Discover…"', 'Discover has branded loading continuity');
+rejectText(discoverPage, "rgba(0,0,255,0.3), rgba(128,0,128,0.3)", 'Discover uses the old generic gradient fallback');
 
 // ── 2. The front door ────────────────────────────────────────────────────────
 
