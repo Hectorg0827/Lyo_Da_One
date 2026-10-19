@@ -42,8 +42,18 @@ const { createRoot } = require('react-dom/client');
 let calls = [];
 let locationAsked = 0;
 dom.window.navigator.geolocation = {
-  getCurrentPosition() { locationAsked += 1; },
-  watchPosition() { locationAsked += 1; return 0; },
+  // The position has to actually arrive: `ready` gates every data request, so
+  // a location that never resolves leaves the signed-in path asserting only
+  // that the page opened, and the fetches it is supposed to prove untested.
+  getCurrentPosition(onSuccess) {
+    locationAsked += 1;
+    onSuccess({ coords: { latitude: 40.713, longitude: -74.006 } });
+  },
+  watchPosition(onSuccess) {
+    locationAsked += 1;
+    onSuccess({ coords: { latitude: 40.713, longitude: -74.006 } });
+    return 0;
+  },
   clearWatch() {},
 };
 // The page reads the bare global `navigator`, and Node supplies one of its own
@@ -142,12 +152,34 @@ test('while the session is still being read, neither the prompt nor the requests
     0,
     'the prompt must wait until the session is known',
   );
+  // Nor the map: its controls act as soon as they are on screen, and the
+  // locate button and search box would both act for an unknown viewer.
+  assert.equal(container.querySelector('[data-map]'), null, 'the map must not render for an unknown viewer');
   assert.deepEqual(calls, []);
 });
 
 test('signed in, the gate opens and Community loads its own state', async t => {
-  await mount(t, { isAuthenticated: true, isLoading: false });
-  assert.ok(calls.length > 0, 'a signed-in learner must still get Community');
+  await mount(t, { isAuthenticated: true, isLoading: false, user: { id: 7 } });
+  // `track` firing only proves the page opened. The map and the account state
+  // are the things a closed gate would silently withhold, so name them.
   assert.ok(calls.includes('track'), `expected the open to be recorded, got ${JSON.stringify(calls)}`);
+  assert.ok(calls.includes('nearby'), `the map never asked for anything, got ${JSON.stringify(calls)}`);
+  assert.ok(calls.includes('me'), `account state was never read, got ${JSON.stringify(calls)}`);
   assert.equal(locationAsked, 1, 'a signed-in learner is asked once for their location');
+});
+
+test('the map cache is keyed per account, so one learner cannot read another', async () => {
+  // A logout leaves this cache in place, and sessionStorage outlives the reload
+  // a session expiry causes, so the key is the only thing keeping the previous
+  // learner's `is_saved`/`is_attending` marks away from the next one.
+  modules.clear();
+  const cache = load(path.join(webRoot, 'src/lib/community-cache.ts'));
+  const where = { latitude: 40.713, longitude: -74.006, radiusKm: 15, filters: '', query: '' };
+  const keyA = cache.nearbyCacheKey({ account: '7', ...where });
+  const keyB = cache.nearbyCacheKey({ account: '8', ...where });
+  assert.notEqual(keyA, keyB, 'two learners in the same place must not share one entry');
+
+  cache.writeNearby(keyA, { nodes: [{ id: 'n1', is_saved: true }] });
+  assert.ok(cache.readNearby(keyA), 'the learner who stored it still reads their own entry');
+  assert.equal(cache.readNearby(keyB), null, 'the next learner must not inherit it');
 });
