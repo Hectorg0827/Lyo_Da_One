@@ -31,6 +31,7 @@ test('autoplay denial offers a gesture; interrupted play does not report a dead 
   s.pending[0].reject({ name: 'NotAllowedError' });
   await tick();
   assert.deepEqual(s.errors(), { blocked: 1, failed: 0 });
+  s.video.paused = true;
   s.controller.update(active);
   s.pending[1].reject({ name: 'AbortError' });
   await tick();
@@ -43,6 +44,7 @@ test('a current media failure offers retry and disposal ignores all late callbac
   s.pending[0].reject(new Error('missing media'));
   await tick();
   assert.deepEqual(s.errors(), { blocked: 0, failed: 1 });
+  s.video.paused = true;
   s.controller.update(active);
   s.controller.dispose();
   s.pending[1].reject(new Error('late'));
@@ -109,4 +111,60 @@ test('late page arrival advances only the same selected reel, with duplicate IDs
   assert.equal(nextClipIndex(['1', '2'], '2', '2'), null);
   assert.equal(nextClipIndex(['1', '2', '3'], '2', '2'), 2);
   assert.equal(nextClipIndex(['1', '2', '3'], '3', '2'), null);
+});
+
+test('repeated active updates do not launch redundant play promises', () => {
+  const s = setup();
+  s.controller.update(active);
+  s.controller.update(active);
+  s.controller.update(active);
+  assert.equal(s.pending.length, 1);
+  assert.equal(s.video.paused, false);
+});
+
+test('synchronous play exceptions yield recoverable autoplay or media failures', () => {
+  for (const [name, expected] of [['NotAllowedError', {blocked:1,failed:0}], ['NotSupportedError', {blocked:0,failed:1}]]) {
+    let blocked=0, failed=0;
+    const video = {paused:true, play() {throw {name};}, pause(){}};
+    const controller = new DiscoverPlaybackController(video, {onBlocked:()=>blocked++, onError:()=>failed++});
+    controller.update(active);
+    assert.deepEqual({blocked,failed}, expected);
+  }
+});
+
+test('pending play is coalesced even when paused stays true until media starts', async () => {
+  const pending = deferred();
+  let calls = 0;
+  const video = { paused: true, duration: 12, pause() { this.paused = true; }, play() { calls++; return pending.promise; } };
+  const controller = new DiscoverPlaybackController(video);
+  controller.update(active);
+  controller.update(active);
+  assert.equal(calls, 1);
+  pending.resolve();
+  await tick();
+  controller.update(active);
+  assert.equal(calls, 2);
+  controller.dispose();
+});
+
+test('return to a reel starts playback even if prior interrupted play never settled', async () => {
+  const pending = [];
+  const video = { paused: true, pause() { this.paused = true; }, play() {
+    const request = deferred();
+    pending.push(request);
+    this.paused = false;
+    return request.promise;
+  }};
+  let errors = 0;
+  const controller = new DiscoverPlaybackController(video, {onError: () => errors++});
+  controller.update(active);
+  controller.update({...active, selected: false});
+  controller.update(active);
+  assert.equal(pending.length, 2);
+  pending[0].reject(new Error('old play rejected after reselect'));
+  await tick();
+  assert.equal(errors, 0);
+  pending[1].resolve();
+  await tick();
+  controller.dispose();
 });
