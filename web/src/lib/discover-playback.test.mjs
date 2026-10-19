@@ -146,3 +146,25 @@ test('pending play is coalesced even when paused stays true until media starts',
   assert.equal(calls, 2);
   controller.dispose();
 });
+
+test('return to a reel starts playback even if prior interrupted play never settled', async () => {
+  const pending = [];
+  const video = { paused: true, pause() { this.paused = true; }, play() {
+    const request = deferred();
+    pending.push(request);
+    this.paused = false;
+    return request.promise;
+  }};
+  let errors = 0;
+  const controller = new DiscoverPlaybackController(video, {onError: () => errors++});
+  controller.update(active);
+  controller.update({...active, selected: false});
+  controller.update(active);
+  assert.equal(pending.length, 2);
+  pending[0].reject(new Error('old play rejected after reselect'));
+  await tick();
+  assert.equal(errors, 0);
+  pending[1].resolve();
+  await tick();
+  controller.dispose();
+});
