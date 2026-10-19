@@ -131,3 +131,18 @@ test('synchronous play exceptions yield recoverable autoplay or media failures',
     assert.deepEqual({blocked,failed}, expected);
   }
 });
+
+test('pending play is coalesced even when paused stays true until media starts', async () => {
+  const pending = deferred();
+  let calls = 0;
+  const video = { paused: true, duration: 12, pause() { this.paused = true; }, play() { calls++; return pending.promise; } };
+  const controller = new DiscoverPlaybackController(video);
+  controller.update(active);
+  controller.update(active);
+  assert.equal(calls, 1);
+  pending.resolve();
+  await tick();
+  controller.update(active);
+  assert.equal(calls, 2);
+  controller.dispose();
+});
