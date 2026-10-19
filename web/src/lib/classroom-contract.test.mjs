@@ -10,11 +10,13 @@ import {
   classroomCourseKey,
   classroomOpening,
   classroomSceneStart,
+  classroomSeatRecord,
   classroomSessionStart,
   classroomSessionStorageKey,
   defaultClassroomObjective,
   isTransferReady,
   normalizeClassroomMode,
+  retireClassroomSeat,
 } from './classroom-contract.mjs';
 
 test('classroom URL preserves learner controls and course context', () => {
@@ -177,3 +179,76 @@ test('a class that reached its end is not an unfinished one', () => {
   assert.equal(start.resumed, false, 'a finished class is started again, not resumed');
   assert.equal(start.sessionId, `course-7~2-${now}`);
 })
+
+test('a continued session keeps the seat it already had', () => {
+  // The stored seat is what decides whether a class is still worth offering
+  // back. Re-stamping it on every entry is what made a dead one immortal:
+  // each reconnect moved `startedAt` forward, so the resume window measured
+  // the last reconnect instead of the class.
+  const now = Date.now();
+  const began = now - 5 * 60 * 60 * 1000;
+  const saved = { id: 'course-7~2-1', startedAt: began, generation: 2 };
+  const start = classroomSessionStart('course-7', saved, { resume: true, now });
+  assert.equal(start.resumed, true);
+
+  const record = classroomSeatRecord(saved, start, now);
+  assert.equal(record.id, saved.id);
+  assert.equal(record.startedAt, began, 'resuming does not restart the clock');
+  assert.equal(record.generation, 2);
+
+  // And so the seat still ages out of the window on the class's own clock.
+  const later = began + CLASSROOM_RESUME_WINDOW_MS + 1;
+  assert.equal(canResumeClassroom(record, later), false);
+});
+
+test('a retired seat stays retired across the next entry', () => {
+  // connect() stores a seat on every entry. Dropping `finished` there undid
+  // the one flag that stops a spent class being offered back.
+  const now = Date.now();
+  const spent = { id: 'course-7~2-1', startedAt: now - 60_000, generation: 2, finished: true };
+  const record = classroomSeatRecord(spent, { sessionId: spent.id, generation: 1, resumed: true }, now);
+  assert.equal(record.finished, true, 'a spent seat is not revived by re-entering it');
+  assert.equal(record.generation, 2, 'an entry handed a session id does not reset its generation');
+  assert.equal(canResumeClassroom(record, now), false);
+});
+
+test('a brand-new session starts its own history', () => {
+  const now = Date.now();
+  const saved = { id: 'course-7~1-1', startedAt: now - 60_000, generation: 1, finished: true };
+  const start = classroomSessionStart('course-7', saved, { now });
+  assert.equal(start.resumed, false);
+
+  const record = classroomSeatRecord(saved, start, now);
+  assert.equal(record.id, start.sessionId);
+  assert.notEqual(record.id, saved.id);
+  assert.equal(record.startedAt, now, 'a new class begins now, not when the old one did');
+  assert.equal(record.generation, 2);
+  assert.equal(record.finished, false, "the old seat's end does not retire the new one");
+  assert.equal(canResumeClassroom(record, now), true);
+});
+
+test('leaving a stuck session behind stops it being offered back', () => {
+  // The learner pressed "start this lesson over". The next class reads the
+  // stored seat to decide whether to offer one back, so a seat left as it was
+  // reopened the class by offering the very session they had walked away
+  // from — and taking that offer reconnected them to a session the server had
+  // moved past, landing them somewhere that was not where they stopped.
+  const now = Date.now();
+  const stuck = { id: 'course-7~2-1', startedAt: now - 60_000, generation: 2 };
+  assert.equal(canResumeClassroom(stuck, now), true, 'live until it is retired');
+
+  const retired = retireClassroomSeat(stuck);
+  assert.equal(retired.finished, true);
+  assert.equal(retired.id, stuck.id, 'the same seat, not a different one');
+  assert.equal(canResumeClassroom(retired, now), false);
+
+  // The fresh class that follows reads that seat and offers nothing.
+  const start = classroomSessionStart('course-7', retired, { now });
+  assert.equal(start.resumed, false);
+  assert.equal(
+    classroomSeatRecord(retired, start, now).finished,
+    false,
+    'the new class is itself unfinished, and resumable in its own right',
+  );
+  assert.equal(retireClassroomSeat(null), null);
+});

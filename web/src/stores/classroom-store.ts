@@ -8,6 +8,8 @@ import {
   CLASSROOM_STALL_RECOVERY_MS,
   buildClassroomWsUrl,
   canResumeClassroom,
+  classroomSeatRecord,
+  retireClassroomSeat,
   classroomCourseKey,
   classroomOpening,
   classroomSceneStart,
@@ -341,11 +343,18 @@ function readSavedSession(courseKey: string): ClassroomSavedSession | null {
   }
 }
 
-/** Mark the stored seat finished, so it stops being offered as unfinished. */
-function markSavedSessionFinished(courseKey: string, sessionId: string) {
+/**
+ * Retire the stored seat, so it stops being offered as an unfinished class.
+ *
+ * Called both when a class reaches its end and when the learner chooses to
+ * leave a stuck session behind: either way the seat is spent, and offering it
+ * back would reconnect them to a session the server has moved on from.
+ */
+function retireSavedSession(courseKey: string, sessionId: string) {
   const saved = readSavedSession(courseKey);
   if (!saved || saved.id !== sessionId) return;
-  writeSavedSession(courseKey, { ...saved, finished: true });
+  const retired = retireClassroomSeat(saved);
+  if (retired) writeSavedSession(courseKey, retired);
 }
 
 function writeSavedSession(courseKey: string, saved: ClassroomSavedSession) {
@@ -840,7 +849,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'session_end':
         // The class reached its end. The seat stops being an unfinished one
         // from here, however recently it was started.
-        markSavedSessionFinished(get().courseKey, get().sessionId);
+        retireSavedSession(get().courseKey, get().sessionId);
         sfx('bell');
         addBoardElement({ id: nextId(), kind: 'dismissal', homework: turn.homework, nextHook: turn.next_hook });
         pushTranscript('Teacher', `🔔 Class dismissed. ${turn.homework ? `Homework: ${turn.homework}` : ''}`);
@@ -995,7 +1004,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         const start = classroomSceneStart(msg);
         set({ recordConcepts: conceptsFromClassScene(start?.scene) });
         if ((start?.scene as { metadata?: Record<string, unknown> } | undefined)?.metadata?.course_complete === true) {
-          markSavedSessionFinished(get().courseKey, get().sessionId);
+          retireSavedSession(get().courseKey, get().sessionId);
           set({ resumable: null });
         }
         // A new scene invalidates every older queued or playing turn.
@@ -1205,11 +1214,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         ? { sessionId: connection.sessionId, generation: 1, resumed: false }
         : classroomSessionStart(courseKey, saved, { resume: connection.resume === true });
       const sessionId = start.sessionId;
-      writeSavedSession(courseKey, {
-        id: sessionId,
-        startedAt: Date.now(),
-        generation: start.generation,
-      });
+      // A class carrying on an existing session inherits that seat's history
+      // rather than stamping a new one over it — see classroomSeatRecord.
+      writeSavedSession(courseKey, classroomSeatRecord(saved, start));
 
       // The cover page goes up before the socket does. A learner should
       // never be looking at a blank stage wondering whether the class has
@@ -1513,6 +1520,13 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     restartLesson: () => {
       const connection = lastConnection;
       if (!connection) return;
+      // Retire the seat first. The learner just said they are done with this
+      // session, and a fresh class reads the stored seat to decide whether to
+      // offer one back — left as it was, the new class opened by offering the
+      // very session they walked away from, and taking that offer dropped
+      // them wherever the dead session had got to rather than where they
+      // stopped.
+      retireSavedSession(get().courseKey, get().sessionId);
       get().disconnect();
       get().connect({
         ...connection, sessionId: undefined, resume: false, resumeSession: undefined,

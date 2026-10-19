@@ -131,6 +131,49 @@ export function classroomSessionStart(courseKey, saved, { resume = false, now = 
   return { sessionId: `${key}~${generation}-${now}`, generation, resumed: false };
 }
 
+/**
+ * The seat record to store for the class that is now starting.
+ *
+ * Storing a seat is not the same as opening one. A class that carries on an
+ * existing session — a resume, or an entry that was handed that session's id
+ * — inherits that seat's own history: the moment it really began, the
+ * generation that minted it, and whether it has already been retired. Only a
+ * genuinely new session starts a new history.
+ *
+ * Rewriting those three fields on every entry is what let a dead seat be
+ * offered back forever: `startedAt` moved to each reconnect, so the resume
+ * window never measured the class and a session from yesterday stayed
+ * "recent"; `finished` was dropped, so a class the learner had already left
+ * behind read as unfinished again; and `generation` fell back to the entry's
+ * own count, so the next fresh id could collide with a session already used.
+ */
+export function classroomSeatRecord(saved, start, now = Date.now()) {
+  const sessionId = (start?.sessionId ?? '').toString();
+  const continuing = saved && saved.id && saved.id === sessionId ? saved : null;
+  const startedAt = Number(continuing?.startedAt);
+  const generation = Number(continuing?.generation);
+  return {
+    id: sessionId,
+    startedAt: Number.isFinite(startedAt) && startedAt > 0 ? startedAt : now,
+    generation: Number.isFinite(generation) && generation >= 1
+      ? Math.floor(generation)
+      : Math.max(1, Number(start?.generation) || 1),
+    finished: continuing?.finished === true,
+  };
+}
+
+/**
+ * The same seat, marked as one not to offer back.
+ *
+ * Used both when a class reaches its end and when the learner deliberately
+ * leaves a stuck session behind — in either case the seat is no longer an
+ * unfinished class, and offering it would drop them somewhere that is not
+ * where they stopped.
+ */
+export function retireClassroomSeat(saved) {
+  return saved ? { ...saved, finished: true } : null;
+}
+
 // ─── When the next step does not arrive ─────────────────────────────────────
 
 /**

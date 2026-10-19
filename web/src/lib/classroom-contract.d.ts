@@ -34,7 +34,8 @@ export interface ClassroomSavedSession {
   id: string;
   startedAt: number;
   generation: number;
-  /** The class reached its end, so it is not an unfinished one to resume. */
+  /** Not an unfinished class to offer back: it reached its end, or the
+      learner deliberately left it behind. */
   finished?: boolean;
 }
 
@@ -67,6 +68,14 @@ export function classroomSessionStart(
   saved: ClassroomSavedSession | null | undefined,
   options?: { resume?: boolean; now?: number },
 ): ClassroomSessionStart;
+export function classroomSeatRecord(
+  saved: ClassroomSavedSession | null | undefined,
+  start: ClassroomSessionStart,
+  now?: number,
+): ClassroomSavedSession;
+export function retireClassroomSeat(
+  saved: ClassroomSavedSession | null | undefined,
+): ClassroomSavedSession | null;
 export const CLASSROOM_STALL_NOTICE_MS: number;
 export const CLASSROOM_STALL_RECOVERY_MS: number;
 export const CLASSROOM_STALL_NOTICE: string;
