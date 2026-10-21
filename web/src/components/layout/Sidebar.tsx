@@ -20,7 +20,7 @@ import {
   safeStorage,
   writeCollapsed,
 } from '@/lib/nav-items.mjs';
-import { NAV_ICONS, RailToggleIcon } from './NavIcons';
+import { NAV_ACCENT, NAV_ICONS, RailToggleIcon } from './NavIcons';
 
 /**
  * The desktop rail.
@@ -39,8 +39,6 @@ import { NAV_ICONS, RailToggleIcon } from './NavIcons';
  * The rail also already collapsed; it just forgot, reopening on every page
  * load, which is what made it feel broken. It remembers now.
  */
-
-const ACCENT = '#ff8c00';
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -177,7 +175,7 @@ export function Sidebar() {
                   Icon && (
                     <Icon
                       className="h-[21px] w-[21px] shrink-0"
-                      accent={active ? ACCENT : undefined}
+                      accent={active ? NAV_ACCENT : undefined}
                     />
                   )
                 )}
@@ -221,6 +219,7 @@ export function Sidebar() {
                   key={item.key}
                   type="button"
                   onClick={() => setCreateOpen(true)}
+                  aria-label={item.label}
                   title={open ? undefined : item.label}
                   className={shell}
                 >
@@ -233,6 +232,7 @@ export function Sidebar() {
               <Link
                 key={item.key}
                 href={item.href}
+                aria-label={item.label}
                 aria-current={active ? 'page' : undefined}
                 title={open ? undefined : item.label}
                 className={shell}
@@ -255,6 +255,7 @@ export function Sidebar() {
         >
           <Link
             href={NAV.profile.href}
+            aria-label={NAV.profile.label}
             aria-current={profileActive ? 'page' : undefined}
             title={open ? undefined : NAV.profile.label}
             className={cn(

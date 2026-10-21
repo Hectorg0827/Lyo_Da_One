@@ -12,6 +12,15 @@
  * the counters in the wordmark beside them.
  */
 
+/**
+ * The brand orange, painted on whichever shape each icon fills.
+ *
+ * It lives here rather than in a component because both navs need it, and a
+ * constant copied into two files is how the two navs came to disagree about
+ * everything else.
+ */
+export const NAV_ACCENT = '#ff8c00';
+
 export type NavIconProps = {
   className?: string | undefined;
   /** Painted on the one filled shape. The rest of the icon stays stroke. */

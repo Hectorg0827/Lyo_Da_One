@@ -126,3 +126,70 @@ test('desktop and phone Create buttons still open their creation sheets', async 
     assert.equal(view.container.querySelectorAll('[role="dialog"]').length, index + 1);
   }
 });
+
+// ── One icon set across both navs ────────────────────────────────────────────
+//
+// The rail was redrawn and the phone bar was left on stock Lucide, so the two
+// navs on one site drew different glyphs for the same destination. The source
+// check in verify-nav-naming-parity.mjs can see which module they import; only
+// the DOM can show that the shapes actually come out the same.
+
+const NAV_ACCENT = '#ff8c00';
+
+/** The outline of every shape in an icon, as rendered. */
+function glyph(root, selector) {
+  const el = root.querySelector(selector);
+  assert.ok(el, `expected ${selector}`);
+  const svg = el.querySelector('svg');
+  assert.ok(svg, `expected an svg inside ${selector}`);
+  return [...svg.querySelectorAll('path, circle, rect')]
+    .map((shape) => shape.getAttribute('d') ?? `${shape.getAttribute('cx')},${shape.getAttribute('r')}`)
+    .join(' | ');
+}
+
+test('the phone bar and the rail draw the same Discover glyph', async (t) => {
+  const { container } = await mount(t, '/discover');
+  const rail = container.querySelector('aside');
+  const bar = container.querySelector('nav[aria-label="Mobile navigation"]');
+
+  assert.equal(
+    glyph(bar, 'a[aria-label="Discover"]'),
+    glyph(rail, 'a[href="/discover"]'),
+    'the phone bar is drawing a different Discover icon than the rail',
+  );
+});
+
+test('the phone bar and the rail draw the same Create glyph', async (t) => {
+  const { container } = await mount(t, '/');
+  const rail = container.querySelector('aside');
+  const bar = container.querySelector('nav[aria-label="Mobile navigation"]');
+
+  assert.equal(
+    glyph(bar, 'button[aria-label="Create"]'),
+    glyph(rail, 'button[aria-label="Create"]'),
+    'the phone bar is drawing a different Create icon than the rail',
+  );
+});
+
+test('the phone bar paints the brand accent on the tab you are on', async (t) => {
+  const { container, render } = await mount(t, '/discover');
+  const bar = () => container.querySelector('nav[aria-label="Mobile navigation"]');
+
+  const filled = (selector) =>
+    [...bar().querySelector(selector).querySelectorAll('[fill]')]
+      .map((shape) => shape.getAttribute('fill'));
+
+  assert.ok(
+    filled('a[aria-label="Discover"]').includes(NAV_ACCENT),
+    'Discover is the current tab and should carry the accent',
+  );
+  assert.ok(
+    !filled('a[aria-label="Focus"]').includes(NAV_ACCENT),
+    'Focus is not the current tab and should not carry the accent',
+  );
+
+  // And it follows the learner rather than being baked onto one tab.
+  await render('/');
+  assert.ok(filled('a[aria-label="Focus"]').includes(NAV_ACCENT));
+  assert.ok(!filled('a[aria-label="Discover"]').includes(NAV_ACCENT));
+});
