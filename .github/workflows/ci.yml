@@ -10,7 +10,7 @@ on:
     # listing them here too ran every job twice per push.
     branches: [main]
   pull_request:
-    branches: [main, chat-course-builder-ux-20261001]
+    branches: [main, chat-course-builder-ux-20261001, feat/discover-filter-header-20261012]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -81,6 +81,9 @@ jobs:
 
       - name: Verify Android Discover integrity
         run: node scripts/verify-android-discover-integrity.mjs
+
+      - name: Verify Discover continuous playback
+        run: node scripts/verify-discover-playback.mjs
 
       - name: Verify Android Notifications reliability
         run: node scripts/verify-android-notifications-reliability.mjs
@@ -216,6 +219,15 @@ jobs:
         if: steps.android-build.outcome == 'failure'
         run: exit 1
 
+      - name: Upload Android build for device validation
+        if: steps.android-build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: discover-device-validation-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
   web:
     name: Typecheck & Build (Web)
     runs-on: ubuntu-latest
@@ -245,6 +257,10 @@ jobs:
       - name: Web unit tests
         working-directory: web
         run: npm test
+
+      - name: Explicit Discover playback regression gate
+        working-directory: web
+        run: node --test src/lib/discover-playback.test.mjs
 
       - name: Typecheck
         working-directory: web

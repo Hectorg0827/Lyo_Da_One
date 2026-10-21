@@ -1,24 +1,10 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter, Nunito } from 'next/font/google';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/nunito';
 import { Toaster } from 'react-hot-toast';
 import AuthProvider from '@/components/providers/AuthProvider';
 import InstallPWAPrompt from '@/components/providers/InstallPWAPrompt';
 import './globals.css';
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-});
-
-// Web stand-in for iOS `.rounded` (SF Pro Rounded) display type. Apple
-// browsers get the real thing via `ui-rounded`; everyone else gets Nunito.
-const nunito = Nunito({
-  subsets: ['latin'],
-  weight: ['500', '600', '700', '800', '900'],
-  variable: '--font-nunito',
-  display: 'swap',
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.lyoai.app'),
@@ -80,7 +66,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`dark ${inter.variable} ${nunito.variable}`} suppressHydrationWarning>
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body
         className="antialiased min-h-screen"
         style={{ color: 'var(--text-primary)' }}

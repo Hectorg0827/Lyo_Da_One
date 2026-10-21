@@ -3,35 +3,32 @@ import AVKit
 
 struct DiscoverReelView: View {
     let item: DiscoverItem
+    // Page selection is authoritative; offscreen neighbours preroll silently.
+    var isActive: Bool = true
+    var shouldLoad: Bool = true
+    var playbackAllowed: Bool = true
+    @Environment(\.scenePhase) private var scenePhase
+    var onFinished: () -> Void = {}
+    var onPlaybackInteraction: () -> Void = {}
     let onLike: () -> Void
     let onComment: () -> Void
     let onShare: () -> Void
     let onSave: () -> Void
     let onAskLio: () -> Void
     let onStart: () -> Void
-    
+
     // New interaction callbacks
     var onConvertToCourse: () -> Void = {}
     
     @State private var isLiked = false
     @State private var isSaved = false
-    @State private var player: AVPlayer?
-
-    // Lifecycle handles — must be released on disappear to avoid leaks.
-    @State private var endObserver: NSObjectProtocol?
-    @State private var timeObserver: Any?
-    @State private var statusObserver: NSKeyValueObservation?
-
-    // True after the first frame has rendered. Used to fade the poster out.
-    @State private var isPlayingFirstFrame: Bool = false
-
-    // True when the video URL fails to load. Surfaces a clear error state to the user.
-    @State private var loadFailed: Bool = false
+    @StateObject private var playback = DiscoverPlayerController()
 
     // Quiz State
     @State private var showQuiz = false
     @State private var currentQuiz: QuizMoment?
     @State private var videoPausedForQuiz = false
+    @State private var completedQuizTimes = Set<TimeInterval>()
 
     var body: some View {
         ZStack {
@@ -49,27 +46,27 @@ struct DiscoverReelView: View {
                             }
                             .frame(width: proxy.size.width, height: proxy.size.height)
                             .clipped()
-                            .opacity(isPlayingFirstFrame ? 0 : 1)
-                            .animation(.easeOut(duration: 0.25), value: isPlayingFirstFrame)
+                            .opacity(playback.isPlayingFirstFrame ? 0 : 1)
+                            .animation(.easeOut(duration: 0.25), value: playback.isPlayingFirstFrame)
                         } else {
                             Rectangle().fill(Color.black)
                                 .frame(width: proxy.size.width, height: proxy.size.height)
                         }
 
-                        VideoPlayer(player: player)
-                            .disabled(true)
+                        DiscoverVideoSurface(controller: playback)
+                            .allowsHitTesting(false)
                             .onAppear {
-                                // Prioritize lightweight preview for feed scrolling
-                                setupPlayer(url: item.previewURL ?? videoURL)
+                                // Neighbours prepare the canonical source before a swipe.
+                                configurePlayback()
                             }
                             .onDisappear {
-                                teardownPlayer()
+                                playback.teardown()
                             }
                             .frame(width: proxy.size.width, height: proxy.size.height)
                             .clipped()
 
                         // Surface load failures so the user is never staring at a frozen black frame.
-                        if loadFailed {
+                        if playback.loadFailed {
                             VStack(spacing: 10) {
                                 Image(systemName: "wifi.exclamationmark")
                                     .font(.system(size: 28, weight: .semibold))
@@ -78,12 +75,14 @@ struct DiscoverReelView: View {
                                     .font(.system(size: 15, weight: .medium))
                                     .foregroundStyle(.white)
                                 Button("Retry") {
-                                    loadFailed = false
-                                    setupPlayer(url: videoURL)
+                                    onPlaybackInteraction()
+                                    playback.retry(url: videoURL)
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .tint(.white.opacity(0.2))
                                 .foregroundStyle(.white)
+                                Button("Next clip", action: onFinished)
+                                    .foregroundStyle(.white)
                             }
                             .padding(20)
                             .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 14))
@@ -104,6 +103,8 @@ struct DiscoverReelView: View {
                     }
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture { onPlaybackInteraction(); playback.togglePause() }
             .ignoresSafeArea()
             
             // Gradient Overlay
@@ -113,6 +114,7 @@ struct DiscoverReelView: View {
                 LinearGradient(colors: [.clear, .black.opacity(0.8)], startPoint: .top, endPoint: .bottom).frame(height: 300)
             }
             .ignoresSafeArea()
+            .allowsHitTesting(false)
             
             // MARK: - 2. Learning UI Layer
             VStack {
@@ -140,7 +142,15 @@ struct DiscoverReelView: View {
                     )
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 110) // Increased tab bar clearance
+                .padding(.bottom, 12)
+
+                if item.videoURL != nil, isActive, !playback.loadFailed {
+                    playbackControls
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 90)
+                } else {
+                    Spacer().frame(height: 110)
+                }
             }
             
             // MARK: - 3. Interaction Layer (Quiz)
@@ -149,104 +159,75 @@ struct DiscoverReelView: View {
                     // Resume video
                     showQuiz = false
                     videoPausedForQuiz = false
-                    player?.play()
+                    completedQuizTimes.insert(quiz.timestamp)
+                    configurePlayback()
                 }
                 .transition(.opacity)
                 .zIndex(100)
             }
         }
-        .onTapGesture {
-            togglePlayback()
-        }
         .onAppear {
             isLiked = item.isLiked
             isSaved = item.isSaved
+            configurePlayback()
         }
+        .onDisappear { playback.teardown() }
+        .onChange(of: isActive) { _ in configurePlayback() }
+        .onChange(of: shouldLoad) { _ in configurePlayback() }
+        .onChange(of: playbackAllowed) { _ in configurePlayback() }
+        .onChange(of: scenePhase) { _ in configurePlayback() }
+        .onChange(of: showQuiz) { _ in configurePlayback() }
+        .onChange(of: playback.completionCount) { _ in
+            if isActive && playbackAllowed && scenePhase == .active && !showQuiz { onFinished() }
+        }
+        .onChange(of: playback.position) { current in checkQuizTrigger(currentTime: current) }
     }
-    
-    // MARK: - Logic
-    
-    private func setupPlayer(url: URL) {
-        // Tear down any prior session before creating a new one (defensive — handles retry).
-        teardownPlayer()
 
-        let newPlayer = AVPlayer(url: url)
-        player = newPlayer
-        newPlayer.play()
-
-        // Loop on end. Capture the token so we can remove the observer on disappear.
-        endObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: newPlayer.currentItem,
-            queue: .main
-        ) { [weak newPlayer] _ in
-            newPlayer?.seek(to: .zero)
-            newPlayer?.play()
-        }
-
-        // Replace the polling Timer with AVPlayer's own time observer — fires on the
-        // playback clock, stops automatically when the player is released, and is
-        // removable via removeTimeObserver. Half-second cadence matches the old behavior.
-        let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
-        timeObserver = newPlayer.addPeriodicTimeObserver(forInterval: interval, queue: .main) { time in
-            checkQuizTrigger(currentTime: time.seconds)
-            // First-frame poster fade trigger.
-            if !isPlayingFirstFrame, time.seconds > 0 {
-                isPlayingFirstFrame = true
-            }
-        }
-
-        // Surface load failures via KVO on the item's status.
-        statusObserver = newPlayer.currentItem?.observe(\.status, options: [.new]) { item, _ in
-            DispatchQueue.main.async {
-                if item.status == .failed {
-                    loadFailed = true
+    private var playbackControls: some View {
+        VStack(spacing: 4) {
+            Slider(value: $playback.position, in: 0...max(playback.duration, 1), onEditingChanged: { editing in
+                if editing { onPlaybackInteraction(); playback.beginScrubbing() } else { playback.endScrubbing() }
+            })
+            .disabled(playback.duration <= 0)
+            .tint(.white)
+            .accessibilityLabel("Seek video")
+            HStack {
+                Button { onPlaybackInteraction(); playback.togglePause() } label: {
+                    Image(systemName: playback.state.userPaused || playback.ended ? "play.fill" : "pause.fill")
+                        .frame(width: 40, height: 32)
                 }
+                .accessibilityLabel(playback.state.userPaused || playback.ended ? "Play video" : "Pause video")
+                Text("\(timeLabel(playback.position)) / \(timeLabel(playback.duration))")
+                    .font(.caption.monospacedDigit())
+                Spacer()
+                Button { playback.toggleMute() } label: {
+                    Image(systemName: playback.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .frame(width: 40, height: 32)
+                }
+                .accessibilityLabel(playback.isMuted ? "Unmute video" : "Mute video")
             }
+            .foregroundStyle(.white)
         }
     }
 
-    /// Releases every long-lived resource the player owns. Must be called from
-    /// `.onDisappear` or before re-creating the player; otherwise observers and
-    /// AVPlayer instances accumulate per swipe and the app eventually crashes.
-    private func teardownPlayer() {
-        if let token = endObserver {
-            NotificationCenter.default.removeObserver(token)
-            endObserver = nil
-        }
-        if let observer = timeObserver, let player = player {
-            player.removeTimeObserver(observer)
-        }
-        timeObserver = nil
-        statusObserver?.invalidate()
-        statusObserver = nil
-
-        player?.pause()
-        player?.replaceCurrentItem(with: nil)
-        player = nil
-
-        isPlayingFirstFrame = false
+    private func timeLabel(_ seconds: Double) -> String {
+        let value = max(0, Int(seconds))
+        return String(format: "%d:%02d", value / 60, value % 60)
     }
-    
-    private func togglePlayback() {
-        guard !showQuiz else { return }
-        if player?.timeControlStatus == .playing {
-            player?.pause()
-        } else {
-            player?.play()
-        }
+
+    private func configurePlayback() {
+        playback.configure(selected: isActive, foreground: scenePhase == .active && playbackAllowed, quizPaused: showQuiz)
+        if shouldLoad, let url = item.videoURL { playback.load(url: url) }
+        else { playback.teardown() }
     }
-    
+
     private func checkQuizTrigger(currentTime: TimeInterval) {
-        guard let customPlayer = player, customPlayer.timeControlStatus == .playing, !showQuiz else { return }
-
-        // Check for quiz moments within 0.5s window
-        if let quiz = item.quizMoments.first(where: { abs($0.timestamp - currentTime) < 0.5 }) {
-            // Trigger Quiz
+        guard playback.state.shouldPlay, !showQuiz, !playback.ended else { return }
+        if let quiz = item.quizMoments.first(where: { !completedQuizTimes.contains($0.timestamp) && abs($0.timestamp - currentTime) < 0.5 }) {
             currentQuiz = quiz
             showQuiz = true
-            customPlayer.pause()
             videoPausedForQuiz = true
+            configurePlayback()
             HapticManager.shared.medium()
         }
     }

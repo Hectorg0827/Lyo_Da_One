@@ -686,11 +686,23 @@ export const api = {
       );
     },
 
-    async discover(page = 1, perPage = 20, subject?: string) {
+    async discover(
+      page = 1,
+      perPage = 20,
+      options: { subject?: string; q?: string; sort?: 'for_you' | 'latest' | 'popular' } = {}
+    ) {
       const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
-      if (subject) params.set('subject', subject);
+      if (options.subject) params.set('subject', options.subject);
+      if (options.q) params.set('q', options.q);
+      if (options.sort && options.sort !== 'for_you') params.set('sort', options.sort);
       return request<{ clips: Record<string, unknown>[]; total: number }>(
         `/api/v1/clips/discover?${params}`
+      );
+    },
+
+    async discoverFilters() {
+      return request<{ subjects: { name: string; count: number }[] }>(
+        '/api/v1/clips/discover/filters'
       );
     },
 
@@ -721,9 +733,12 @@ export const api = {
       return request(`/api/v1/clips/${clipId}/view`, { method: 'POST' });
     },
 
-    async saved(page = 1, perPage = 20) {
+    async saved(page = 1, perPage = 20, options: { q?: string; subject?: string } = {}) {
+      const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+      if (options.subject) params.set('subject', options.subject);
+      if (options.q) params.set('q', options.q);
       return request<{ clips: Record<string, unknown>[]; total: number }>(
-        `/api/v1/clips/saved?page=${page}&per_page=${perPage}`
+        `/api/v1/clips/saved?${params}`
       );
     },
 
