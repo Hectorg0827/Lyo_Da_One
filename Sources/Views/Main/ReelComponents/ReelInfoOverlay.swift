@@ -32,15 +32,12 @@ struct ReelInfoOverlay: View {
                         }
                     }
                     
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(author)
-                            .font(.callout.weight(.semibold))
-                            .foregroundColor(.white)
-                        
-                        Text("Verified Mentor") // Placeholder logic
-                            .font(.caption2)
-                            .foregroundColor(.white.opacity(0.8))
-                    }
+                    // No badge under the name: nothing verifies mentors, so
+                    // "Verified Mentor" on every author was a claim we could
+                    // not stand behind (web removed it for the same reason).
+                    Text(author)
+                        .font(.callout.weight(.semibold))
+                        .foregroundColor(.white)
                 }
             }
             
@@ -50,7 +47,28 @@ struct ReelInfoOverlay: View {
                     .font(.headline.weight(.bold))
                     .foregroundColor(.white)
                     .lineLimit(2)
-                
+
+                // Library videos carry their creator and licence: open
+                // licences are only honoured when the credit travels with
+                // the video. Tapping it opens the source page.
+                if let credit = item.attribution?.displayLine {
+                    if let source = item.attribution?.sourceLink {
+                        Link(destination: source) {
+                            Text(credit)
+                                .font(.caption2)
+                                .underline()
+                                .foregroundColor(.white.opacity(0.75))
+                                .lineLimit(2)
+                        }
+                        .accessibilityHint("Opens the video's source")
+                    } else {
+                        Text(credit)
+                            .font(.caption2)
+                            .foregroundColor(.white.opacity(0.75))
+                            .lineLimit(2)
+                    }
+                }
+
                 // Key Points (The "Learning Wrapper")
                 if !item.keyPoints.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {

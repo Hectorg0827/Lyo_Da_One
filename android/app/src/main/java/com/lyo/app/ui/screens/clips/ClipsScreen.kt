@@ -78,7 +78,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1056,6 +1058,26 @@ private fun ClipPage(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
+            // Library videos carry their creator and licence: open licences
+            // are only honoured when the credit travels with the video.
+            clip.attribution?.displayLine?.let { credit ->
+                val source = clip.attribution?.sourceLink
+                val uriHandler = LocalUriHandler.current
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    credit,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.75f),
+                    textDecoration = if (source != null) TextDecoration.Underline else null,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = if (source != null) {
+                        Modifier.clickable { runCatching { uriHandler.openUri(source) } }
+                    } else {
+                        Modifier
+                    },
+                )
+            }
             if (!clip.authorName.isNullOrBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text(

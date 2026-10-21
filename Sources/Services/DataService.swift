@@ -73,7 +73,8 @@ final class DataService: ObservableObject {
                     shareCount: 0,
                     isSaved: discovery.isSaved,
                     authorName: discovery.userName ?? "Lyo User",
-                    authorAvatarURL: nil // Could add if available in model
+                    authorAvatarURL: nil, // Could add if available in model
+                    attribution: discovery.attribution
                 )
             }
             

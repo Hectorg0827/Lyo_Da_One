@@ -43,6 +43,7 @@ import CreateClipModal from '@/components/clips/CreateClipModal';
 import { draftSubject, draftTitle } from '@/lib/teach-it.mjs';
 import { DiscoverPlaybackController, DiscoverPageCursor, mergeClipPage, nextClipIndex } from '@/lib/discover-playback.mjs';
 import { normalizeDiscoverFeed, discoverFilterHref, discoverSubjects } from '@/lib/discover-filters.mjs';
+import { attributionFor } from '@/lib/discover-attribution.mjs';
 
 interface Reel {
   id: string;
@@ -58,6 +59,7 @@ interface Reel {
   comments: number;
   isLiked: boolean;
   isSaved: boolean;
+  attribution: ReturnType<typeof attributionFor>;
 }
 
 // iOS ReelInfoOverlay level ring colors (system green / yellow / red)
@@ -76,6 +78,7 @@ function adaptReel(raw: Record<string, unknown>): Reel {
     rawLevel === 'advanced' ? 'advanced' : rawLevel === 'intermediate' ? 'intermediate' : 'beginner';
 
   const keyPoints = (
+    (metadata.keyPoints as string[]) ||
     (metadata.key_points as string[]) ||
     (raw.key_points as string[]) ||
     []
@@ -104,6 +107,7 @@ function adaptReel(raw: Record<string, unknown>): Reel {
     comments: (raw.commentCount as number) || (raw.comment_count as number) || 0,
     isLiked: (raw.isLiked as boolean) || (raw.is_liked as boolean) || false,
     isSaved: (raw.isSaved as boolean) || (raw.is_saved as boolean) || false,
+    attribution: attributionFor(raw),
   };
 }
 
@@ -227,6 +231,40 @@ function InfoOverlay({ reel }: { reel: Reel }) {
 
       {/* Title */}
       <h2 className="text-[17px] font-bold text-white leading-snug line-clamp-2">{reel.title}</h2>
+
+      {/* Library videos carry their creator and licence: open licences are
+          only honoured when the credit travels with the video. */}
+      {reel.attribution && (
+        <p className="text-[11px] text-white/70 leading-snug">
+          {reel.attribution.sourceHref ? (
+            <a
+              href={reel.attribution.sourceHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="underline decoration-white/30 underline-offset-2 hover:text-white"
+            >
+              {reel.attribution.text}
+            </a>
+          ) : (
+            reel.attribution.text
+          )}
+          {reel.attribution.licenseHref && (
+            <>
+              {' · '}
+              <a
+                href={reel.attribution.licenseHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="underline decoration-white/30 underline-offset-2 hover:text-white"
+              >
+                Licence
+              </a>
+            </>
+          )}
+        </p>
+      )}
 
       {/* Key points, or the subtitle when there are none */}
       {reel.keyPoints.length > 0 ? (

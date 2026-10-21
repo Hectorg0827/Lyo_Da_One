@@ -155,7 +155,9 @@ struct Discovery: Identifiable, Codable {
     var isLiked: Bool
     let isSaved: Bool
     let createdAt: Date
-    
+    /// Source and licence of a library video; nil for a learner's own clip.
+    var attribution: ClipAttribution? = nil
+
     enum CodingKeys: String, CodingKey {
         case id
         case userId = "userId"
@@ -169,6 +171,7 @@ struct Discovery: Identifiable, Codable {
         case isLiked = "isLiked"
         case isSaved = "isSaved"
         case createdAt = "createdAt"
+        case attribution
     }
     
     init(from decoder: Decoder) throws {
@@ -204,7 +207,9 @@ struct Discovery: Identifiable, Codable {
         self.views = try container.decodeIfPresent(Int.self, forKey: .views) ?? 0
         self.isLiked = try container.decodeIfPresent(Bool.self, forKey: .isLiked) ?? false
         self.isSaved = try container.decodeIfPresent(Bool.self, forKey: .isSaved) ?? false
-        
+        // A malformed credit must not cost the learner the whole feed.
+        self.attribution = try? container.decodeIfPresent(ClipAttribution.self, forKey: .attribution)
+
         // 5. Date Decoding Resiliency
         if let dateString = try? container.decode(String.self, forKey: .createdAt) {
             let formatter = ISO8601DateFormatter()

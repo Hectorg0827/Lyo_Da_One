@@ -94,6 +94,41 @@ struct Clip: Identifiable, Codable, Hashable {
     }
 }
 
+// MARK: - Clip Attribution
+
+/// The credit a library video must show. Discover's STEM library is built
+/// from public-domain and Creative Commons videos, whose terms are met only
+/// when the creator, licence and a link to the source travel with the video.
+/// Nil for a learner's own clip. Mirrors web `discover-attribution.mjs`.
+struct ClipAttribution: Codable, Hashable {
+    let credit: String?
+    let sourceName: String?
+    let sourceURL: String?
+    let license: String?
+    let licenseURL: String?
+
+    /// "NASA/JPL-Caltech · Public domain", or nil when there is nothing to credit.
+    var displayLine: String? {
+        let credit = (self.credit ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let license = (self.license ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = (sourceName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let line: String
+        if !credit.isEmpty {
+            // The server's credit already reads "creator · licence".
+            line = license.isEmpty || credit.contains(license) ? credit : "\(credit) · \(license)"
+        } else {
+            line = [name, license].filter { !$0.isEmpty }.joined(separator: " · ")
+        }
+        return line.isEmpty ? nil : line
+    }
+
+    /// The source page, and only when it is https.
+    var sourceLink: URL? {
+        guard let value = sourceURL, let url = URL(string: value), url.scheme == "https" else { return nil }
+        return url
+    }
+}
+
 // MARK: - Clip Metadata
 
 /// AI-extractable metadata for course generation from clips
