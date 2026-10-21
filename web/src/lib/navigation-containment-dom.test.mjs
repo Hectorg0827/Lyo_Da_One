@@ -48,10 +48,13 @@ function load(filename) {
   } }).outputText, filename);
   return mod.exports;
 }
-async function mount(t, route = '/chat', communityEnabled = false) {
+async function mount(t, route = '/chat', communityEnabled = false, discoverEnabled = true) {
   pathname = route;
-  // This is a build-time flag: load each configuration as a fresh module.
-  mocks['@/lib/launch-features'] = { COMMUNITY_LAUNCH_ENABLED: communityEnabled };
+  // These are build-time flags: load each configuration as a fresh module.
+  mocks['@/lib/launch-features'] = {
+    COMMUNITY_LAUNCH_ENABLED: communityEnabled,
+    DISCOVER_LAUNCH_ENABLED: discoverEnabled,
+  };
   modules.clear();
   const { Sidebar } = load(path.join(webRoot, 'src/components/layout/Sidebar.tsx'));
   const { MobileNav } = load(path.join(webRoot, 'src/components/layout/MobileNav.tsx'));
@@ -99,6 +102,24 @@ test('Discover holds Community\'s slot on the phone bar while Community is hidde
   const shipped = groups((await mount(t, '/chat', true)).container);
   assert.deepEqual(shipped.left, ['/', '/discover'], 'Discover returns to the left');
   assert.deepEqual(shipped.right, ['/community'], 'Community takes its slot back');
+});
+
+// Discover has its own launch gate: until its videos are proven to play, no
+// nav may lead to it. Both bars drop it, and the phone bar keeps Focus on the
+// left and Create on the right rather than leaving a hole.
+test('both navs leave Discover out while its launch flag is off', async t => {
+  const contained = await mount(t, '/chat', false, false);
+  assert.equal(contained.container.querySelectorAll('a[href="/discover"]').length, 0);
+  assert.equal(contained.container.querySelectorAll('a[href="/community"]').length, 0);
+  const bar = contained.container.querySelector('nav[aria-label="Mobile navigation"]');
+  const [left, right] = [...bar.firstElementChild.children].filter(el => el.tagName === 'DIV');
+  assert.deepEqual([...left.querySelectorAll('a')].map(a => a.getAttribute('href')), ['/']);
+  assert.deepEqual([...right.querySelectorAll('a')].map(a => a.getAttribute('href')), []);
+  assert.ok(right.querySelector('button[aria-label="Create"]'), 'Create stays on the right');
+
+  const withCommunity = await mount(t, '/chat', true, false);
+  assert.equal(withCommunity.container.querySelectorAll('a[href="/discover"]').length, 0);
+  assert.equal(withCommunity.container.querySelectorAll('a[href="/community"]').length, 2);
 });
 
 test('entering Classroom removes both navs and releases the rail keyboard shortcut', async t => {

@@ -10,6 +10,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { useAuthStore } from '@/stores/auth-store';
 import { authSwitchHref } from '@/lib/auth-return.mjs';
 import { UNREAD_CHANGED_EVENT, totalUnread, unreadBadge, unreadLabel } from '@/lib/unread.mjs';
+import { DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 const UNREAD_REFRESH_MS = 60_000;
 
@@ -71,6 +72,21 @@ export function TopBar() {
 
   const [searchValue, setSearchValue] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // The TopBar is Discover's sole search control. Sync deep links and browser
+  // Back/Forward so the visible query is never different from the active feed.
+  useEffect(() => {
+    const sync = () => {
+      setSearchValue(
+        window.location.pathname.startsWith('/discover')
+          ? new URLSearchParams(window.location.search).get('q') || ''
+          : '',
+      );
+    };
+    sync();
+    window.addEventListener('popstate', sync);
+    return () => window.removeEventListener('popstate', sync);
+  }, [pathname]);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -95,8 +111,16 @@ export function TopBar() {
   function handleSearch(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const query = searchValue.trim();
-    if (!query) return;
-    router.push(`/discover?q=${encodeURIComponent(query)}`);
+    // Keep the current topic or Saved tab when searching within Discover.
+    // Submitting a cleared field clears the search instead of doing nothing.
+    const params = pathname.startsWith('/discover')
+      ? new URLSearchParams(window.location.search)
+      : new URLSearchParams();
+    params.delete('clip');
+    if (query) params.set('q', query);
+    else params.delete('q');
+    const suffix = params.toString();
+    router.push(`/discover${suffix ? `?${suffix}` : ''}`);
   }
 
   // Focused classroom layout: no global search/notifications/messages
@@ -122,8 +146,10 @@ export function TopBar() {
         <span className="text-sm font-medium text-[var(--text-secondary)]" aria-hidden="true" />
       </div>
 
-      {/* Center: Search — a real navigation action, not a decorative field. */}
-      <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-auto" role="search">
+      {/* Center: Search — a real navigation action, not a decorative field.
+          It searches Discover, so it is left out while Discover is held back;
+          a spacer takes its place so the account actions stay on the right. */}
+      {DISCOVER_LAUNCH_ENABLED ? <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-auto" role="search">
         <div className="relative">
           <Search
             className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-secondary)] pointer-events-none"
@@ -144,7 +170,7 @@ export function TopBar() {
             aria-label="Search discoveries"
           />
         </div>
-      </form>
+      </form> : <div className="flex-1" aria-hidden="true" />}
 
       {/* Right: account actions. Signed out, there is nothing personal to show. */}
       {isLoading ? (

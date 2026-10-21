@@ -99,6 +99,8 @@ struct DiscoverItem: Identifiable, Codable {
     var isSaved: Bool
     let authorName: String?
     let authorAvatarURL: URL?
+    /// Creator, licence and source of a library video; nil for a learner's own clip.
+    let attribution: ClipAttribution?
     
     init(
         id: String = UUID().uuidString,
@@ -132,7 +134,8 @@ struct DiscoverItem: Identifiable, Codable {
         shareCount: Int = 0,
         isSaved: Bool = false,
         authorName: String? = nil,
-        authorAvatarURL: URL? = nil
+        authorAvatarURL: URL? = nil,
+        attribution: ClipAttribution? = nil
     ) {
         self.id = id
         self.type = type
@@ -164,5 +167,6 @@ struct DiscoverItem: Identifiable, Codable {
         self.isSaved = isSaved
         self.authorName = authorName
         self.authorAvatarURL = authorAvatarURL
+        self.attribution = attribution
     }
 }

@@ -12,6 +12,7 @@ import {
   creatorStats,
   isReported,
 } from '@/lib/creator-stats.mjs';
+import { DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 /**
  * A creator's own clips, and what they have added up to.
@@ -84,14 +85,20 @@ export default function CreatorStatsPanel() {
         <Film className="mx-auto mb-3 text-white/25" />
         <p className="text-sm font-medium text-white/70">No clips yet</p>
         <p className="mx-auto mt-1 max-w-xs text-xs text-white/40">
-          Teach something in 60 seconds and it shows up here — with how many people watched it.
+          {DISCOVER_LAUNCH_ENABLED
+            ? 'Teach something in 60 seconds and it shows up here — with how many people watched it.'
+            : 'Clips you publish will show up here — with how many people watched them.'}
         </p>
-        <Link
-          href="/discover?compose=clip"
-          className="mt-4 inline-flex rounded-full bg-white px-4 py-2 font-rounded text-[13px] font-bold text-[#0A0D16]"
-        >
-          Make your first clip
-        </Link>
+        {/* The composer lives on Discover; while Discover is held back the
+            button would only lead to its "being updated" page. */}
+        {DISCOVER_LAUNCH_ENABLED && (
+          <Link
+            href="/discover?compose=clip"
+            className="mt-4 inline-flex rounded-full bg-white px-4 py-2 font-rounded text-[13px] font-bold text-[#0A0D16]"
+          >
+            Make your first clip
+          </Link>
+        )}
       </div>
     );
   }

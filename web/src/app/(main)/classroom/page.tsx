@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { CALL_TO_ACTION, invitation } from '@/lib/teach-it.mjs';
+import { DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 import {
   configureDictation,
   createBrowserSpeechRecognition,
@@ -632,8 +633,9 @@ function ClassroomStage() {
                 supply; this is where supply comes from. The topic is already
                 known, so the ask names it and the composer opens with the
                 title written. Not shown after an error, where nothing was
-                finished to teach. */}
-            {status === 'ended' && !error && (
+                finished to teach, nor while Discover is held back from
+                launch, where the composer cannot open. */}
+            {DISCOVER_LAUNCH_ENABLED && status === 'ended' && !error && (
               <div className="rounded-xl border border-[#8B5CF6]/30 bg-[#8B5CF6]/10 px-4 py-3">
                 <p className="text-sm text-white/85">{invitation(topic)}</p>
                 <Link
