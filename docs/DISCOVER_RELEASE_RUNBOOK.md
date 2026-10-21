@@ -61,11 +61,15 @@ python scripts/discover_media_audit.py
 # after taking a database backup in Railway:
 DISCOVER_AUDIT_APPLY=YES \
 DISCOVER_AUDIT_BACKUP_VERIFIED=YES \
-DISCOVER_AUDIT_EXPECTED_HOST=<the database host name> \
+DISCOVER_AUDIT_EXPECTED_TARGET=<database host>/<database name> \
 python scripts/discover_media_audit.py
 ```
 
-Run it with the backend's own variables (for example `railway run`).
+Run it with the backend's own variables (for example `railway run`). The
+`EXPECTED_TARGET` must name both the database server and the database. A
+different database on the same server is refused. Only videos on
+`api.lyoai.app` can be marked `ready`. If the API also answers on another
+domain, list both in `DISCOVER_AUDIT_API_HOSTS` (comma-separated).
 
 Pass: legacy clips 1 and 2 show `missing`. Nothing is deleted and nobody's
 privacy setting changes. They can only come back if someone re-uploads the
@@ -125,7 +129,12 @@ python scripts/discover_catalog.py ingest --manifest catalog.json --api https://
 
 Allowed licences are public domain, CC0, CC BY and CC BY-SA.
 NonCommercial and NoDerivatives licences are refused automatically. No
-TikTok or YouTube footage.
+TikTok or YouTube footage. Every video must carry a credit, and one source
+can be published only once.
+
+`ingest` uploads nothing if `validate` would fail. To publish the ready
+entries of a list that is still short of 20, add `--partial`. Discover is
+still off at this point, so a partial library is not public yet.
 
 Starter searches, two per area:
 
