@@ -14,6 +14,8 @@
  * to comment on one or make one. Both now live here, and `/clips` redirects.
  */
 
+import Link from 'next/link';
+import { DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
@@ -887,6 +889,9 @@ function DiscoverContent() {
 
 
 export default function DiscoverPage() {
+  if (!DISCOVER_LAUNCH_ENABLED) {
+    return <main className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center text-white"><h1 className="font-rounded text-3xl font-bold">Discover is being updated</h1><p className="mt-4 max-w-md text-white/65">The video library will return when playback and media storage have passed live validation.</p><Link href="/" className="mt-7 rounded-full bg-white px-6 py-3 font-bold text-[#0d0f18]">Continue learning</Link></main>;
+  }
   return (
     <Suspense fallback={<div className="h-full bg-black" aria-label="Loading Discover" />}>
       <DiscoverContent />
