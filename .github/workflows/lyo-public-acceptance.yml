@@ -1,0 +1,35 @@
+name: LYO public production acceptance
+on:
+  push:
+    branches: [test/production-public-certification-20261015, main]
+  workflow_dispatch:
+jobs:
+  production-public:
+    name: Check live public-site contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify canonical web and public files live
+        working-directory: web
+        env:
+          SITE_URL: https://www.lyoai.app
+        run: node scripts/verify-public-release.mjs
+      - name: Check API health without secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for endpoint in https://api.lyoai.app/health https://api.lyoai.app/api/v1/health; do
+            result="$(curl --max-time 12 -sS -o /tmp/lyo-health.json -w '%{http_code}' "$endpoint" || true)"
+            echo "$endpoint => $result"
+            if [ "$result" = "200" ]; then exit 0; fi
+          done
+          echo "LYO public API health unavailable; cannot certify production."
+          exit 1
+
+      - name: Verify required production API routes
+        working-directory: web
+        run: node scripts/probe-production-contract.mjs
