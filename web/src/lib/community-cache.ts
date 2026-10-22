@@ -4,8 +4,16 @@ import type { NearbyLearningResponse } from '@/types';
  * A disposable performance cache for map results — never the source of
  * truth. It lets a returning visit paint instantly (then revalidate) and lets
  * a failed request fall back to the last good answer with an honest "from N
- * minutes ago" label. Saves, RSVPs and created events always come from the
- * server; this cache only stores what the server last said about an area.
+ * minutes ago" label.
+ *
+ * What the server says about an area is partly about *who asked*: every node
+ * carries `is_saved`, `is_joined` and `is_attending` for the viewer. So the
+ * key starts with the account. Without that, one learner signing out and
+ * another signing in on the same device inside `FRESH_MS` served the second
+ * learner the first one's entry — fresh, so not revalidated — and showed them
+ * someone else's saved and attending marks. A logout does not clear this, and
+ * sessionStorage outlives the reload that a session expiry causes, so keying
+ * it is what actually closes that off.
  */
 
 const STORAGE_KEY = 'lyo.community.nearby.v1';
@@ -55,6 +63,8 @@ function persist() {
 }
 
 export function nearbyCacheKey(parts: {
+  /** The viewer this answer was for; entries are never shared across accounts. */
+  account: string;
   latitude: number;
   longitude: number;
   radiusKm: number;
@@ -62,6 +72,7 @@ export function nearbyCacheKey(parts: {
   query: string;
 }): string {
   return [
+    parts.account,
     parts.latitude.toFixed(3),
     parts.longitude.toFixed(3),
     parts.radiusKm.toFixed(1),
