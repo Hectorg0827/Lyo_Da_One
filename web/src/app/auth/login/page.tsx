@@ -205,6 +205,10 @@ export default function LoginPage() {
             </button>
           </form>
 
+          <p className="text-right text-sm">
+            <Link href="/auth/forgot-password" className="font-semibold text-[#a78bfa] hover:underline">Forgot your password?</Link>
+          </p>
+
           <p className="text-center text-sm text-secondary">
             New to LYO?{' '}
             <Link
