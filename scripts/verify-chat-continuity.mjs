@@ -230,6 +230,60 @@ const contracts = [
   },
 ];
 
+// Regression gate for the Chat response UX across web and native clients.
+contracts.push(
+  {
+    name: 'Web Chat grounded reading and functional response controls',
+    path: 'web/src/components/chat/MessageBubble.tsx',
+    needles: [
+      'sourceItems.map((source, index)',
+      'safeWebUrl(source.url)',
+      'ResponseActionButton label={copied',
+      'handleRegenerate',
+      'handleSave',
+      'api.tts.synthesizeStream',
+      'max-w-[88ch]',
+      'spokenSoFar',
+      'BlockRenderer blocks={primaryBlocks}',
+    ],
+  },
+  {
+    name: 'iOS persistent Chat response toolbar',
+    path: 'Sources/Views/Chat/EnhancedMessageBubble.swift',
+    needles: [
+      'title: didCopy ? "Copied" : "Copy"',
+      'title: isSpeaking ? "Stop" : "Listen"',
+      'title: "Try again"',
+      'title: "Save"',
+      'saveResponseToFiles()',
+      'onSmartVisualUpdate',
+    ],
+    forbidden: ['Read Aloud (TTS) in Header'],
+  },
+  {
+    name: 'iOS Chat control wiring',
+    path: 'Sources/Views/Main/Hybrid/LyoOverlayView.swift',
+    needles: [
+      'viewModel.toggleMessageAudio(messageId: message.id',
+      'viewModel.messages.last?.id == message.id',
+      'onSmartVisualUpdate:',
+    ],
+  },
+  {
+    name: 'Android functional response controls',
+    path: 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatScreen.kt',
+    needles: [
+      'ActivityResultContracts.CreateDocument("text/markdown")',
+      'onCopy = {',
+      'onSave = {',
+      'label = "Try again"',
+      'label = "Save"',
+      'SmartBlockList(',
+      'onVisualUpdate = onVisualUpdate',
+    ],
+  },
+);
+
 const failures = [];
 for (const contract of contracts) {
   const source = fs.readFileSync(contract.path, 'utf8');
