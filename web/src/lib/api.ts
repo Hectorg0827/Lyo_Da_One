@@ -646,6 +646,10 @@ export const api = {
 
   // ── Courses ──
   courses: {
+    async mine() {
+      return request<Record<string, unknown>[]>('/api/v1/learning/courses/mine');
+    },
+
     async list(skip = 0, limit = 20, subject?: string, difficulty?: string) {
       const params = new URLSearchParams({ skip: String(skip), limit: String(limit) });
       if (subject) params.set('subject', subject);
