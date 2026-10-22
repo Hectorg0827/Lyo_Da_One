@@ -535,6 +535,12 @@ export default function HomePage() {
       </motion.div>
       )}
 
+      <footer className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-white/10 pt-6 text-xs text-white/55">
+        <Link href="/terms" className="hover:text-white">Terms</Link>
+        <Link href="/privacy" className="hover:text-white">Privacy</Link>
+        <a href="mailto:support@lyo.app" className="hover:text-white">Support</a>
+      </footer>
+
       {/* ── Bottom spacer for mobile nav ─────────────────────── */}
       <div className="h-2 md:h-4" />
     </motion.div>
