@@ -200,3 +200,11 @@ state works.
 - No Railway service visible to this account has `api.lyoai.app` attached, so
   confirm in Railway (or wherever DNS points) which service answers it before
   Step 1.
+- `www.lyoai.app` and `lyoai.app` are two different Railway services. The one
+  in project `zonal-wisdom` answers `www`; the bare domain is answered by a
+  service in a Railway account this one cannot see, and on 22 October it was
+  still serving the build from 19 October. The website now forwards
+  `lyoai.app` to `www.lyoai.app`, keeping the path, but only once that hidden
+  service redeploys from `main`. Until then, check `www.lyoai.app` for the
+  current release. Moving the bare domain onto the `zonal-wisdom` service (in
+  Railway and at the DNS provider) removes the second copy for good.
