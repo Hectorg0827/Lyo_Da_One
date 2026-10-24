@@ -22,6 +22,10 @@ final class DiscoverViewModel: ObservableObject {
     /// Loaded videos that left the feed since page 1 loaded, by a report or
     /// a block. Each one moves later server pages up a place.
     private var removedSinceLoad = 0
+    /// Reported videos and blocked owners stay out of every page merged
+    /// later, including one already on its way when they were removed.
+    private var reportedIds: Set<String> = []
+    private var blockedOwnerIds: Set<String> = []
     
     // UI State for Context Sheet
     @Published var showVideoContextSheet: Bool = false
@@ -121,6 +125,7 @@ final class DiscoverViewModel: ObservableObject {
     /// A reported video leaves this learner's feed at once; the server also
     /// stops sending it to them.
     func removeReported(_ item: DiscoverItem, message: String) {
+        reportedIds.insert(item.id)
         let before = items.count
         items.removeAll { $0.id == item.id }
         removedSinceLoad += before - items.count
@@ -130,11 +135,17 @@ final class DiscoverViewModel: ObservableObject {
 
     /// Every video by someone blocked leaves the feed at once.
     func removeVideos(by ownerId: String, message: String) {
+        blockedOwnerIds.insert(ownerId)
         let before = items.count
         items.removeAll { $0.authorId == ownerId }
         removedSinceLoad += before - items.count
         showToast(message)
         refillIfShort()
+    }
+
+    private func isHidden(_ item: DiscoverItem) -> Bool {
+        if let owner = item.authorId, blockedOwnerIds.contains(owner) { return true }
+        return reportedIds.contains(item.id)
     }
 
     /// A block can empty most of what is loaded; fetch more rather than show
@@ -292,7 +303,7 @@ final class DiscoverViewModel: ObservableObject {
         // Note: DataService internally handles some fallbacks, but we should be aware of the auth state
         let firstPage = await DataService.shared.fetchDiscoverFeed(limit: 20, offset: 0)
         guard generation == feedGeneration else { return }
-        self.items = firstPage
+        self.items = firstPage.filter { !isHidden($0) }
         nextOffset = 20
         hasMore = !AuthService.shared.isDemoMode && firstPage.count == 20
 
@@ -326,7 +337,7 @@ final class DiscoverViewModel: ObservableObject {
         }
         guard generation == feedGeneration else { return }
         var known = Set(items.map(\.id))
-        for item in next where !known.contains(item.id) {
+        for item in next where !known.contains(item.id) && !isHidden(item) {
             items.append(item)
             known.insert(item.id)
         }

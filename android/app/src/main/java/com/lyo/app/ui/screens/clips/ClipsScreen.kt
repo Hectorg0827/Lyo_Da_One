@@ -145,6 +145,12 @@ fun ClipsScreen(nav: NavHostController) {
     // Loaded videos that left the feed since page 1 loaded, by a report or a
     // block. Each one moves later server pages up a place.
     var removedSinceLoad by remember { mutableIntStateOf(0) }
+    // Reported videos and blocked owners stay out of every page merged later,
+    // including one already on its way when they were removed.
+    var reportedIds by remember { mutableStateOf(setOf<String>()) }
+    var blockedOwnerIds by remember { mutableStateOf(setOf<String>()) }
+    fun hidden(clip: ClipDto): Boolean =
+        clip.idStr in reportedIds || clip.ownerIdStr?.let { it in blockedOwnerIds } == true
     var pendingVideoUri by remember { mutableStateOf<Uri?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
     var nextPage by remember { mutableIntStateOf(2) }
@@ -218,7 +224,7 @@ fun ClipsScreen(nav: NavHostController) {
         currentCoroutineContext().ensureActive()
         if (generation != feedGeneration) return@LaunchedEffect
         if (resolved != null) {
-            clips = resolved
+            clips = resolved.filterNot { hidden(it) }
             likedIds = resolved.filter { it.isLiked == true }.map { it.idStr }.toSet()
             savedIds = resolved.filter { it.isSaved == true }.map { it.idStr }.toSet()
             loaded = true
@@ -376,7 +382,7 @@ fun ClipsScreen(nav: NavHostController) {
                             }
                             if (generation != feedGeneration) return@launch
                             val known = clips.map { it.idStr }.toSet()
-                            clips = clips + fetched.distinctBy { it.idStr }.filterNot { it.idStr in known }
+                            clips = clips + fetched.distinctBy { it.idStr }.filterNot { it.idStr in known || hidden(it) }
                             nextPage = page + 1
                             hasMore = lastBatch.size == 20
                         } catch (cancelled: CancellationException) {
@@ -561,9 +567,13 @@ fun ClipsScreen(nav: NavHostController) {
                 isLibrary = clip.attribution?.displayLine != null,
             ),
             onDismiss = { reportingClip = null },
-            onReported = { outcome -> leaveFeed(outcome.message) { it.idStr == clip.idStr } },
+            onReported = { outcome ->
+                reportedIds = reportedIds + clip.idStr
+                leaveFeed(outcome.message) { it.idStr == clip.idStr }
+            },
             onBlocked = { outcome ->
                 val owner = clip.ownerIdStr
+                if (owner != null) blockedOwnerIds = blockedOwnerIds + owner
                 leaveFeed(outcome.message) { owner != null && it.ownerIdStr == owner }
             },
         )
