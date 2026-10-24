@@ -47,7 +47,7 @@ import { draftSubject, draftTitle } from '@/lib/teach-it.mjs';
 import { DiscoverPlaybackController, DiscoverPageCursor, mergeClipPage, nextClipIndex } from '@/lib/discover-playback.mjs';
 import { normalizeDiscoverFeed, discoverFilterHref, discoverSubjects } from '@/lib/discover-filters.mjs';
 import { attributionFor } from '@/lib/discover-attribution.mjs';
-import { canReport, pagesToFetch } from '@/lib/discover-report.mjs';
+import { canBlock, canReport, pagesToFetch } from '@/lib/discover-report.mjs';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface Reel {
@@ -603,12 +603,13 @@ function DiscoverContent() {
   }, [composeParam]);
   const [overrides, setOverrides] = useState<Record<string, Partial<Reel>>>({});
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
-  // A reported video leaves this learner's feed at once, as the server also
-  // stops sending it to them.
+  // A reported video, and every video by someone blocked, leaves this
+  // learner's feed at once, as the server also stops sending them.
   const [reportingFor, setReportingFor] = useState<Reel | null>(null);
   const [reportedIds, setReportedIds] = useState<Set<string>>(() => new Set());
-  // Reports since page 1 loaded: each one moves later server pages up a place.
-  const reportsSinceLoad = useRef(0);
+  const [blockedOwners, setBlockedOwners] = useState<Set<string>>(() => new Set());
+  // Loaded videos removed since page 1 loaded: each moves later server pages up a place.
+  const removedSinceLoad = useRef(0);
   const viewerId = useAuthStore((state) => state.user?.id);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const viewed = useRef<Set<string>>(new Set());
@@ -638,7 +639,7 @@ function DiscoverContent() {
   // continuous feed, not a reel that silently stops after 20 clips.
   useEffect(() => {
     pageCursor.current.reset();
-    reportsSinceLoad.current = 0;
+    removedSinceLoad.current = 0;
     setMoreClips([]);
     setPendingAdvanceId(null);
     setActiveIndex(0);
@@ -676,8 +677,10 @@ function DiscoverContent() {
     const ordered = namedReel && feedMode === 'for_you' && !subject && !query
       ? [namedReel, ...list.filter((r) => r.id !== namedReel.id)]
       : list;
-    return ordered.filter((r) => !reportedIds.has(r.id)).map((r) => ({ ...r, ...overrides[r.id] }));
-  }, [data, overrides, namedReel, moreClips, feedMode, subject, query, reportedIds]);
+    return ordered
+      .filter((r) => !reportedIds.has(r.id) && !(r.ownerId && blockedOwners.has(r.ownerId)))
+      .map((r) => ({ ...r, ...overrides[r.id] }));
+  }, [data, overrides, namedReel, moreClips, feedMode, subject, query, reportedIds, blockedOwners]);
 
   useEffect(() => {
     if (isLoading || !data) return;
@@ -689,7 +692,7 @@ function DiscoverContent() {
     const load = (page: number) => feedMode === 'saved'
       ? api.clips.saved(page, 20, requestOptions)
       : api.clips.discover(page, 20, { ...requestOptions, sort: feedMode });
-    Promise.all(pagesToFetch(request.page, reportsSinceLoad.current, 20).map(load)).then((results) => {
+    Promise.all(pagesToFetch(request.page, removedSinceLoad.current, 20).map(load)).then((results) => {
       if (!pageCursor.current.complete(request)) return;
       setMoreClips((current) => results.reduce((merged, result) => mergeClipPage(merged, result.clips || []), current));
     }).catch(() => {
@@ -955,13 +958,26 @@ function DiscoverContent() {
             key={reportingFor.id}
             clipId={reportingFor.id}
             clipTitle={reportingFor.title}
+            owner={
+              reportingFor.ownerId && canBlock(reportingFor.ownerId, viewerId, Boolean(reportingFor.attribution))
+                ? { id: reportingFor.ownerId, name: reportingFor.author.name }
+                : null
+            }
             onClose={() => setReportingFor(null)}
             onDone={(outcome) => {
               const reportedId = reportingFor.id;
               // A sheet opened since this report was sent stays open.
               setReportingFor((current) => (current?.id === reportedId ? null : current));
               setReportedIds((current) => new Set(current).add(reportedId));
-              reportsSinceLoad.current += 1;
+              removedSinceLoad.current += 1;
+              toast(outcome.message);
+            }}
+            onBlocked={(outcome) => {
+              const ownerId = reportingFor.ownerId;
+              if (!ownerId) return;
+              setReportingFor((current) => (current?.ownerId === ownerId ? null : current));
+              removedSinceLoad.current += reels.filter((reel) => reel.ownerId === ownerId).length;
+              setBlockedOwners((current) => new Set(current).add(ownerId));
               toast(outcome.message);
             }}
           />

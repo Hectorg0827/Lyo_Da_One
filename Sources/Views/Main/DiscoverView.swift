@@ -6,6 +6,7 @@ struct DiscoverView: View {
     @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject var uiState: AppUIState
     @EnvironmentObject var uiStackStore: UIStackStore
+    @EnvironmentObject var rootViewModel: RootViewModel
     
     @StateObject private var viewModel = DiscoverViewModel()
     // Unified AI ViewModel from MainTabView environment
@@ -19,9 +20,14 @@ struct DiscoverView: View {
     @State private var animateHeader = false
     @State private var selectedReelId = ""
     @State private var pendingAdvanceId: String?
+    @State private var reportingItem: DiscoverItem?
 
     private var playbackAllowed: Bool {
-        !showClassroom && !showLioChat && itemToShare == nil && viewModel.selectedContextItem == nil && viewModel.selectedItemForComments == nil
+        !showClassroom && !showLioChat && itemToShare == nil && viewModel.selectedContextItem == nil && viewModel.selectedItemForComments == nil && reportingItem == nil
+    }
+
+    private var viewerId: String? {
+        rootViewModel.currentUser.map { String($0.id) }
     }
     
     var body: some View {
@@ -111,6 +117,30 @@ struct DiscoverView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+        .sheet(item: $reportingItem) { item in
+            ReportClipSheet(
+                item: item,
+                canBlock: DiscoverSafety.canBlock(ownerId: item.authorId, viewerId: viewerId, isLibrary: item.attribution != nil),
+                onReported: { outcome in
+                    reportingItem = nil
+                    viewModel.removeReported(item, message: outcome.message)
+                },
+                onBlocked: { outcome in
+                    reportingItem = nil
+                    if let ownerId = item.authorId {
+                        viewModel.removeVideos(by: ownerId, message: outcome.message)
+                    }
+                }
+            )
+        }
+        .overlay(alignment: .bottom) {
+            if let message = viewModel.toastMessage {
+                CommunityToast(message: message)
+                    .padding(.bottom, 110)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.85), value: viewModel.toastMessage)
         .onChange(of: scenePhase) { phase in
             if phase == .active, let pending = pendingAdvanceId { advanceAfter(pending) }
         }
@@ -216,7 +246,10 @@ struct DiscoverView: View {
                         },
                         onAskLio: { askLioAbout(item) },
                         onStart: { startAction(for: item) },
-                        onConvertToCourse: { viewModel.convertToCourse(item: item) }
+                        onConvertToCourse: { viewModel.convertToCourse(item: item) },
+                        onReport: DiscoverSafety.canReport(ownerId: item.authorId, viewerId: viewerId)
+                            ? { reportingItem = item }
+                            : nil
                     )
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .tag(item.id)
@@ -344,4 +377,5 @@ struct ActivityViewController: UIViewControllerRepresentable {
     DiscoverView()
         .environmentObject(AppUIState())
         .environmentObject(UIStackStore.shared)
+        .environmentObject(RootViewModel())
 }

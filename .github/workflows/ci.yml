@@ -85,6 +85,9 @@ jobs:
       - name: Verify Discover continuous playback
         run: node scripts/verify-discover-playback.mjs
 
+      - name: Verify Discover Report and Block parity
+        run: node scripts/verify-discover-safety-parity.mjs
+
       - name: Verify Android Notifications reliability
         run: node scripts/verify-android-notifications-reliability.mjs
 

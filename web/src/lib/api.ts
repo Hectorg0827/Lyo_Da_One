@@ -796,6 +796,26 @@ export const api = {
     },
   },
 
+  // ── Blocked accounts: hidden both ways in Discover and Community ──
+  blocks: {
+    async list() {
+      return request<{ id: number; user_id: number; user_name: string; user_avatar?: string | null; blocked_at: string }[]>(
+        '/api/v1/community/blocks'
+      );
+    },
+
+    async block(userId: string) {
+      return request<{ id: number; user_id: number; user_name: string }>('/api/v1/community/blocks', {
+        method: 'POST',
+        body: JSON.stringify({ user_id: Number(userId) }),
+      });
+    },
+
+    async unblock(userId: string) {
+      return request<void>(`/api/v1/community/blocks/${userId}`, { method: 'DELETE' });
+    },
+  },
+
   // ── Media upload (multipart; chat attachments, reels, and post images) ──
   media: {
     async upload(file: File, folder = 'content') {

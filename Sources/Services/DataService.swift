@@ -74,6 +74,7 @@ final class DataService: ObservableObject {
                     isSaved: discovery.isSaved,
                     authorName: discovery.userName ?? "Lyo User",
                     authorAvatarURL: nil, // Could add if available in model
+                    authorId: String(discovery.userId),
                     attribution: discovery.attribution
                 )
             }

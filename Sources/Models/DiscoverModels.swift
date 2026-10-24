@@ -99,6 +99,8 @@ struct DiscoverItem: Identifiable, Codable {
     var isSaved: Bool
     let authorName: String?
     let authorAvatarURL: URL?
+    /// The account that posted it, for Report and Block; nil when unknown.
+    let authorId: String?
     /// Creator, licence and source of a library video; nil for a learner's own clip.
     let attribution: ClipAttribution?
     
@@ -135,6 +137,7 @@ struct DiscoverItem: Identifiable, Codable {
         isSaved: Bool = false,
         authorName: String? = nil,
         authorAvatarURL: URL? = nil,
+        authorId: String? = nil,
         attribution: ClipAttribution? = nil
     ) {
         self.id = id
@@ -167,6 +170,7 @@ struct DiscoverItem: Identifiable, Codable {
         self.isSaved = isSaved
         self.authorName = authorName
         self.authorAvatarURL = authorAvatarURL
+        self.authorId = authorId
         self.attribution = attribution
     }
 }
