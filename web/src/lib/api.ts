@@ -773,6 +773,28 @@ export const api = {
     },
   },
 
+  // ── Discover moderation (moderators only; the API answers 403 otherwise) ──
+  moderation: {
+    async me() {
+      return request<{ moderator: boolean }>('/api/v1/moderation/me');
+    },
+
+    async clips(view: 'reported' | 'all' | 'removed', options: { q?: string; page?: number } = {}) {
+      const params = new URLSearchParams({ view, page: String(options.page ?? 1), per_page: '20' });
+      if (options.q) params.set('q', options.q);
+      return request<{ clips: Record<string, unknown>[]; total: number; page: number }>(
+        `/api/v1/moderation/clips?${params}`
+      );
+    },
+
+    async decide(clipId: string, action: 'keep' | 'remove' | 'restore', note?: string) {
+      return request<{ clip: Record<string, unknown> }>(`/api/v1/moderation/clips/${clipId}/decision`, {
+        method: 'POST',
+        body: JSON.stringify({ action, note: note || undefined }),
+      });
+    },
+  },
+
   // ── Media upload (multipart; chat attachments, reels, and post images) ──
   media: {
     async upload(file: File, folder = 'content') {
