@@ -46,3 +46,16 @@ export function reportOutcome(status) {
   }
   return { leaveFeed: false, message: "Your report couldn't be sent. Please try again." };
 }
+
+/**
+ * The pages to request for feed page `page` after `reports` loaded videos
+ * were reported. The server drops a reported video from this learner's feed,
+ * so every later page starts that many places earlier and the videos at the
+ * old page boundary move onto the page before. Asking for that page too, and
+ * merging without duplicates, keeps them from being skipped.
+ */
+export function pagesToFetch(page, reports, perPage) {
+  const back = Math.ceil(Math.max(0, reports) / perPage);
+  const first = Math.max(1, page - back);
+  return Array.from({ length: page - first + 1 }, (_, index) => first + index);
+}

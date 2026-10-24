@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { REPORT_NOTE_LIMIT, REPORT_REASONS, canReport, reportOutcome } from './discover-report.mjs';
+import { REPORT_NOTE_LIMIT, REPORT_REASONS, canReport, pagesToFetch, reportOutcome } from './discover-report.mjs';
+import { mergeClipPage } from './discover-playback.mjs';
 
 // The reasons POST /api/v1/clips/{id}/report accepts (LyoBackendJune
 // lyo_app/community/models.py ReportReason). Anything else is a 422.
@@ -45,4 +46,27 @@ test('Discover offers Report on other people\'s videos and drops a reported one 
     'the video pauses while the report sheet is open');
   assert.ok(sheet.includes('api.clips.report(clipId, reason, note.trim())'));
   assert.ok(sheet.includes('role="dialog"') && sheet.includes('aria-modal="true"'));
+});
+
+test('after a report, the next page also asks for the one before, so no video is skipped', () => {
+  assert.deepEqual(pagesToFetch(2, 0, 20), [2]);
+  assert.deepEqual(pagesToFetch(2, 1, 20), [1, 2]);
+  assert.deepEqual(pagesToFetch(3, 20, 20), [2, 3]);
+  assert.deepEqual(pagesToFetch(3, 21, 20), [1, 2, 3]);
+  assert.deepEqual(pagesToFetch(2, 45, 20), [1, 2]);
+
+  // 25 videos, pages of 10; the learner reports video 4 while on page 1.
+  const all = Array.from({ length: 25 }, (_, i) => ({ id: i + 1 }));
+  const serverPage = (n, hidden) => all.filter((c) => !hidden.has(c.id)).slice((n - 1) * 10, n * 10);
+  let loaded = serverPage(1, new Set());
+  const hidden = new Set([4]);
+  for (const n of pagesToFetch(2, 1, 10)) loaded = mergeClipPage(loaded, serverPage(n, hidden));
+  for (const n of pagesToFetch(3, 1, 10)) loaded = mergeClipPage(loaded, serverPage(n, hidden));
+  assert.deepEqual(loaded.map((c) => c.id), all.map((c) => c.id), 'every video arrives once');
+});
+
+test('a report that finishes late never closes a newer report sheet', () => {
+  const page = readFileSync(new URL('../app/(main)/discover/page.tsx', import.meta.url), 'utf8');
+  assert.ok(page.includes('setReportingFor((current) => (current?.id === reportedId ? null : current))'));
+  assert.ok(page.includes('pagesToFetch(request.page, reportsSinceLoad.current, 20)'));
 });

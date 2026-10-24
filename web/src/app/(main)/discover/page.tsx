@@ -47,7 +47,7 @@ import { draftSubject, draftTitle } from '@/lib/teach-it.mjs';
 import { DiscoverPlaybackController, DiscoverPageCursor, mergeClipPage, nextClipIndex } from '@/lib/discover-playback.mjs';
 import { normalizeDiscoverFeed, discoverFilterHref, discoverSubjects } from '@/lib/discover-filters.mjs';
 import { attributionFor } from '@/lib/discover-attribution.mjs';
-import { canReport } from '@/lib/discover-report.mjs';
+import { canReport, pagesToFetch } from '@/lib/discover-report.mjs';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface Reel {
@@ -607,6 +607,8 @@ function DiscoverContent() {
   // stops sending it to them.
   const [reportingFor, setReportingFor] = useState<Reel | null>(null);
   const [reportedIds, setReportedIds] = useState<Set<string>>(() => new Set());
+  // Reports since page 1 loaded: each one moves later server pages up a place.
+  const reportsSinceLoad = useRef(0);
   const viewerId = useAuthStore((state) => state.user?.id);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const viewed = useRef<Set<string>>(new Set());
@@ -636,6 +638,7 @@ function DiscoverContent() {
   // continuous feed, not a reel that silently stops after 20 clips.
   useEffect(() => {
     pageCursor.current.reset();
+    reportsSinceLoad.current = 0;
     setMoreClips([]);
     setPendingAdvanceId(null);
     setActiveIndex(0);
@@ -678,17 +681,17 @@ function DiscoverContent() {
 
   useEffect(() => {
     if (isLoading || !data) return;
-    const loadedCount = (data.clips?.length || 0) + moreClips.length;
+    // Pages overlap after a report, so count each loaded clip once.
+    const loadedCount = mergeClipPage((data.clips as Record<string, unknown>[]) || [], moreClips).length;
     if (activeIndex < reels.length - 4 || loadedCount >= (data.total || 0)) return;
     const request = pageCursor.current.begin();
     if (!request) return;
-    const page = request.page;
-    const load = feedMode === 'saved'
+    const load = (page: number) => feedMode === 'saved'
       ? api.clips.saved(page, 20, requestOptions)
       : api.clips.discover(page, 20, { ...requestOptions, sort: feedMode });
-    load.then((result) => {
+    Promise.all(pagesToFetch(request.page, reportsSinceLoad.current, 20).map(load)).then((results) => {
       if (!pageCursor.current.complete(request)) return;
-      setMoreClips((current) => mergeClipPage(current, result.clips || []));
+      setMoreClips((current) => results.reduce((merged, result) => mergeClipPage(merged, result.clips || []), current));
     }).catch(() => {
       pageCursor.current.fail(request);
     });
@@ -955,8 +958,10 @@ function DiscoverContent() {
             onClose={() => setReportingFor(null)}
             onDone={(outcome) => {
               const reportedId = reportingFor.id;
-              setReportingFor(null);
+              // A sheet opened since this report was sent stays open.
+              setReportingFor((current) => (current?.id === reportedId ? null : current));
               setReportedIds((current) => new Set(current).add(reportedId));
+              reportsSinceLoad.current += 1;
               toast(outcome.message);
             }}
           />
