@@ -272,6 +272,23 @@ export const api = {
       return { user: adaptUser(data.user), accessToken: data.access_token };
     },
 
+    /** Emails a one-time reset link when the address has an account; the answer is the same either way. */
+    async requestPasswordReset(email: string) {
+      return request<{ message: string }>('/auth/password-reset/request', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+        skipAuth: true,
+      });
+    },
+
+    async confirmPasswordReset(token: string, newPassword: string) {
+      return request<{ message: string }>('/auth/password-reset/confirm', {
+        method: 'POST',
+        body: JSON.stringify({ token, new_password: newPassword }),
+        skipAuth: true,
+      });
+    },
+
     async register(params: {
       email: string;
       username: string;
