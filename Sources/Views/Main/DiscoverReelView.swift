@@ -19,6 +19,8 @@ struct DiscoverReelView: View {
 
     // New interaction callbacks
     var onConvertToCourse: () -> Void = {}
+    /// Opens the report sheet; nil on the learner's own video.
+    var onReport: (() -> Void)? = nil
     
     @State private var isLiked = false
     @State private var isSaved = false
@@ -138,7 +140,8 @@ struct DiscoverReelView: View {
                         onShare: onShare,
                         onAskLio: onAskLio,
                         onSave: onSave,
-                        onConvertToCourse: onConvertToCourse
+                        onConvertToCourse: onConvertToCourse,
+                        onReport: onReport
                     )
                 }
                 .padding(.horizontal, 16)

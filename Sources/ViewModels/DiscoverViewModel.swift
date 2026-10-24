@@ -15,8 +15,13 @@ final class DiscoverViewModel: ObservableObject {
     @Published var isLoadingMore: Bool = false
     @Published var hasMore: Bool = false
     @Published var errorMessage: String?
+    @Published var toastMessage: String?
     private var nextOffset = 0
     private var feedGeneration = 0
+    private var toastTask: Task<Void, Never>?
+    /// Loaded videos that left the feed since page 1 loaded, by a report or
+    /// a block. Each one moves later server pages up a place.
+    private var removedSinceLoad = 0
     
     // UI State for Context Sheet
     @Published var showVideoContextSheet: Bool = false
@@ -111,6 +116,42 @@ final class DiscoverViewModel: ObservableObject {
     /// Open comments for an item
     func commentsAction(item: DiscoverItem) {
         selectedItemForComments = item
+    }
+
+    /// A reported video leaves this learner's feed at once; the server also
+    /// stops sending it to them.
+    func removeReported(_ item: DiscoverItem, message: String) {
+        let before = items.count
+        items.removeAll { $0.id == item.id }
+        removedSinceLoad += before - items.count
+        showToast(message)
+        refillIfShort()
+    }
+
+    /// Every video by someone blocked leaves the feed at once.
+    func removeVideos(by ownerId: String, message: String) {
+        let before = items.count
+        items.removeAll { $0.authorId == ownerId }
+        removedSinceLoad += before - items.count
+        showToast(message)
+        refillIfShort()
+    }
+
+    /// A block can empty most of what is loaded; fetch more rather than show
+    /// "No results" while the server still has videos.
+    private func refillIfShort() {
+        guard hasMore, items.count < 5 else { return }
+        Task { await loadMore() }
+    }
+
+    func showToast(_ message: String) {
+        toastTask?.cancel()
+        toastMessage = message
+        toastTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard let self, !Task.isCancelled else { return }
+            self.toastMessage = nil
+        }
     }
     
     /// Toggle like status for an item
@@ -243,6 +284,7 @@ final class DiscoverViewModel: ObservableObject {
         isLoading = true
         isLoadingMore = false
         nextOffset = 0
+        removedSinceLoad = 0
         hasMore = false
         errorMessage = nil
         
@@ -272,13 +314,24 @@ final class DiscoverViewModel: ObservableObject {
         guard hasMore && !isLoading && !isLoadingMore else { return }
         isLoadingMore = true
         let generation = feedGeneration
-        let offset = nextOffset
-        let next = await DataService.shared.fetchDiscoverFeed(limit: 20, offset: offset)
+        let page = nextOffset / 20 + 1
+        var next: [DiscoverItem] = []
+        var lastPageCount = 0
+        // After reports or blocks, the page before is fetched too, so the
+        // videos that moved onto it are not skipped.
+        for number in DiscoverSafety.pagesToFetch(page: page, removed: removedSinceLoad, perPage: 20) {
+            let batch = await DataService.shared.fetchDiscoverFeed(limit: 20, offset: (number - 1) * 20)
+            next.append(contentsOf: batch)
+            lastPageCount = batch.count
+        }
         guard generation == feedGeneration else { return }
-        let known = Set(items.map(\.id))
-        items.append(contentsOf: next.filter { !known.contains($0.id) })
+        var known = Set(items.map(\.id))
+        for item in next where !known.contains(item.id) {
+            items.append(item)
+            known.insert(item.id)
+        }
         nextOffset += 20
-        hasMore = next.count == 20
+        hasMore = lastPageCount == 20
         isLoadingMore = false
     }
 
