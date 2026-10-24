@@ -248,7 +248,7 @@ function ClipCard({
 }
 
 export default function ModerationPage() {
-  const [moderator, setModerator] = useState<boolean | null>(null);
+  const [access, setAccess] = useState<'checking' | 'moderator' | 'denied' | 'error'>('checking');
   const [view, setView] = useState<ModerationView>('reported');
   const [searchText, setSearchText] = useState('');
   const [query, setQuery] = useState('');
@@ -257,21 +257,41 @@ export default function ModerationPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set());
+  // Bumped by every list request and by every decision, so an answer that
+  // started before either is dropped rather than shown over newer state.
   const generation = useRef(0);
+  // Bumped when a list starts over (new tab, search or reload); a decision
+  // only edits the list it was made in.
+  const listVersion = useRef(0);
   // Each decision takes a video out of this list on the server too, so later
   // pages start that many places earlier (see pagesToFetch).
   const decidedSinceLoad = useRef(0);
 
-  useEffect(() => {
-    api.moderation.me().then((result) => setModerator(result.moderator)).catch(() => setModerator(false));
+  const checkAccess = useCallback(() => {
+    setAccess('checking');
+    api.moderation
+      .me()
+      .then((result) => setAccess(result.moderator ? 'moderator' : 'denied'))
+      // A failed check is not a "no": it gets its own message and a retry.
+      .catch(() => setAccess('error'));
   }, []);
+
+  useEffect(() => {
+    checkAccess();
+  }, [checkAccess]);
 
   const load = useCallback(async (nextView: ModerationView, nextQuery: string, nextPage: number) => {
     const current = ++generation.current;
+    if (nextPage === 1) {
+      listVersion.current += 1;
+      decidedSinceLoad.current = 0;
+      setClips([]);
+      setTotal(0);
+      setPage(1);
+    }
     setLoading(true);
     setFailed(false);
-    if (nextPage === 1) decidedSinceLoad.current = 0;
     try {
       const pages = pagesToFetch(nextPage, decidedSinceLoad.current, 20);
       const results = await Promise.all(
@@ -294,31 +314,56 @@ export default function ModerationPage() {
   }, []);
 
   useEffect(() => {
-    if (moderator) void load(view, query, 1);
-  }, [moderator, view, query, load]);
+    if (access === 'moderator') void load(view, query, 1);
+  }, [access, view, query, load]);
+
+  // Deciding on every loaded video empties the list while more remain on the
+  // server; those are now its first page.
+  useEffect(() => {
+    if (access === 'moderator' && !loading && !failed && clips.length === 0 && total > 0 && decidedSinceLoad.current > 0) {
+      void load(view, query, 1);
+    }
+  }, [access, loading, failed, clips.length, total, view, query, load]);
+
+  const setBusy = (id: string, busy: boolean) =>
+    setBusyIds((previous) => {
+      const next = new Set(previous);
+      if (busy) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   const decide = async (clip: ModerationClip, action: ModerationAction, note?: string) => {
-    setBusyId(clip.id);
+    const startedIn = listVersion.current;
+    setBusy(clip.id, true);
     try {
       const result = await api.moderation.decide(clip.id, action, note);
-      const updated = adaptClip(result.clip);
-      if (belongsIn(view, updated)) {
-        setClips((previous) => previous.map((item) => (item.id === clip.id ? updated : item)));
-      } else {
-        // It moved to another tab, or a kept video left Reported.
-        setClips((previous) => previous.filter((item) => item.id !== clip.id));
-        setTotal((previous) => Math.max(0, previous - 1));
-        decidedSinceLoad.current += 1;
+      if (listVersion.current === startedIn) {
+        // A list page still in flight was read before this decision.
+        generation.current += 1;
+        setLoading(false);
+        const updated = adaptClip(result.clip);
+        if (belongsIn(view, updated)) {
+          setClips((previous) => previous.map((item) => (item.id === clip.id ? updated : item)));
+        } else {
+          // It moved to another tab, or a kept video left Reported.
+          setClips((previous) => previous.filter((item) => item.id !== clip.id));
+          setTotal((previous) => Math.max(0, previous - 1));
+          decidedSinceLoad.current += 1;
+        }
       }
       toast(DECISION_MESSAGES[action]);
     } catch (err) {
       toast.error(err instanceof Error && err.message ? err.message : 'That could not be saved. Please try again.');
+      // The decision may have been saved even though its answer was lost, or
+      // someone else decided first: show what the server has now.
+      if (listVersion.current === startedIn) void load(view, query, 1);
     } finally {
-      setBusyId(null);
+      setBusy(clip.id, false);
     }
   };
 
-  if (moderator === null) {
+  if (access === 'checking') {
     return (
       <div className="flex h-[60vh] items-center justify-center" aria-label="Loading moderation">
         <Loader2 className="h-6 w-6 animate-spin text-white/60" />
@@ -326,7 +371,19 @@ export default function ModerationPage() {
     );
   }
 
-  if (!moderator) {
+  if (access === 'error') {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center text-white">
+        <h1 className="text-xl font-bold">Couldn&apos;t check your access</h1>
+        <p className="mt-2 max-w-sm text-sm text-white/60">Check your connection and try again.</p>
+        <button type="button" onClick={checkAccess} className="mt-6 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#0d0f18]">
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (access === 'denied') {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center text-white">
         <ShieldCheck className="h-8 w-8 text-white/40" aria-hidden="true" />
@@ -401,12 +458,21 @@ export default function ModerationPage() {
       ) : (
         <ul className="space-y-3">
           {clips.map((clip) => (
-            <ClipCard key={clip.id} clip={clip} busy={busyId === clip.id} onDecide={decide} />
+            <ClipCard key={clip.id} clip={clip} busy={busyIds.has(clip.id)} onDecide={decide} />
           ))}
         </ul>
       )}
 
-      {clips.length > 0 && clips.length < total && (
+      {failed && clips.length > 0 && (
+        <p className="text-center text-sm text-red-300">
+          More videos couldn&apos;t load.{' '}
+          <button type="button" onClick={() => void load(view, query, page + 1)} className="underline">
+            Try again
+          </button>
+        </p>
+      )}
+
+      {clips.length > 0 && clips.length < total && !failed && (
         <div className="flex justify-center">
           <button
             type="button"

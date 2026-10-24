@@ -776,7 +776,8 @@ export const api = {
   // ── Discover moderation (moderators only; the API answers 403 otherwise) ──
   moderation: {
     async me() {
-      return request<{ moderator: boolean }>('/api/v1/moderation/me');
+      // A stalled check should end in a retry, not an endless spinner.
+      return request<{ moderator: boolean }>('/api/v1/moderation/me', { signal: AbortSignal.timeout(15000) });
     },
 
     async clips(view: 'reported' | 'all' | 'removed', options: { q?: string; page?: number } = {}) {

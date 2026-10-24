@@ -40,9 +40,19 @@ test('after a decision a video stays only in the view it still belongs to', () =
 test('the page asks the API who may use it, confirms Remove, and links from Settings', () => {
   const page = readFileSync(new URL('../app/(main)/moderation/page.tsx', import.meta.url), 'utf8');
   const settings = readFileSync(new URL('../app/(main)/settings/page.tsx', import.meta.url), 'utf8');
-  assert.ok(page.includes('api.moderation.me()'));
+  assert.match(page, /api\.moderation\s*\.me\(\)/);
   assert.ok(page.includes('This page is for moderators'));
   assert.ok(page.includes("onDecide(clip, 'remove', note.trim())"), 'Remove goes through the confirm form');
   assert.ok(page.includes('pagesToFetch(nextPage, decidedSinceLoad.current, 20)'));
   assert.ok(settings.includes('href="/moderation"') && settings.includes('{moderator && ('));
+});
+
+test('decisions and list loads cannot overwrite each other, and a failed check is not a denial', () => {
+  const page = readFileSync(new URL('../app/(main)/moderation/page.tsx', import.meta.url), 'utf8');
+  const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
+  assert.ok(page.includes("Couldn&apos;t check your access"), 'an access-check failure has its own state');
+  assert.ok(api.includes("request<{ moderator: boolean }>('/api/v1/moderation/me', { signal: AbortSignal.timeout(15000) })"));
+  assert.ok(page.includes('busy={busyIds.has(clip.id)}'), 'each card tracks its own pending decision');
+  assert.ok(page.includes('if (listVersion.current === startedIn) {'), 'a decision only edits the list it was made in');
+  assert.ok(page.includes('clips.length === 0 && total > 0 && decidedSinceLoad.current > 0'), 'an emptied list refills');
 });
