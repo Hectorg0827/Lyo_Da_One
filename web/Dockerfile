@@ -7,6 +7,13 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 ARG NEXT_PUBLIC_API_URL=https://api.lyoai.app
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Launch switches (src/lib/launch-features.ts) are compiled into the bundle,
+# and a Docker build only sees the service variables it declares. Undeclared,
+# setting one to "true" on Railway rebuilt the site with the feature still off.
+ARG NEXT_PUBLIC_DISCOVER_LAUNCH_ENABLED=false
+ENV NEXT_PUBLIC_DISCOVER_LAUNCH_ENABLED=$NEXT_PUBLIC_DISCOVER_LAUNCH_ENABLED
+ARG NEXT_PUBLIC_COMMUNITY_LAUNCH_ENABLED=false
+ENV NEXT_PUBLIC_COMMUNITY_LAUNCH_ENABLED=$NEXT_PUBLIC_COMMUNITY_LAUNCH_ENABLED
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
