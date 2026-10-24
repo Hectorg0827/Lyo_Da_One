@@ -179,6 +179,7 @@ data. Test on a real iPhone (Safari and the app), a real Android phone
 - [ ] Phone call or another app's audio: Discover pauses and recovers
 - [ ] Like, save, comment, share, Learn with Lyo, Course and mute all do what they say
 - [ ] The credit line under a library video opens its source page
+- [ ] Report on someone else's video: pick a reason, send; it leaves your feed and "Thanks" shows. Your own videos have no Report button
 - [ ] Create video: record with the camera, upload from the gallery, refuse a non-video file
 
 ## Step 7 — Switch Discover on

@@ -748,6 +748,13 @@ export const api = {
       });
     },
 
+    async report(clipId: string, reason: string, description?: string) {
+      return request<{ status: 'reported' | 'already_reported'; message: string }>(
+        `/api/v1/clips/${clipId}/report`,
+        { method: 'POST', body: JSON.stringify({ reason, description: description || undefined }) }
+      );
+    },
+
     async comments(clipId: string, page = 1, perPage = 50) {
       return request<{ items: Record<string, unknown>[]; total_count: number }>(
         `/api/v1/clips/${clipId}/comments?page=${page}&per_page=${perPage}`
