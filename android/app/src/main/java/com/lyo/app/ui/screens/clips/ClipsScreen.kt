@@ -1,6 +1,7 @@
 package com.lyo.app.ui.screens.clips
 
 import android.content.Intent
+import android.widget.Toast
 import android.net.Uri
 import androidx.media3.common.C
 import androidx.media3.common.AudioAttributes
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -139,6 +141,10 @@ fun ClipsScreen(nav: NavHostController) {
     var viewedIds by remember { mutableStateOf(setOf<String>()) }
     var failedViewIds by remember { mutableStateOf(setOf<String>()) }
     var commentsClipId by remember { mutableStateOf<String?>(null) }
+    var reportingClip by remember { mutableStateOf<ClipDto?>(null) }
+    // Loaded videos that left the feed since page 1 loaded, by a report or a
+    // block. Each one moves later server pages up a place.
+    var removedSinceLoad by remember { mutableIntStateOf(0) }
     var pendingVideoUri by remember { mutableStateOf<Uri?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
     var nextPage by remember { mutableIntStateOf(2) }
@@ -217,6 +223,7 @@ fun ClipsScreen(nav: NavHostController) {
             savedIds = resolved.filter { it.isSaved == true }.map { it.idStr }.toSet()
             loaded = true
             nextPage = 2
+            removedSinceLoad = 0
             hasMore = resolved.size >= 20
             loadingMore = false
         } else {
@@ -319,7 +326,7 @@ fun ClipsScreen(nav: NavHostController) {
             clips.isNotEmpty() -> {
                 val pagerState = rememberPagerState(pageCount = { clips.size })
                 val currentClipId = clips.getOrNull(pagerState.currentPage)?.idStr
-                val playbackAllowed = foreground && commentsClipId == null && pendingVideoUri == null
+                val playbackAllowed = foreground && commentsClipId == null && pendingVideoUri == null && reportingClip == null
 
                 // Keep only the visible reel and its immediate neighbours in
                 // memory. Preparing the next clip ahead of the swipe removes
@@ -359,12 +366,19 @@ fun ClipsScreen(nav: NavHostController) {
                     // This request belongs to the feed, so a swipe does not cancel it.
                     scope.launch {
                         try {
-                            val batch = ApiClient.api.discoverClips(page, 20).clips.orEmpty()
+                            // After reports or blocks, the page before is fetched too, so
+                            // the videos that moved onto it are not skipped.
+                            val fetched = mutableListOf<ClipDto>()
+                            var lastBatch = emptyList<ClipDto>()
+                            for (number in DiscoverSafety.pagesToFetch(page, removedSinceLoad, 20)) {
+                                lastBatch = ApiClient.api.discoverClips(number, 20).clips.orEmpty()
+                                fetched += lastBatch
+                            }
                             if (generation != feedGeneration) return@launch
                             val known = clips.map { it.idStr }.toSet()
-                            clips = clips + batch.distinctBy { it.idStr }.filterNot { it.idStr in known }
+                            clips = clips + fetched.distinctBy { it.idStr }.filterNot { it.idStr in known }
                             nextPage = page + 1
-                            hasMore = batch.size == 20
+                            hasMore = lastBatch.size == 20
                         } catch (cancelled: CancellationException) {
                             throw cancelled
                         } catch (_: Exception) {
@@ -448,6 +462,11 @@ fun ClipsScreen(nav: NavHostController) {
                         onSave = { toggleSave(id) },
                         onRetryView = { syncView(id) },
                         onComments = { commentsClipId = id },
+                        onReport = if (DiscoverSafety.canReport(clip.ownerIdStr, Session.user?.id)) {
+                            { reportingClip = clip }
+                        } else {
+                            null
+                        },
                         onShare = {
                             val send = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
@@ -519,6 +538,33 @@ fun ClipsScreen(nav: NavHostController) {
                         clip
                     }
                 }
+            },
+        )
+    }
+
+    reportingClip?.let { clip ->
+        // A reported video, and every video by someone blocked, leaves the
+        // feed at once; the server also stops sending them.
+        fun leaveFeed(message: String, gone: (ClipDto) -> Boolean) {
+            reportingClip = null
+            val before = clips.size
+            clips = clips.filterNot(gone)
+            removedSinceLoad += before - clips.size
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+            if (clips.isEmpty() && hasMore) refreshKey++
+        }
+        ReportClipSheet(
+            clip = clip,
+            canBlock = DiscoverSafety.canBlock(
+                clip.ownerIdStr,
+                Session.user?.id,
+                isLibrary = clip.attribution?.displayLine != null,
+            ),
+            onDismiss = { reportingClip = null },
+            onReported = { outcome -> leaveFeed(outcome.message) { it.idStr == clip.idStr } },
+            onBlocked = { outcome ->
+                val owner = clip.ownerIdStr
+                leaveFeed(outcome.message) { owner != null && it.ownerIdStr == owner }
             },
         )
     }
@@ -898,6 +944,7 @@ private fun ClipPage(
     onRetryView: () -> Unit,
     onComments: () -> Unit,
     onShare: () -> Unit,
+    onReport: (() -> Unit)?,
 ) {
     var playbackError by remember(clip.idStr) { mutableStateOf<String?>(null) }
 
@@ -1186,6 +1233,20 @@ private fun ClipPage(
                     style = MaterialTheme.typography.labelMedium,
                     color = Color.White,
                 )
+            }
+            // Report (and Block, inside the sheet); not on the learner's own video.
+            onReport?.let { report ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    IconButton(onClick = report) {
+                        Icon(
+                            Icons.Outlined.Flag,
+                            contentDescription = "Report video",
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp),
+                        )
+                    }
+                    Text("Report", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(

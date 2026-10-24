@@ -117,9 +117,24 @@ data class ClipDto(
     val subject: String? = null,
     @SerializedName(value = "createdAt", alternate = ["created_at"]) val createdAt: String? = null,
     val attribution: ClipAttributionDto? = null,
+    /** The account that posted it, for Report and Block. */
+    @SerializedName(value = "userId", alternate = ["user_id"]) val userId: Any? = null,
 ) {
     val idStr: String get() = id?.toString()?.removeSuffix(".0") ?: ""
+    val ownerIdStr: String? get() = userId?.toString()?.removeSuffix(".0")?.takeIf { it.isNotBlank() }
 }
+
+/** POST /api/v1/clips/{id}/report; reason is one of DiscoverSafety.REPORT_REASONS. */
+data class ClipReportRequest(val reason: String, val description: String? = null)
+
+/** POST /api/v1/community/blocks: hides both people from each other in Discover. */
+data class BlockUserRequest(@SerializedName("user_id") val userId: Long)
+
+/** One account the learner blocked (GET /api/v1/community/blocks). */
+data class BlockedAccountDto(
+    @SerializedName("user_id") val userId: Long,
+    @SerializedName("user_name") val userName: String? = null,
+)
 
 /**
  * Creator, licence and source of a library video; null for a learner's own

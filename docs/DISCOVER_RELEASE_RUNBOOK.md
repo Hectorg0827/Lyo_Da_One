@@ -180,6 +180,8 @@ data. Test on a real iPhone (Safari and the app), a real Android phone
 - [ ] Like, save, comment, share, Learn with Lyo, Course and mute all do what they say
 - [ ] The credit line under a library video opens its source page
 - [ ] Report on someone else's video: pick a reason, send; it leaves your feed and "Thanks" shows. Your own videos have no Report button
+- [ ] Block, from Report on another learner's video: it asks first, then every video by them leaves your feed. Library videos offer no Block. Settings lists them under Blocked accounts, and Unblock brings their videos back after a refresh
+- [ ] Like a video and unlike it straight away in the app: the heart count stays right after reopening Discover
 - [ ] Create video: record with the camera, upload from the gallery, refuse a non-video file
 
 ## Step 7 — Switch Discover on
