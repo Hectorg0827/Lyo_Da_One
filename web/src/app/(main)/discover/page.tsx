@@ -32,18 +32,23 @@ import {
   Volume2,
   VolumeX,
   MessageCircle,
+  Flag,
 } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { useRouter, useSearchParams } from 'next/navigation';
+import toast from 'react-hot-toast';
 import { formatNumber } from '@/lib/utils';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
 import ClipCommentsDrawer from '@/components/clips/ClipCommentsDrawer';
+import ReportClipSheet from '@/components/clips/ReportClipSheet';
 import CreateClipModal from '@/components/clips/CreateClipModal';
 import { draftSubject, draftTitle } from '@/lib/teach-it.mjs';
 import { DiscoverPlaybackController, DiscoverPageCursor, mergeClipPage, nextClipIndex } from '@/lib/discover-playback.mjs';
 import { normalizeDiscoverFeed, discoverFilterHref, discoverSubjects } from '@/lib/discover-filters.mjs';
 import { attributionFor } from '@/lib/discover-attribution.mjs';
+import { canReport, pagesToFetch } from '@/lib/discover-report.mjs';
+import { useAuthStore } from '@/stores/auth-store';
 
 interface Reel {
   id: string;
@@ -60,6 +65,7 @@ interface Reel {
   isLiked: boolean;
   isSaved: boolean;
   attribution: ReturnType<typeof attributionFor>;
+  ownerId: string | null;
 }
 
 // iOS ReelInfoOverlay level ring colors (system green / yellow / red)
@@ -108,6 +114,7 @@ function adaptReel(raw: Record<string, unknown>): Reel {
     isLiked: (raw.isLiked as boolean) || (raw.is_liked as boolean) || false,
     isSaved: (raw.isSaved as boolean) || (raw.is_saved as boolean) || false,
     attribution: attributionFor(raw),
+    ownerId: raw.userId != null ? String(raw.userId) : null,
   };
 }
 
@@ -144,6 +151,7 @@ function ActionStrip({
   onLike,
   onSave,
   onShare,
+  onReport,
 }: {
   reel: Reel;
   onAsk: () => void;
@@ -152,6 +160,8 @@ function ActionStrip({
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
+  /** Absent on the viewer's own videos, which they cannot report. */
+  onReport?: () => void;
 }) {
   return (
     <div className="flex flex-col items-center gap-3 shrink-0">
@@ -193,6 +203,12 @@ function ActionStrip({
       <ActionButton label="Share" onClick={onShare}>
         <Forward className="w-6 h-6 text-white" />
       </ActionButton>
+
+      {onReport && (
+        <ActionButton label="Report" onClick={onReport}>
+          <Flag className="w-5 h-5 text-white/80" />
+        </ActionButton>
+      )}
     </div>
   );
 }
@@ -319,6 +335,7 @@ function ReelSlide({
   onLike,
   onSave,
   onShare,
+  onReport,
 }: {
   reel: Reel;
   isActive: boolean;
@@ -334,6 +351,7 @@ function ReelSlide({
   onLike: () => void;
   onSave: () => void;
   onShare: () => void;
+  onReport?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
@@ -496,6 +514,7 @@ function ReelSlide({
           onLike={onLike}
           onSave={onSave}
           onShare={onShare}
+          onReport={onReport}
         />
       </div>
       {reel.videoUrl && isActive && !loadFailed && (
@@ -584,6 +603,13 @@ function DiscoverContent() {
   }, [composeParam]);
   const [overrides, setOverrides] = useState<Record<string, Partial<Reel>>>({});
   const [commentsFor, setCommentsFor] = useState<string | null>(null);
+  // A reported video leaves this learner's feed at once, as the server also
+  // stops sending it to them.
+  const [reportingFor, setReportingFor] = useState<Reel | null>(null);
+  const [reportedIds, setReportedIds] = useState<Set<string>>(() => new Set());
+  // Reports since page 1 loaded: each one moves later server pages up a place.
+  const reportsSinceLoad = useRef(0);
+  const viewerId = useAuthStore((state) => state.user?.id);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const viewed = useRef<Set<string>>(new Set());
 
@@ -612,6 +638,7 @@ function DiscoverContent() {
   // continuous feed, not a reel that silently stops after 20 clips.
   useEffect(() => {
     pageCursor.current.reset();
+    reportsSinceLoad.current = 0;
     setMoreClips([]);
     setPendingAdvanceId(null);
     setActiveIndex(0);
@@ -649,22 +676,22 @@ function DiscoverContent() {
     const ordered = namedReel && feedMode === 'for_you' && !subject && !query
       ? [namedReel, ...list.filter((r) => r.id !== namedReel.id)]
       : list;
-    return ordered.map((r) => ({ ...r, ...overrides[r.id] }));
-  }, [data, overrides, namedReel, moreClips, feedMode, subject, query]);
+    return ordered.filter((r) => !reportedIds.has(r.id)).map((r) => ({ ...r, ...overrides[r.id] }));
+  }, [data, overrides, namedReel, moreClips, feedMode, subject, query, reportedIds]);
 
   useEffect(() => {
     if (isLoading || !data) return;
-    const loadedCount = (data.clips?.length || 0) + moreClips.length;
+    // Pages overlap after a report, so count each loaded clip once.
+    const loadedCount = mergeClipPage((data.clips as Record<string, unknown>[]) || [], moreClips).length;
     if (activeIndex < reels.length - 4 || loadedCount >= (data.total || 0)) return;
     const request = pageCursor.current.begin();
     if (!request) return;
-    const page = request.page;
-    const load = feedMode === 'saved'
+    const load = (page: number) => feedMode === 'saved'
       ? api.clips.saved(page, 20, requestOptions)
       : api.clips.discover(page, 20, { ...requestOptions, sort: feedMode });
-    load.then((result) => {
+    Promise.all(pagesToFetch(request.page, reportsSinceLoad.current, 20).map(load)).then((results) => {
       if (!pageCursor.current.complete(request)) return;
-      setMoreClips((current) => mergeClipPage(current, result.clips || []));
+      setMoreClips((current) => results.reduce((merged, result) => mergeClipPage(merged, result.clips || []), current));
     }).catch(() => {
       pageCursor.current.fail(request);
     });
@@ -677,7 +704,7 @@ function DiscoverContent() {
   // clip stays paused when there is no subsequent item to advance into.
   const advanceFrom = useCallback((index: number) => {
     const finished = filtered[index]?.id;
-    if (!finished || index !== activeIndexRef.current || !foreground || composing || commentsFor) return;
+    if (!finished || index !== activeIndexRef.current || !foreground || composing || commentsFor || reportingFor) return;
     const next = nextClipIndex(filtered.map((reel) => reel.id), filtered[activeIndexRef.current]?.id, finished);
     if (next === null) { setPendingAdvanceId(finished); return; }
     setPendingAdvanceId(null);
@@ -685,7 +712,7 @@ function DiscoverContent() {
     setActiveIndex(next);
     const scroller = scrollerRef.current;
     if (scroller) scroller.scrollTo({ top: next * scroller.clientHeight, behavior: 'auto' });
-  }, [filtered, foreground, composing, commentsFor]);
+  }, [filtered, foreground, composing, commentsFor, reportingFor]);
 
   useEffect(() => {
     if (pendingAdvanceId && filtered[activeIndex]?.id === pendingAdvanceId && activeIndex + 1 < filtered.length) advanceFrom(activeIndex);
@@ -822,7 +849,7 @@ function DiscoverContent() {
               reel={reel}
               isActive={i === activeIndex}
               shouldLoad={Math.abs(i - activeIndex) <= 1}
-              foreground={foreground && !composing && !commentsFor}
+              foreground={foreground && !composing && !commentsFor && !reportingFor}
               muted={muted}
               onMutedChange={setMuted}
               onInteraction={() => setPendingAdvanceId(null)}
@@ -833,6 +860,7 @@ function DiscoverContent() {
               onLike={() => handleLike(reel)}
               onSave={() => handleSave(reel)}
               onShare={() => handleShare(reel)}
+              onReport={canReport(reel.ownerId, viewerId) ? () => setReportingFor(reel) : undefined}
             />
           ))
         )}
@@ -917,6 +945,25 @@ function DiscoverContent() {
             clipId={commentsFor}
             onClose={() => setCommentsFor(null)}
             onCountChange={(count) => patch(commentsFor, { comments: count })}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {reportingFor && (
+          <ReportClipSheet
+            key={reportingFor.id}
+            clipId={reportingFor.id}
+            clipTitle={reportingFor.title}
+            onClose={() => setReportingFor(null)}
+            onDone={(outcome) => {
+              const reportedId = reportingFor.id;
+              // A sheet opened since this report was sent stays open.
+              setReportingFor((current) => (current?.id === reportedId ? null : current));
+              setReportedIds((current) => new Set(current).add(reportedId));
+              reportsSinceLoad.current += 1;
+              toast(outcome.message);
+            }}
           />
         )}
       </AnimatePresence>
