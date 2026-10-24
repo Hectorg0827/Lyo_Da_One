@@ -185,6 +185,15 @@ export default function LoginPage() {
               }
             />
 
+            <div className="-mt-1 text-right">
+              <Link
+                href="/auth/forgot-password"
+                className="text-xs font-semibold text-[#a78bfa] transition-colors duration-150 hover:text-[#6366f1]"
+              >
+                Forgot password?
+              </Link>
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}
@@ -216,7 +225,7 @@ export default function LoginPage() {
           </p>
 
           <p className="text-center text-xs leading-relaxed text-secondary">
-            Password recovery and social sign-in will appear only after their backend flows are available.
+            Social sign-in will appear only after its backend flow is available.
           </p>
         </div>
       </motion.div>
