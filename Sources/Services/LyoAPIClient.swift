@@ -115,7 +115,12 @@ final class LyoAPIClient {
         )
         
         do {
-            return try await NetworkClient.shared.request(endpoint)
+            // Only reads may be answered from the cache. A like, save or
+            // comment served from it would never reach the server.
+            return try await NetworkClient.shared.request(
+                endpoint,
+                cachePolicy: httpMethod == .get ? .default : .reloadIgnoringCache
+            )
         } catch {
             // Map NetworkClient errors to APIError for compatibility
             if let lyoError = error as? LyoError {
@@ -937,6 +942,48 @@ extension LyoAPIClient {
 
     func recordClipShare(clipId: String) async throws {
         let _: EmptyAPIResponse = try await request(method: "POST", path: "/api/v1/clips/\(clipId)/share")
+    }
+
+    // MARK: - Discover Safety (report and block)
+
+    /// Sends a report or block request and returns what it came to: 200 for
+    /// any success, 404 when the clip or account is gone, 0 for any other
+    /// failure. DiscoverSafety decides what each means for the learner.
+    private func safetyStatus(method: HTTPMethod, path: String, json: [String: Any]?) async -> Int {
+        let body = json
+            .flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+            .map { DataWrapper(data: $0) }
+        let endpoint = DynamicEndpoint(urlString: path, method: method, body: body, requiresAuth: true)
+        do {
+            let _: EmptyResponse = try await NetworkClient.shared.request(endpoint, cachePolicy: .reloadIgnoringCache)
+            return 200
+        } catch LyoError.network(.notFound) {
+            return 404
+        } catch {
+            return 0
+        }
+    }
+
+    /// POST /api/v1/clips/{id}/report with a DiscoverReportReason and an optional note.
+    func reportClip(clipId: String, reason: String, note: String) async -> Int {
+        var json: [String: Any] = ["reason": reason]
+        if !note.isEmpty { json["description"] = String(note.prefix(DiscoverSafety.noteLimit)) }
+        return await safetyStatus(method: .post, path: "/api/v1/clips/\(clipId)/report", json: json)
+    }
+
+    /// Blocks a learner: both are hidden from each other in Discover.
+    func blockUser(userId: String) async -> Int {
+        guard let id = Int(userId) else { return 0 }
+        return await safetyStatus(method: .post, path: "/api/v1/community/blocks", json: ["user_id": id])
+    }
+
+    func unblockUser(userId: Int) async -> Int {
+        await safetyStatus(method: .delete, path: "/api/v1/community/blocks/\(userId)", json: nil)
+    }
+
+    func fetchBlockedAccounts() async throws -> [BlockedAccount] {
+        let endpoint = DynamicEndpoint(urlString: "/api/v1/community/blocks", method: .get, requiresAuth: true)
+        return try await NetworkClient.shared.request(endpoint, cachePolicy: .reloadIgnoringCache)
     }
     
     func fetchDiscoveriesFeed(limit: Int = 20, offset: Int = 0) async throws -> DiscoveriesResponse {

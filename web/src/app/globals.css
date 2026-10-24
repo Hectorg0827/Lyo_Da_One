@@ -10,6 +10,9 @@
 /* Generated from /design-tokens.json (source of truth: iOS Sources/Core/DesignTokens.swift).
    Do not hand-edit hex values here; update design-tokens.json and mirror the change. */
 :root {
+  /* Bundled variable fonts keep builds and playback independent of Google Fonts. */
+  --font-inter: 'Inter Variable';
+  --font-nunito: 'Nunito Variable';
   --background: #0b1230;
   --surface: #0e173d;
   --surface-2: #2a2d3a;

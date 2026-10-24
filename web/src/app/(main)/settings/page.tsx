@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AtSign, ExternalLink, Info, Mail, Save, User } from 'lucide-react';
+import { AtSign, ChevronRight, ExternalLink, Info, Mail, Save, ShieldCheck, User } from 'lucide-react';
+import BlockedAccounts from '@/components/settings/BlockedAccounts';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -69,10 +71,15 @@ export default function SettingsPage() {
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saved' | 'error'>('idle');
+  const [moderator, setModerator] = useState(false);
 
   useEffect(() => {
     setDisplayName(user?.displayName ?? '');
   }, [user?.displayName]);
+
+  useEffect(() => {
+    api.moderation.me().then((result) => setModerator(result.moderator)).catch(() => setModerator(false));
+  }, []);
 
   async function saveDisplayName() {
     const value = displayName.trim();
@@ -140,6 +147,23 @@ export default function SettingsPage() {
         <ReadOnlyRow icon={Mail} label="Email" value={user?.email ?? ''} />
         <ReadOnlyRow icon={AtSign} label="Username" value={user?.username ? `@${user.username}` : ''} />
       </Section>
+
+      <Section title="Blocked accounts">
+        <BlockedAccounts />
+      </Section>
+
+      {moderator && (
+        <Section title="Moderation">
+          <Link
+            href="/moderation"
+            className="flex items-center gap-3 px-5 py-4 text-sm text-primary transition-colors hover:bg-white/[0.04]"
+          >
+            <ShieldCheck size={16} className="shrink-0 text-secondary" />
+            <span className="flex-1">Review reported Discover videos</span>
+            <ChevronRight size={14} className="text-secondary" />
+          </Link>
+        </Section>
+      )}
 
       <Section title="About & support">
         <ExternalRow label="Terms of Service" href="https://lyo.app/terms" />

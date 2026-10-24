@@ -109,6 +109,10 @@ struct SettingsView: View {
                         TermsOfServiceView()
                     }
 
+                    NavigationLink("Blocked accounts") {
+                        BlockedAccountsView()
+                    }
+
                     Button("Clear Cache") {
                         clearCache()
                     }

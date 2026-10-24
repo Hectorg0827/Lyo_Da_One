@@ -9,7 +9,7 @@ import MascotAvatar from '@/components/chat/MascotAvatar';
 import CreateSheet from '@/components/create/CreateSheet';
 import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
 import { NAV, isActiveHref } from '@/lib/nav-items.mjs';
-import { COMMUNITY_LAUNCH_ENABLED } from '@/lib/launch-features';
+import { COMMUNITY_LAUNCH_ENABLED, DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 import {
   CommunityIcon,
   CreateIcon,
@@ -35,6 +35,9 @@ import {
 // its own. When the flag turns on, Community takes its slot back and Discover
 // returns to the left, which is the arrangement iOS and Android ship.
 //
+// Discover has its own launch flag: while it is off, its tab is left out
+// rather than opening a screen that cannot play anything.
+//
 // The glyphs are the set drawn in `NavIcons`, the same ones the desktop rail
 // carries. This bar ran on stock Lucide — the target, compass and two-person
 // group every other app ships — so a learner who met the drawn set on desktop
@@ -44,9 +47,11 @@ const focusItem = { href: NAV.focus.href, icon: FocusIcon, label: NAV.focus.labe
 const discoverItem = { href: NAV.discover.href, icon: DiscoverIcon, label: NAV.discover.label };
 const communityItem = { href: NAV.community.href, icon: CommunityIcon, label: NAV.community.label };
 
-const leftItems = COMMUNITY_LAUNCH_ENABLED ? [focusItem, discoverItem] : [focusItem];
+const discoverItems = DISCOVER_LAUNCH_ENABLED ? [discoverItem] : [];
 
-const rightItems = COMMUNITY_LAUNCH_ENABLED ? [communityItem] : [discoverItem];
+const leftItems = COMMUNITY_LAUNCH_ENABLED ? [focusItem, ...discoverItems] : [focusItem];
+
+const rightItems = COMMUNITY_LAUNCH_ENABLED ? [communityItem] : discoverItems;
 
 function GhostTab({
   href,

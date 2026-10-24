@@ -243,6 +243,9 @@ fun SettingsScreen(nav: NavHostController) {
             )
         }
 
+        SectionHeader("Blocked accounts")
+        BlockedAccountsSection()
+
         SectionHeader("About")
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             Column {

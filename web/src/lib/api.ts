@@ -686,11 +686,23 @@ export const api = {
       );
     },
 
-    async discover(page = 1, perPage = 20, subject?: string) {
+    async discover(
+      page = 1,
+      perPage = 20,
+      options: { subject?: string; q?: string; sort?: 'for_you' | 'latest' | 'popular' } = {}
+    ) {
       const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
-      if (subject) params.set('subject', subject);
+      if (options.subject) params.set('subject', options.subject);
+      if (options.q) params.set('q', options.q);
+      if (options.sort && options.sort !== 'for_you') params.set('sort', options.sort);
       return request<{ clips: Record<string, unknown>[]; total: number }>(
         `/api/v1/clips/discover?${params}`
+      );
+    },
+
+    async discoverFilters() {
+      return request<{ subjects: { name: string; count: number }[] }>(
+        '/api/v1/clips/discover/filters'
       );
     },
 
@@ -721,9 +733,12 @@ export const api = {
       return request(`/api/v1/clips/${clipId}/view`, { method: 'POST' });
     },
 
-    async saved(page = 1, perPage = 20) {
+    async saved(page = 1, perPage = 20, options: { q?: string; subject?: string } = {}) {
+      const params = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+      if (options.subject) params.set('subject', options.subject);
+      if (options.q) params.set('q', options.q);
       return request<{ clips: Record<string, unknown>[]; total: number }>(
-        `/api/v1/clips/saved?page=${page}&per_page=${perPage}`
+        `/api/v1/clips/saved?${params}`
       );
     },
 
@@ -731,6 +746,13 @@ export const api = {
       return request<{ shareCount: number }>(`/api/v1/clips/${clipId}/share`, {
         method: 'POST',
       });
+    },
+
+    async report(clipId: string, reason: string, description?: string) {
+      return request<{ status: 'reported' | 'already_reported'; message: string }>(
+        `/api/v1/clips/${clipId}/report`,
+        { method: 'POST', body: JSON.stringify({ reason, description: description || undefined }) }
+      );
     },
 
     async comments(clipId: string, page = 1, perPage = 50) {
@@ -748,6 +770,49 @@ export const api = {
 
     async deleteComment(clipId: string, commentId: string) {
       return request(`/api/v1/clips/${clipId}/comments/${commentId}`, { method: 'DELETE' });
+    },
+  },
+
+  // ── Discover moderation (moderators only; the API answers 403 otherwise) ──
+  moderation: {
+    async me() {
+      // A stalled check should end in a retry, not an endless spinner.
+      return request<{ moderator: boolean }>('/api/v1/moderation/me', { signal: AbortSignal.timeout(15000) });
+    },
+
+    async clips(view: 'reported' | 'all' | 'removed', options: { q?: string; page?: number } = {}) {
+      const params = new URLSearchParams({ view, page: String(options.page ?? 1), per_page: '20' });
+      if (options.q) params.set('q', options.q);
+      return request<{ clips: Record<string, unknown>[]; total: number; page: number }>(
+        `/api/v1/moderation/clips?${params}`
+      );
+    },
+
+    async decide(clipId: string, action: 'keep' | 'remove' | 'restore', note?: string) {
+      return request<{ clip: Record<string, unknown> }>(`/api/v1/moderation/clips/${clipId}/decision`, {
+        method: 'POST',
+        body: JSON.stringify({ action, note: note || undefined }),
+      });
+    },
+  },
+
+  // ── Blocked accounts: hidden both ways in Discover and Community ──
+  blocks: {
+    async list() {
+      return request<{ id: number; user_id: number; user_name: string; user_avatar?: string | null; blocked_at: string }[]>(
+        '/api/v1/community/blocks'
+      );
+    },
+
+    async block(userId: string) {
+      return request<{ id: number; user_id: number; user_name: string }>('/api/v1/community/blocks', {
+        method: 'POST',
+        body: JSON.stringify({ user_id: Number(userId) }),
+      });
+    },
+
+    async unblock(userId: string) {
+      return request<void>(`/api/v1/community/blocks/${userId}`, { method: 'DELETE' });
     },
   },
 

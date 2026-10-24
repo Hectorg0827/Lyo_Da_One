@@ -11,6 +11,8 @@ struct ReelActionStrip: View {
     let onAskLio: () -> Void
     let onSave: () -> Void
     let onConvertToCourse: () -> Void
+    /// Opens the report sheet; nil on the learner's own video.
+    var onReport: (() -> Void)? = nil
     
     var body: some View {
         VStack(spacing: 16) {
@@ -100,6 +102,22 @@ struct ReelActionStrip: View {
                         .font(.system(size: 10, weight: .bold))
                         .foregroundColor(.white)
                 }
+            }
+
+            // Report (and Block, inside the sheet)
+            if let onReport {
+                Button(action: onReport) {
+                    VStack(spacing: 2) {
+                        Image(systemName: "flag")
+                            .font(.system(size: 22))
+                            .foregroundColor(.white)
+
+                        Text("Report")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.white)
+                    }
+                }
+                .accessibilityLabel("Report video")
             }
         }
     }

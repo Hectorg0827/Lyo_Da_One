@@ -40,7 +40,7 @@ final class DataService: ObservableObject {
     
     // MARK: - Discover Feed
     
-    func fetchDiscoverFeed() async -> [DiscoverItem] {
+    func fetchDiscoverFeed(limit: Int = 20, offset: Int = 0) async -> [DiscoverItem] {
         if isInDemoMode {
             Log.data.info("Demo Mode: returning mock discover items")
             return mockDiscoverItems()
@@ -48,7 +48,7 @@ final class DataService: ObservableObject {
         
         do {
             // Fetch real discoveries from clips/discover
-            let response = try await apiClient.fetchDiscoveriesFeed(limit: 20, offset: 0)
+            let response = try await apiClient.fetchDiscoveriesFeed(limit: limit, offset: offset)
             
             // Map Discovery models to DiscoverItems
             let discoveryItems = response.discoveries.map { discovery -> DiscoverItem in
@@ -73,7 +73,9 @@ final class DataService: ObservableObject {
                     shareCount: 0,
                     isSaved: discovery.isSaved,
                     authorName: discovery.userName ?? "Lyo User",
-                    authorAvatarURL: nil // Could add if available in model
+                    authorAvatarURL: nil, // Could add if available in model
+                    authorId: String(discovery.userId),
+                    attribution: discovery.attribution
                 )
             }
             

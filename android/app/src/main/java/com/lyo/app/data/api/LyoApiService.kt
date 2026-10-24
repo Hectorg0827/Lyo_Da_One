@@ -132,6 +132,23 @@ interface LyoApiService {
     @POST("api/v1/clips/{clipId}/share")
     suspend fun shareClip(@Path("clipId") clipId: String): JsonObject
 
+    // Report and Block return their status as is: DiscoverSafety decides what
+    // 200, 201 and 404 mean for the learner.
+    @POST("api/v1/clips/{clipId}/report")
+    suspend fun reportClip(
+        @Path("clipId") clipId: String,
+        @Body body: ClipReportRequest,
+    ): Response<JsonObject>
+
+    @GET("api/v1/community/blocks")
+    suspend fun blockedAccounts(): List<BlockedAccountDto>
+
+    @POST("api/v1/community/blocks")
+    suspend fun blockUser(@Body body: BlockUserRequest): Response<JsonObject>
+
+    @DELETE("api/v1/community/blocks/{userId}")
+    suspend fun unblockUser(@Path("userId") userId: Long): Response<Unit>
+
     @GET("api/v1/clips/saved")
     suspend fun savedClips(
         @Query("page") page: Int = 1,

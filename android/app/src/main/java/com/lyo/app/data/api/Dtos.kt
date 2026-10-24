@@ -116,8 +116,55 @@ data class ClipDto(
     @SerializedName(value = "authorName", alternate = ["author_name"]) val authorName: String? = null,
     val subject: String? = null,
     @SerializedName(value = "createdAt", alternate = ["created_at"]) val createdAt: String? = null,
+    val attribution: ClipAttributionDto? = null,
+    /** The account that posted it, for Report and Block. */
+    @SerializedName(value = "userId", alternate = ["user_id"]) val userId: Any? = null,
 ) {
     val idStr: String get() = id?.toString()?.removeSuffix(".0") ?: ""
+    val ownerIdStr: String? get() = userId?.toString()?.removeSuffix(".0")?.takeIf { it.isNotBlank() }
+}
+
+/** POST /api/v1/clips/{id}/report; reason is one of DiscoverSafety.REPORT_REASONS. */
+data class ClipReportRequest(val reason: String, val description: String? = null)
+
+/** POST /api/v1/community/blocks: hides both people from each other in Discover. */
+data class BlockUserRequest(@SerializedName("user_id") val userId: Long)
+
+/** One account the learner blocked (GET /api/v1/community/blocks). */
+data class BlockedAccountDto(
+    @SerializedName("user_id") val userId: Long,
+    @SerializedName("user_name") val userName: String? = null,
+)
+
+/**
+ * Creator, licence and source of a library video; null for a learner's own
+ * clip. Discover's STEM library is public-domain and Creative Commons video,
+ * whose terms are met only when this credit is shown with it. Mirrors web
+ * `discover-attribution.mjs` and iOS `ClipAttribution`.
+ */
+data class ClipAttributionDto(
+    val credit: String? = null,
+    val sourceName: String? = null,
+    @SerializedName("sourceURL") val sourceUrl: String? = null,
+    val license: String? = null,
+    @SerializedName("licenseURL") val licenseUrl: String? = null,
+) {
+    /** "NASA/JPL-Caltech · Public domain", or null when there is nothing to credit. */
+    val displayLine: String?
+        get() {
+            val credit = credit.orEmpty().trim()
+            val license = license.orEmpty().trim()
+            val line = if (credit.isNotEmpty()) {
+                // The server's credit already reads "creator · licence".
+                if (license.isEmpty() || credit.contains(license)) credit else "$credit · $license"
+            } else {
+                listOf(sourceName.orEmpty().trim(), license).filter { it.isNotEmpty() }.joinToString(" · ")
+            }
+            return line.ifEmpty { null }
+        }
+
+    /** The source page, and only when it is https. */
+    val sourceLink: String? get() = sourceUrl?.trim()?.takeIf { it.startsWith("https://") }
 }
 
 data class ClipCreateRequest(
