@@ -165,6 +165,37 @@ for (const [source, where] of [
   }
 }
 
+// ── One icon set, both navs ──────────────────────────────────────────────────
+//
+// The rail was redrawn and the phone bar was left on stock Lucide, so the two
+// navs on one site disagreed about their glyphs the same way they once
+// disagreed about their names. Both read `NavIcons` now, and neither pulls a
+// tab glyph out of the stock pack. (Lucide is fine elsewhere — the settings
+// cog is still one; this is about the tabs.)
+const STOCK_TAB_GLYPHS = ['Target', 'Compass', 'Users', 'SquarePlus', 'Home', 'MessageSquare'];
+
+for (const [source, where] of [
+  [sidebar, 'The web sidebar'],
+  [mobileNav, 'The web phone nav'],
+]) {
+  if (!source) continue;
+  const body = code(source);
+  if (!body.includes("from './NavIcons'")) {
+    failures.push(`${where} does not use the drawn icon set in NavIcons`);
+  }
+  const lucide = body.match(/import\s*\{([^}]*)\}\s*from\s*['"]lucide-react['"]/);
+  const imported = lucide ? lucide[1].split(',').map((name) => name.trim()) : [];
+  for (const glyph of imported.filter((name) => STOCK_TAB_GLYPHS.includes(name))) {
+    failures.push(`${where} still uses the stock ${glyph} glyph for a tab`);
+  }
+}
+
+// The accent that makes the set a family belongs in one place, not copied
+// into each nav.
+if (code(sidebar).includes("'#ff8c00'") || code(mobileNav).includes("'#ff8c00'")) {
+  failures.push('A nav hard-codes the brand accent instead of reading NAV_ACCENT');
+}
+
 // The internal build name must never reach a learner.
 if (code(sidebar).includes('DA ONE') || code(mobileNav).includes('DA ONE')) {
   failures.push('"DA ONE" is an internal name and is shipping in the navigation');

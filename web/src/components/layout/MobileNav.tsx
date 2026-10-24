@@ -4,13 +4,20 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Target, Compass, Users, SquarePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import MascotAvatar from '@/components/chat/MascotAvatar';
 import CreateSheet from '@/components/create/CreateSheet';
 import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
 import { NAV, isActiveHref } from '@/lib/nav-items.mjs';
 import { COMMUNITY_LAUNCH_ENABLED, DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
+import {
+  CommunityIcon,
+  CreateIcon,
+  DiscoverIcon,
+  FocusIcon,
+  NAV_ACCENT,
+  type NavIconProps,
+} from './NavIcons';
 
 // Mirrors iOS LivingHubTabBar (MainTabView.swift): two icon groups flanking
 // the center mascot FAB — Focus, Discover · Community, Create. Icon-only
@@ -30,9 +37,15 @@ import { COMMUNITY_LAUNCH_ENABLED, DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-
 //
 // Discover has its own launch flag: while it is off, its tab is left out
 // rather than opening a screen that cannot play anything.
-const focusItem = { href: NAV.focus.href, icon: Target, label: NAV.focus.label };
-const discoverItem = { href: NAV.discover.href, icon: Compass, label: NAV.discover.label };
-const communityItem = { href: NAV.community.href, icon: Users, label: NAV.community.label };
+//
+// The glyphs are the set drawn in `NavIcons`, the same ones the desktop rail
+// carries. This bar ran on stock Lucide — the target, compass and two-person
+// group every other app ships — so a learner who met the drawn set on desktop
+// met a different nav on their phone. Half the complaint about the old icons
+// was the phone's.
+const focusItem = { href: NAV.focus.href, icon: FocusIcon, label: NAV.focus.label };
+const discoverItem = { href: NAV.discover.href, icon: DiscoverIcon, label: NAV.discover.label };
+const communityItem = { href: NAV.community.href, icon: CommunityIcon, label: NAV.community.label };
 
 const discoverItems = DISCOVER_LAUNCH_ENABLED ? [discoverItem] : [];
 
@@ -47,7 +60,7 @@ function GhostTab({
   isActive,
 }: {
   href: string;
-  icon: typeof Target;
+  icon: React.ComponentType<NavIconProps>;
   label: string;
   isActive: boolean;
 }) {
@@ -66,6 +79,7 @@ function GhostTab({
             ? 'opacity-100 scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'
             : 'opacity-50',
         )}
+        accent={isActive ? NAV_ACCENT : undefined}
       />
       <span
         className={cn(
@@ -147,13 +161,14 @@ export function MobileNav() {
             aria-label={NAV.create.label}
             className="flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-200"
           >
-            <SquarePlus
+            <CreateIcon
               className={cn(
                 'w-6 h-6 text-white transition-all duration-200',
                 createOpen
                   ? 'opacity-100 scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'
                   : 'opacity-50'
               )}
+              accent={createOpen ? NAV_ACCENT : undefined}
             />
             <span
               className={cn(
