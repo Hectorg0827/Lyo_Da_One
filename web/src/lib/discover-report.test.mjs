@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { REPORT_NOTE_LIMIT, REPORT_REASONS, canReport, pagesToFetch, reportOutcome } from './discover-report.mjs';
+import {
+  REPORT_NOTE_LIMIT, REPORT_REASONS, blockOutcome, canBlock, canReport, pagesToFetch, reportOutcome,
+} from './discover-report.mjs';
 import { mergeClipPage } from './discover-playback.mjs';
 
 // The reasons POST /api/v1/clips/{id}/report accepts (LyoBackendJune
@@ -41,7 +43,8 @@ test('Discover offers Report on other people\'s videos and drops a reported one 
   const sheet = readFileSync(new URL('../components/clips/ReportClipSheet.tsx', import.meta.url), 'utf8');
   assert.ok(page.includes('<ActionButton label="Report" onClick={onReport}>'));
   assert.ok(page.includes('onReport={canReport(reel.ownerId, viewerId) ? () => setReportingFor(reel) : undefined}'));
-  assert.ok(page.includes('ordered.filter((r) => !reportedIds.has(r.id))'), 'reported video leaves the feed');
+  assert.ok(page.includes('.filter((r) => !reportedIds.has(r.id) && !(r.ownerId && blockedOwners.has(r.ownerId)))'),
+    'a reported video, and every video by someone blocked, leaves the feed');
   assert.ok(page.includes('foreground={foreground && !composing && !commentsFor && !reportingFor}'),
     'the video pauses while the report sheet is open');
   assert.ok(sheet.includes('api.clips.report(clipId, reason, note.trim())'));
@@ -68,5 +71,40 @@ test('after a report, the next page also asks for the one before, so no video is
 test('a report that finishes late never closes a newer report sheet', () => {
   const page = readFileSync(new URL('../app/(main)/discover/page.tsx', import.meta.url), 'utf8');
   assert.ok(page.includes('setReportingFor((current) => (current?.id === reportedId ? null : current))'));
-  assert.ok(page.includes('pagesToFetch(request.page, reportsSinceLoad.current, 20)'));
+  assert.ok(page.includes('pagesToFetch(request.page, removedSinceLoad.current, 20)'));
+});
+
+test('Block is offered on someone else\'s video, never on your own or a library video', () => {
+  assert.equal(canBlock('42', '7', false), true);
+  assert.equal(canBlock(42, '7', false), true);
+  assert.equal(canBlock('42', '42', false), false, 'you cannot block yourself');
+  assert.equal(canBlock('42', 42, false), false);
+  assert.equal(canBlock('42', '7', true), false, 'blocking the library account would empty Discover');
+  assert.equal(canBlock(null, '7', false), false);
+  assert.equal(canBlock('42', undefined, false), false, 'an unknown viewer might be the owner');
+});
+
+test('a block succeeds once the server stores it; anything else keeps the sheet open', () => {
+  assert.deepEqual(blockOutcome(201, 'Sam'), {
+    blocked: true, message: "Blocked Sam. You won't see each other's videos or comments.",
+  });
+  assert.equal(blockOutcome(200, 'Sam').blocked, true);
+  assert.deepEqual(blockOutcome(404, 'Sam'), { blocked: false, message: 'This account no longer exists.' });
+  for (const status of [0, 400, 401, 422, 500]) assert.equal(blockOutcome(status, 'Sam').blocked, false);
+});
+
+test('the report sheet offers Block with a confirmation, and Settings lists blocked accounts', () => {
+  const page = readFileSync(new URL('../app/(main)/discover/page.tsx', import.meta.url), 'utf8');
+  const sheet = readFileSync(new URL('../components/clips/ReportClipSheet.tsx', import.meta.url), 'utf8');
+  const settings = readFileSync(new URL('../app/(main)/settings/page.tsx', import.meta.url), 'utf8');
+  const blocked = readFileSync(new URL('../components/settings/BlockedAccounts.tsx', import.meta.url), 'utf8');
+  assert.ok(page.includes('canBlock(reportingFor.ownerId, viewerId, Boolean(reportingFor.attribution))'));
+  assert.ok(page.includes('removedSinceLoad.current += reels.filter((reel) => reel.ownerId === ownerId).length'),
+    'every loaded video by the blocked owner counts toward the page overlap');
+  assert.ok(sheet.includes('api.blocks.block(owner.id)'));
+  const confirmStep = sheet.slice(sheet.indexOf('{confirmingBlock ? ('), sheet.indexOf(') : (', sheet.indexOf('{confirmingBlock ? (')));
+  assert.ok(confirmStep.includes('onClick={block}'), 'blocking asks first: the Block button is only in the confirmation');
+  assert.equal(sheet.split('onClick={block}').length, 2, 'nothing else blocks without asking');
+  assert.ok(settings.includes('<Section title="Blocked accounts">'));
+  assert.ok(blocked.includes('api.blocks.unblock(String(account.user_id))'));
 });

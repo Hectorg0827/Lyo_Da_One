@@ -2,43 +2,78 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Flag, Loader2, X } from 'lucide-react';
+import { Flag, Loader2, UserX, X } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { REPORT_NOTE_LIMIT, REPORT_REASONS, reportOutcome, type ReportOutcome } from '@/lib/discover-report.mjs';
+import {
+  REPORT_NOTE_LIMIT,
+  REPORT_REASONS,
+  blockOutcome,
+  reportOutcome,
+  type BlockOutcome,
+  type ReportOutcome,
+} from '@/lib/discover-report.mjs';
 
 /**
- * Report one Discover video.
+ * Report one Discover video, or block the person who posted it.
  *
  * The learner picks a reason and may add a note. What the server answers
  * decides whether the video leaves this learner's feed (reportOutcome); a
  * failure keeps the sheet open, with the choices intact, so they can retry.
+ *
+ * When `owner` is given, the sheet also offers to block them. Blocking asks
+ * first, then hides both people from each other in Discover (blockOutcome).
  */
 export default function ReportClipSheet({
   clipId,
   clipTitle,
+  owner,
   onClose,
   onDone,
+  onBlocked,
 }: {
   clipId: string;
   clipTitle: string;
+  owner?: { id: string; name: string } | null;
   onClose: () => void;
   onDone: (outcome: ReportOutcome) => void;
+  onBlocked?: (outcome: BlockOutcome) => void;
 }) {
   const [reason, setReason] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingBlock, setConfirmingBlock] = useState(false);
+  const [blocking, setBlocking] = useState(false);
+  const [blockError, setBlockError] = useState<string | null>(null);
+  const busy = sending || blocking;
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !sending) onClose();
+      if (event.key === 'Escape' && !busy) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, sending]);
+  }, [onClose, busy]);
+
+  const block = async () => {
+    if (!owner || busy) return;
+    setBlocking(true);
+    setBlockError(null);
+    let status = 0;
+    try {
+      await api.blocks.block(owner.id);
+      status = 201;
+    } catch (err) {
+      status = err instanceof ApiError ? err.status : 0;
+    }
+    const outcome = blockOutcome(status, owner.name);
+    setBlocking(false);
+    if (outcome.blocked) onBlocked?.(outcome);
+    else setBlockError(outcome.message);
+  };
 
   const submit = async () => {
-    if (!reason || sending) return;
+    if (!reason || busy) return;
     setSending(true);
     setError(null);
     let status = 0;
@@ -62,7 +97,7 @@ export default function ReportClipSheet({
       className="fixed inset-0 z-[70] flex items-end justify-center bg-black/60 sm:items-center"
       onClick={(event) => {
         event.stopPropagation();
-        if (!sending) onClose();
+        if (!busy) onClose();
       }}
     >
       <motion.div
@@ -87,7 +122,7 @@ export default function ReportClipSheet({
           <button
             type="button"
             onClick={onClose}
-            disabled={sending}
+            disabled={busy}
             aria-label="Close report"
             className="rounded-lg p-2 text-white/50 hover:bg-white/10 hover:text-white"
           >
@@ -102,7 +137,7 @@ export default function ReportClipSheet({
             submit();
           }}
         >
-          <fieldset disabled={sending}>
+          <fieldset disabled={busy}>
             <legend className="mb-2 text-sm text-white/70">What&apos;s wrong with this video?</legend>
             <div className="space-y-1.5">
               {REPORT_REASONS.map((option) => (
@@ -145,13 +180,60 @@ export default function ReportClipSheet({
 
           <button
             type="submit"
-            disabled={!reason || sending}
+            disabled={!reason || busy}
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white disabled:opacity-40"
           >
             {sending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
             Send report
           </button>
         </form>
+
+        {owner && onBlocked && (
+          <div className="mt-5 border-t border-white/10 pt-4">
+            {confirmingBlock ? (
+              <div role="group" aria-labelledby="block-owner-question">
+                <p id="block-owner-question" className="text-sm text-white/80">
+                  Block {owner.name}? You won&apos;t see each other&apos;s videos or comments in Discover. You can
+                  unblock them in Settings.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingBlock(false)}
+                    disabled={busy}
+                    className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm text-white/80 hover:bg-white/5"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={block}
+                    disabled={busy}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-white py-2.5 text-sm font-semibold text-[#050810] disabled:opacity-40"
+                  >
+                    {blocking && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                    Block
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingBlock(true)}
+                disabled={busy}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 py-2.5 text-sm text-white/80 hover:bg-white/5"
+              >
+                <UserX className="h-4 w-4" aria-hidden="true" />
+                Block {owner.name}
+              </button>
+            )}
+            {blockError && (
+              <p role="alert" className="mt-3 text-sm text-red-400">
+                {blockError}
+              </p>
+            )}
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

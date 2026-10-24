@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AtSign, ChevronRight, ExternalLink, Info, Mail, Save, ShieldCheck, User } from 'lucide-react';
+import BlockedAccounts from '@/components/settings/BlockedAccounts';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
 
@@ -145,6 +146,10 @@ export default function SettingsPage() {
 
         <ReadOnlyRow icon={Mail} label="Email" value={user?.email ?? ''} />
         <ReadOnlyRow icon={AtSign} label="Username" value={user?.username ? `@${user.username}` : ''} />
+      </Section>
+
+      <Section title="Blocked accounts">
+        <BlockedAccounts />
       </Section>
 
       {moderator && (
