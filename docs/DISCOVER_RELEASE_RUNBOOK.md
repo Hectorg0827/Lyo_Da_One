@@ -183,20 +183,37 @@ data. Test on a real iPhone (Safari and the app), a real Android phone
 
 ## Step 7 — Switch Discover on
 
-1. In the Railway web service, set `NEXT_PUBLIC_DISCOVER_LAUNCH_ENABLED=true`
-   and redeploy. It is a build-time value, so a redeploy is required.
-2. Run Step 3's `upload` and `reverify` again against `https://api.lyoai.app`.
+Two Railway services serve the website, and both need the switch:
 
-To roll back, delete the variable and redeploy. Step 5 already proved that
-state works.
+| Address | Railway project | Environment | Service |
+| --- | --- | --- | --- |
+| `www.lyoai.app` | `zonal-wisdom` | production | `Lyo_Da_One` |
+| `lyoai.app` | `caring-cat` | Lyo | `LyoWeb` |
+
+1. On both services, set `NEXT_PUBLIC_DISCOVER_LAUNCH_ENABLED=true` and
+   redeploy. It is compiled into the site, so it needs a new build, and
+   `web/Dockerfile` must declare it as a build arg or the build never sees it
+   (`dockerfile-build-args.test.mjs` checks this).
+2. Check `/discover` on both addresses shows the feed, not "Discover is being
+   updated".
+3. Run the live probe in `LyoBackendJune` (`discover-live-probe.yml`): its
+   last step reads the feed as the library account and checks every clip is
+   ready and plays.
+
+To roll back, delete the variable on both services and redeploy. Step 5
+already proved that state works.
 
 ## Things found outside Discover
 
-- The Railway project `caring-cat` has a `LyoBackendJune` service whose
-  production deploys have all failed since 8 October. The latest failed
-  because its `DATABASE_URL` is empty. It has no domain attached. If it is an
-  old copy, remove it; its failed deploys make the real deploy status hard to
-  read.
-- No Railway service visible to this account has `api.lyoai.app` attached, so
-  confirm in Railway (or wherever DNS points) which service answers it before
-  Step 1.
+- The production backend (`api.lyoai.app`) and the bare-domain website
+  (`lyoai.app`) live in Railway project `caring-cat`, environment "Lyo". The
+  same project's "production" environment has a `LyoBackendJune` service whose
+  deploys have all failed since 8 October because its `DATABASE_URL` is empty.
+  It has no domain. If it is an old copy, remove it; its failed deploys make the
+  real deploy status hard to read.
+- During Railway's capacity pause on 21 to 23 October, pushes to `main` created
+  no deployments at all. Deploying again (reconnecting the service's source)
+  queued them, and they ran when the pause lifted.
+- The API refused every request over 10 MB, so videos over 10 MB could not be
+  uploaded. Fixed in `LyoBackendJune` #151: the upload route now gets its own
+  201 MB cap.
