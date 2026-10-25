@@ -258,7 +258,7 @@ function MapKey() {
 export default function CommunityPage() {
   const router = useRouter()
   const isDesktop = useIsDesktop()
-  const { isAuthenticated, isLoading: authLoading } = useAuthStore()
+  const { isAuthenticated, isLoading: authLoading, user } = useAuthStore()
   // Community is account-owned end to end — even the map's own /nearby needs a
   // signed-in learner. So nothing here runs until we know who is asking:
   // `request()` treats a 401 on a required call as a dead session and sets
@@ -364,7 +364,7 @@ export default function CommunityPage() {
 
   useEffect(() => {
     if (!ready || !signedIn) return
-    const key = nearbyCacheKey({ latitude: area.latitude, longitude: area.longitude, radiusKm, filters: filterKey, query: activeQuery })
+    const key = nearbyCacheKey({ account: String(user?.id ?? ''), latitude: area.latitude, longitude: area.longitude, radiusKm, filters: filterKey, query: activeQuery })
     const cached = readNearby(key)
     if (cached) {
       setNearby(cached.response)
@@ -416,7 +416,7 @@ export default function CommunityPage() {
         if (requestRef.current === controller) setLoading(false)
       })
     return () => controller.abort()
-  }, [ready, signedIn, area.latitude, area.longitude, radiusKm, filterKey, activeQuery, filterQuery, reloadTick, clearSettled])
+  }, [ready, signedIn, user?.id, area.latitude, area.longitude, radiusKm, filterKey, activeQuery, filterQuery, reloadTick, clearSettled])
 
   const retry = useCallback(() => setReloadTick((tick) => tick + 1), [])
   const refreshAll = useCallback(() => {
@@ -652,10 +652,24 @@ export default function CommunityPage() {
   // attribution, and controls always stay above it.
   const sheetPx = sheetHeight
 
+  // Still reading the session: show neither the map nor the prompt. The map's
+  // controls act the moment they are on screen — the locate button asks for
+  // GPS, the search box calls resolveSearch — and a call made before we know
+  // who is asking is the same 401 bounce to a destination-less login that this
+  // page exists to avoid. Test Prep holds its render the same way.
+  if (authLoading) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-16 text-center text-white/60">
+        <Loader2 className="mx-auto h-6 w-6 animate-spin" aria-hidden />
+        <p className="mt-3 text-sm">Loading Community…</p>
+      </main>
+    )
+  }
+
   // Signed out: ask, rather than letting a refused request bounce them to a
   // login that has lost the destination. `authReturnPath` already allows
   // /community, so signing in from here comes back to this page.
-  if (!authLoading && !isAuthenticated) {
+  if (!isAuthenticated) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-16">
         <h1 className="text-2xl font-semibold text-white">Find learning around you</h1>
