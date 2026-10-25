@@ -220,6 +220,13 @@ fun SignupScreen(nav: NavHostController) {
             }
         }
 
+        GoogleSignInSection(
+            enabled = !loading,
+            onBusyChange = { loading = it },
+            onError = { error = it },
+            onSignedIn = { nav.navigate(Routes.HOME) { popUpTo(0) } },
+        )
+
         Spacer(Modifier.height(24.dp))
 
         Text(

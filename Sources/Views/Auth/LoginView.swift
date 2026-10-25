@@ -1,5 +1,4 @@
 import SwiftUI
-import AuthenticationServices
 
 struct LoginView: View {
     @EnvironmentObject var rootViewModel: RootViewModel
@@ -104,33 +103,20 @@ struct LoginView: View {
                             .padding(.horizontal, 40)
                             
                             VStack(spacing: 12) {
-                                SignInWithAppleButton(
-                                    onRequest: { request in
-                                        request.requestedScopes = [.fullName, .email]
-                                    },
-                                    onCompletion: { result in
-                                        authService.handleAppleSignIn(result: result)
+                                // Sign in with Apple returns once the app has an Apple Developer
+                                // account to switch it on; until then it could only pretend.
+                                Button(action: {
+                                    Task {
+                                        // Waits for the learner to finish in Google's sheet.
+                                        await authService.signInWithGoogle()
                                         if authService.isAuthenticated {
                                             rootViewModel.isAuthenticated = true
                                         }
                                     }
-                                )
-                                .signInWithAppleButtonStyle(.white)
-                                .frame(maxWidth: 340) // Fixed max width to prevent layout issues
-                                .frame(height: 52, alignment: .center)
-                                .cornerRadius(16)
-                                
-                                Button(action: {
-                                    authService.signInWithGoogle()
-                                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                                         if authService.isAuthenticated {
-                                             rootViewModel.isAuthenticated = true
-                                         }
-                                    }
                                 }) {
                                     HStack {
                                         Image(systemName: "globe")
-                                        Text("Sign in with Google")
+                                        Text("Continue with Google")
                                     }
                                     .fontWeight(.semibold)
                                     .foregroundColor(.black)
@@ -139,6 +125,7 @@ struct LoginView: View {
                                     .background(Color.white)
                                     .cornerRadius(16)
                                 }
+                                .disabled(authService.isLoading)
                                 
                                 // Demo Mode Button
                                 Button(action: {

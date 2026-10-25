@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, User, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { authReturnPath, authSwitchHref } from '@/lib/auth-return.mjs';
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import MascotAvatar from '@/components/chat/MascotAvatar';
 
 // ── Animation variants ─────────────────────────────────────────────────────────
@@ -166,6 +167,7 @@ export default function SignupPage() {
           {/* Error banner */}
           {error && (
             <motion.div
+              role="alert"
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm"
@@ -269,6 +271,18 @@ export default function SignupPage() {
               )}
             </button>
           </form>
+
+          <GoogleSignInButton
+            onError={setError}
+            note={
+              <>
+                By continuing with Google, you agree to LYO&apos;s{' '}
+                <a href="https://lyo.app/terms" target="_blank" rel="noreferrer" className="text-[#a78bfa] hover:underline">Terms of Service</a>
+                {' '}and{' '}
+                <a href="https://lyo.app/privacy" target="_blank" rel="noreferrer" className="text-[#a78bfa] hover:underline">Privacy Policy</a>.
+              </>
+            }
+          />
 
           {/* Log in link */}
           <p className="text-center text-sm text-secondary">

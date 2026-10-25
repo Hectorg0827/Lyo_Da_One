@@ -36,6 +36,10 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+        // firebase-auth (Continue with Google) is compiled by a newer Kotlin than
+        // this project's 2.0.20, and the compiler refuses its metadata. Only its
+        // Java API is used; drop this once the project's Kotlin is 2.2 or newer.
+        freeCompilerArgs += "-Xskip-metadata-version-check"
     }
     buildFeatures {
         compose = true
@@ -47,6 +51,13 @@ android {
 dependencies {
     implementation(platform("com.google.firebase:firebase-bom:34.19.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // Continue with Google: Credential Manager picks the account, Firebase turns
+    // it into the ID token that POST /auth/firebase accepts.
+    implementation("com.google.firebase:firebase-auth")
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     val composeBom = platform("androidx.compose:compose-bom:2024.09.02")
     implementation(composeBom)
 

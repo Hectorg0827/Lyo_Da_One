@@ -1,7 +1,5 @@
 import Foundation
-import AuthenticationServices
 import Combine
-import CryptoKit
 #if canImport(GoogleSignIn)
 import GoogleSignIn
 #endif
@@ -121,23 +119,6 @@ class AuthService: NSObject, ObservableObject {
         }
     }
     
-    /// Local authentication fallback when backend is unavailable
-    private func performLocalAuth(email: String, name: String?) async {
-        // Simulate network delay
-        try? await Task.sleep(nanoseconds: 500_000_000)
-        
-        let userName = name ?? email.components(separatedBy: "@").first ?? "User"
-        
-        await MainActor.run {
-            self.currentUserName = userName
-            self.currentUserEmail = email
-            self.saveUserSession(name: userName, email: email)
-            self.isAuthenticated = true
-            self.isLoading = false
-            self.error = nil
-        }
-    }
-    
     private func saveUserSession(name: String, email: String) {
         UserDefaults.standard.set(name, forKey: userNameKey)
         UserDefaults.standard.set(email, forKey: userEmailKey)
@@ -162,199 +143,57 @@ class AuthService: NSObject, ObservableObject {
         }
     }
     
-    // MARK: - Apple Sign In
-
-    /// Stored nonce for Apple+Firebase credential exchange
-    private var currentNonce: String?
-
-    /// Generate a cryptographically-secure random nonce string
-    private func randomNonceString(length: Int = 32) -> String {
-        precondition(length > 0)
-        var randomBytes = [UInt8](repeating: 0, count: length)
-        let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
-        if errorCode != errSecSuccess {
-            // Fall back to UUID-derived randomness instead of crashing the app.
-            Log.auth.error("SecRandomCopyBytes failed (OSStatus \(errorCode)) — using UUID nonce fallback")
-            return (UUID().uuidString + UUID().uuidString)
-                .replacingOccurrences(of: "-", with: "")
-                .prefix(length)
-                .description
-        }
-        let charset: [Character] = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
-        return String(randomBytes.map { charset[Int($0) % charset.count] })
-    }
-
-    /// SHA-256 hash of the input string
-    private func sha256(_ input: String) -> String {
-        let inputData = Data(input.utf8)
-        let hashedData = SHA256.hash(data: inputData)
-        return hashedData.compactMap { String(format: "%02x", $0) }.joined()
-    }
-
-    /// Call this from the SignInWithAppleButton onRequest closure
-    func prepareAppleSignInRequest(_ request: ASAuthorizationAppleIDRequest) {
-        request.requestedScopes = [.fullName, .email]
-    }
-    
-    func handleAppleSignIn(result: Result<ASAuthorization, Error>) {
-        switch result {
-        case .success(let auth):
-            if let appleIDCredential = auth.credential as? ASAuthorizationAppleIDCredential {
-                let userIdentifier = appleIDCredential.user
-                let email = appleIDCredential.email
-                // let fullName = appleIDCredential.fullName
-                
-                // In a real app, you would send the identityToken and authorizationCode to your backend
-                // let identityToken = appleIDCredential.identityToken
-                // let authCode = appleIDCredential.authorizationCode
-                
-                print("Apple Sign In Success: \(userIdentifier) \(String(describing: email))")
-                
-                // Mock backend call
-                Task {
-                    await MainActor.run { isLoading = true }
-                    try? await Task.sleep(nanoseconds: 1_000_000_000)
-                    await MainActor.run {
-                        self.isAuthenticated = true
-                        self.isLoading = false
-                    }
-                }
-            }
-        case .failure(let error):
-            print("Apple Sign In Failed: \(error.localizedDescription)")
-            self.error = "Apple Sign In failed."
-        }
-    }
-    
     // MARK: - Google Sign In
-    
-    func signInWithGoogle() {
-        #if canImport(GoogleSignIn)
-        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let rootViewController = windowScene.windows.first?.rootViewController else {
-            print("❌ No root view controller found for Google Sign In")
+
+    /// Signs in with Google: Google confirms the account, Firebase turns that
+    /// into an ID token, and the API exchanges it for LYO's tokens
+    /// (POST /auth/firebase), creating the account the first time.
+    @MainActor
+    func signInWithGoogle() async {
+        #if canImport(GoogleSignIn) && canImport(FirebaseAuth)
+        guard let presenter = Self.topViewController() else {
+            error = "Couldn't open Google sign-in. Please try again."
             return
         }
-        
-        Task { @MainActor in
-            self.isLoading = true
-            self.error = nil
-            
-            do {
-                let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController)
-                let user = result.user
-                
-                let email = user.profile?.email ?? ""
-                let name = user.profile?.name ?? email.components(separatedBy: "@").first ?? "User"
-                
-                guard let idToken = user.idToken?.tokenString else {
-                    print("❌ Google Sign In Failed: No ID Token")
-                    self.error = "Failed to get ID token from Google"
-                    self.isLoading = false
-                    return
-                }
-                
-                print("✅ Google Sign In Success: \(email)")
-                
-                #if canImport(FirebaseAuth)
-                // Exchange Google ID Token for Firebase Credential
-                let credential = GoogleAuthProvider.credential(withIDToken: idToken,
-                                                             accessToken: user.accessToken.tokenString)
-                
-                // Sign in to Firebase
-                let firebaseResult = try await Auth.auth().signIn(with: credential)
-                let firebaseUser = firebaseResult.user
-                
-                // Get Firebase ID Token
-                let firebaseIdToken = try await firebaseUser.getIDToken()
-                print("✅ Firebase Auth Success: \(firebaseUser.uid)")
-                
-                // Authenticate with Backend using Firebase ID Token
-                do {
-                    let backendUser = try await repository.loginWithGoogle(idToken: firebaseIdToken)
-                    self.currentUserName = backendUser.name
-                    self.currentUserEmail = backendUser.email
-                    self.isDemoMode = false
-                    UserDefaults.standard.set(false, forKey: demoModeKey)
-                    self.saveUserSession(name: backendUser.name, email: backendUser.email)
-                    self.isAuthenticated = true
-                    print("✅ Backend auth successful for: \(backendUser.email)")
-                } catch {
-                    // Backend Firebase auth failed - try to register/login with email directly
-                    print("⚠️ Backend Firebase auth failed: \(error.localizedDescription)")
-                    print("🔄 Attempting backend login with Google email...")
-                    
-                    do {
-                        // Try to login first (user might already exist)
-                        // bcrypt requires max 72 BYTES - properly truncate UTF-8 data
-                        let fullPassword = "Google_\(firebaseUser.uid)_Auth"
-                        let passwordData = Data(fullPassword.utf8.prefix(72))
-                        let tempPassword = String(decoding: passwordData, as: UTF8.self)
-                        let backendUser = try await repository.login(email: email, password: tempPassword)
-                        
-                        self.currentUserName = backendUser.name
-                        self.currentUserEmail = backendUser.email
-                        self.isDemoMode = false
-                        UserDefaults.standard.set(false, forKey: demoModeKey)
-                        self.saveUserSession(name: backendUser.name, email: backendUser.email)
-                        self.isAuthenticated = true
-                        print("✅ Backend login successful for Google user: \(email)")
-                    } catch {
-                        // Login failed - try to register
-                        print("🔄 Login failed: \(type(of: error)): \(error.localizedDescription)")
-                        print("   underlying: \(error)")
-                        do {
-                            // bcrypt requires max 72 BYTES - properly truncate UTF-8 data
-                            let fullPassword = "Google_\(firebaseUser.uid)_Auth"
-                            let passwordData = Data(fullPassword.utf8.prefix(72))
-                            let tempPassword = String(decoding: passwordData, as: UTF8.self)
-                            let backendUser = try await repository.register(email: email, password: tempPassword, name: name)
-                            
-                            self.currentUserName = backendUser.name
-                            self.currentUserEmail = backendUser.email
-                            self.isDemoMode = false
-                            UserDefaults.standard.set(false, forKey: demoModeKey)
-                            self.saveUserSession(name: backendUser.name, email: backendUser.email)
-                            self.isAuthenticated = true
-                            print("✅ Backend registration successful for Google user: \(email)")
-                        } catch let registrationError {
-                            // Both login and register failed - cannot use app without backend auth
-                            print("❌ Backend auth completely failed: \(registrationError.localizedDescription)")
-                            print("⚠️ Firebase UID cannot be used as backend user ID - would cause 403/500 errors")
-                            
-                            // Do NOT store Firebase UID as userId - it's incompatible with backend!
-                            // Show error to user instead of silently failing
-                            self.error = "Unable to connect to server. Please try again later."
-                            self.isLoading = false
-                            self.isAuthenticated = false
-                            return
-                        }
-                    }
-                }
-                #else
-                // FirebaseAuth not available: cannot proceed - backend requires Firebase auth
-                print("❌ FirebaseAuth not available. Cannot authenticate with backend.")
-                self.error = "Authentication unavailable. Please update the app."
-                self.isLoading = false
-                self.isAuthenticated = false
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+        do {
+            let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: presenter)
+            guard let googleIdToken = result.user.idToken?.tokenString else {
+                error = "Google didn't confirm your account. Please try again."
                 return
-                #endif
-                
-                self.isLoading = false
-                
-            } catch {
-                print("❌ Google Sign In Failed: \(error.localizedDescription)")
-                self.error = error.localizedDescription
-                self.isLoading = false
             }
+            let credential = GoogleAuthProvider.credential(withIDToken: googleIdToken,
+                                                           accessToken: result.user.accessToken.tokenString)
+            let firebaseUser = try await Auth.auth().signIn(with: credential).user
+            let firebaseIdToken = try await firebaseUser.getIDToken()
+            let user = try await repository.loginWithGoogle(idToken: firebaseIdToken)
+            currentUserName = user.name
+            currentUserEmail = user.email
+            isDemoMode = false
+            UserDefaults.standard.set(false, forKey: demoModeKey)
+            saveUserSession(name: user.name, email: user.email)
+            isAuthenticated = true
+        } catch GIDSignInError.canceled {
+            // The learner closed Google's sheet; nothing went wrong.
+        } catch {
+            // No fallback: without the API's confirmation there is no LYO session.
+            print("❌ Google sign-in failed: \(error.localizedDescription)")
+            self.error = "Couldn't sign you in with Google. Please try again."
         }
         #else
-        // Fallback if SDK is not available
-        print("⚠️ GoogleSignIn SDK not imported")
-        Task {
-            await performLocalAuth(email: "google_user@example.com", name: "Google User")
-        }
+        error = "Google sign-in isn't available in this version of the app."
         #endif
+    }
+
+    /// The screen on top, so Google's sheet opens above any sheet already showing.
+    @MainActor
+    private static func topViewController() -> UIViewController? {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        var top = scene?.windows.first(where: \.isKeyWindow)?.rootViewController ?? scene?.windows.first?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        return top
     }
     
     // MARK: - Helper Methods

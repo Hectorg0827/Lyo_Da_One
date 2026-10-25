@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react';
 import { useAuthStore } from '@/stores/auth-store';
 import { authReturnPath, authSwitchHref } from '@/lib/auth-return.mjs';
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 
 const containerVariants = {
   hidden: { opacity: 0, y: 24 },
@@ -214,6 +215,8 @@ export default function LoginPage() {
             </button>
           </form>
 
+          <GoogleSignInButton onError={setError} />
+
           <p className="text-center text-sm text-secondary">
             New to LYO?{' '}
             <Link
@@ -222,10 +225,6 @@ export default function LoginPage() {
             >
               Sign up
             </Link>
-          </p>
-
-          <p className="text-center text-xs leading-relaxed text-secondary">
-            Social sign-in will appear only after its backend flow is available.
           </p>
         </div>
       </motion.div>

@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.lyo.app.data.api.ApiClient
+import com.lyo.app.data.api.FirebaseLoginRequest
 import com.lyo.app.data.api.LoginRequest
 import com.lyo.app.data.api.RegisterRequest
 import com.lyo.app.data.api.UserDto
@@ -67,6 +68,19 @@ object Session {
 
     suspend fun login(email: String, password: String) {
         val response = ApiClient.api.login(LoginRequest(email, password))
+        val accessToken = response.accessToken
+            ?: throw IllegalStateException("The server did not return an access token.")
+
+        establishSession(
+            accessToken = accessToken,
+            refreshToken = response.refreshToken,
+            providedUser = response.user,
+        )
+    }
+
+    /** Signs in with Firebase's ID token for a Google account (see GoogleSignIn.kt). */
+    suspend fun loginWithFirebase(idToken: String) {
+        val response = ApiClient.api.firebase(FirebaseLoginRequest(idToken))
         val accessToken = response.accessToken
             ?: throw IllegalStateException("The server did not return an access token.")
 

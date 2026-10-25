@@ -1,5 +1,4 @@
 import SwiftUI
-import AuthenticationServices
 
 struct OnboardingView: View {
     @EnvironmentObject var rootViewModel: RootViewModel
@@ -160,38 +159,23 @@ struct OnboardingView: View {
                             
                         case .credentials:
                             VStack(spacing: 16) {
-                                // Social Login
-                                HStack(spacing: 16) {
-                                    SignInWithAppleButton(
-                                        onRequest: { request in
-                                            authService.prepareAppleSignInRequest(request)
-                                        },
-                                        onCompletion: { result in
-                                            handleSocialLogin {
-                                                authService.handleAppleSignIn(result: result)
-                                            }
-                                        }
-                                    )
-                                    .signInWithAppleButtonStyle(.white)
-                                    .frame(height: 50)
-                                    .cornerRadius(16)
-                                    
-                                    Button(action: {
-                                        handleSocialLogin {
-                                            authService.signInWithGoogle()
-                                        }
-                                    }) {
-                                        HStack {
-                                            Image(systemName: "globe")
-                                            Text("Google")
-                                        }
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.black)
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 50)
-                                        .background(Color.white)
-                                        .cornerRadius(16)
+                                // Social Login (Sign in with Apple returns once the app has an
+                                // Apple Developer account to switch it on).
+                                Button(action: {
+                                    handleSocialLogin {
+                                        await authService.signInWithGoogle()
                                     }
+                                }) {
+                                    HStack {
+                                        Image(systemName: "globe")
+                                        Text("Continue with Google")
+                                    }
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.black)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 50)
+                                    .background(Color.white)
+                                    .cornerRadius(16)
                                 }
                                 
                                 HStack {
@@ -284,16 +268,15 @@ struct OnboardingView: View {
         }
     }
     
-    private func handleSocialLogin(action: @escaping () -> Void) {
+    private func handleSocialLogin(action: @escaping () async -> Void) {
         currentStep = .creating
         isThinking = true
         withAnimation { showInput = false }
         
         typeWriterEffect("Connecting to your account...") {
-            action()
-            
-            // Wait for auth state change
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            Task { @MainActor in
+                // Returns once the learner has finished in Google's sheet.
+                await action()
                 if authService.isAuthenticated {
                     LyoAnalyticsManager.shared.trackEvent("onboarding_signup_completed", parameters: ["method": "social"])
                     rootViewModel.isAuthenticated = true
@@ -301,7 +284,8 @@ struct OnboardingView: View {
                 } else {
                     isThinking = false
                     currentStep = .credentials
-                    lyoMessage = authService.error ?? "Login failed. Please try again."
+                    // No error means they closed Google's sheet.
+                    lyoMessage = authService.error ?? "No problem! Continue with Google, or use your email."
                     withAnimation { showInput = true }
                 }
             }

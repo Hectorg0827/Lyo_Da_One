@@ -29,6 +29,10 @@ interface LyoApiService {
     @POST("auth/register")
     suspend fun register(@Body body: RegisterRequest): AuthResponse
 
+    /** Signs in with Firebase's ID token from Google, creating the account the first time. */
+    @POST("auth/firebase")
+    suspend fun firebase(@Body body: FirebaseLoginRequest): AuthResponse
+
     @GET("auth/me")
     suspend fun me(): UserDto
 

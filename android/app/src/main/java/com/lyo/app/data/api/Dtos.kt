@@ -15,6 +15,8 @@ data class RegisterRequest(
     @SerializedName("last_name") val lastName: String? = null,
 )
 
+data class FirebaseLoginRequest(@SerializedName("id_token") val idToken: String)
+
 data class AuthResponse(
     val user: UserDto?,
     @SerializedName("access_token") val accessToken: String?,
