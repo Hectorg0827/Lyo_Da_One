@@ -269,7 +269,6 @@ struct CommunityFeedPostCard: View {
                 
                 Spacer()
                 
-                // Post type badge
                 if post.postType != .text {
                     Label(post.postType.displayName, systemImage: post.postType.iconName)
                         .font(.caption2)
@@ -278,7 +277,14 @@ struct CommunityFeedPostCard: View {
                         .background(Color.accentColor.opacity(0.1))
                         .cornerRadius(12)
                 }
-                
+
+                Button(action: onBookmark) {
+                    Image(systemName: post.hasBookmarked ? "bookmark.fill" : "bookmark")
+                        .font(.subheadline)
+                        .foregroundColor(post.hasBookmarked ? .accentColor : .secondary)
+                        .frame(width: 34, height: 34)
+                }
+                .accessibilityLabel(post.hasBookmarked ? "Remove saved post" : "Save post")
             }
             
             // Content
@@ -303,14 +309,31 @@ struct CommunityFeedPostCard: View {
                 }
             }
             
-            // Media returned by the shared Community store
-            if !post.mediaURLs.isEmpty {
+            // Keep learning materials at their natural aspect ratio. A cropped
+            // worksheet or diagram is not useful to a student.
+            if let firstPhoto = post.mediaURLs.first, post.mediaURLs.count == 1 {
+                AsyncImage(url: URL(string: firstPhoto)) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFit()
+                    case .failure:
+                        Label("Image unavailable", systemImage: "photo.badge.exclamationmark")
+                            .foregroundColor(.secondary)
+                    default:
+                        ProgressView()
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .accessibilityLabel("Post photo")
+            } else if !post.mediaURLs.isEmpty {
                 TabView {
                     ForEach(post.mediaURLs, id: \.self) { mediaURL in
                         AsyncImage(url: URL(string: mediaURL)) { phase in
                             switch phase {
                             case .success(let image):
-                                image.resizable().scaledToFill()
+                                image.resizable().scaledToFit()
                             case .failure:
                                 Image(systemName: "photo.badge.exclamationmark")
                                     .foregroundColor(.secondary)
@@ -319,60 +342,51 @@ struct CommunityFeedPostCard: View {
                             }
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
                     }
                 }
-                .frame(height: 200)
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: post.mediaURLs.count > 1 ? .automatic : .never))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .frame(height: 320)
+                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .automatic))
             }
-            
+
+            if post.likeCount > 0 || post.commentCount > 0 {
+                HStack {
+                    if post.likeCount > 0 {
+                        Text("\(post.likeCount) likes")
+                    }
+                    Spacer()
+                    if post.commentCount > 0 {
+                        Text("\(post.commentCount) comments")
+                    }
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
+
             Divider()
             
-            // Actions
+            // Familiar post controls: bookmarking stays in the header.
             HStack(spacing: 0) {
-                // Like
                 Button(action: onLike) {
-                    HStack(spacing: 4) {
-                        Image(systemName: post.hasLiked ? "heart.fill" : "heart")
-                            .foregroundColor(post.hasLiked ? .red : .secondary)
-                        Text("\(post.likeCount)")
-                            .foregroundColor(.secondary)
-                    }
-                    .font(.subheadline)
+                    Label("Like", systemImage: post.hasLiked ? "heart.fill" : "heart")
+                        .foregroundColor(post.hasLiked ? .red : .secondary)
+                        .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
-                
-                // Comment
                 NavigationLink(destination: CommentsView(post: post)) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "bubble.left")
-                        Text("\(post.commentCount)")
-                    }
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                
-                // Bookmark
-                Button(action: onBookmark) {
-                    Image(systemName: post.hasBookmarked ? "bookmark.fill" : "bookmark")
-                        .font(.subheadline)
-                        .foregroundColor(post.hasBookmarked ? .accentColor : .secondary)
-                }
-                .frame(maxWidth: .infinity)
-                
-                // Share
-                Button(action: onShare) {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.subheadline)
+                    Label("Comment", systemImage: "bubble.left")
                         .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+                Button(action: onShare) {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .foregroundColor(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .padding(.vertical, 4)
+            .font(.subheadline.weight(.medium))
+            .padding(.vertical, 6)
         }
-        .padding()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
         .background(DesignTokens.Colors.surface)
         .cornerRadius(16)
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)

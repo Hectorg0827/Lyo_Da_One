@@ -487,15 +487,9 @@ private fun ReliablePostCard(
                     modifier = Modifier.padding(top = 10.dp),
                 ) {
                     items(post.mediaUrls.orEmpty()) { mediaUrl ->
-                        AsyncImage(
-                            model = mediaUrl,
-                            contentDescription = "Post image",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillParentMaxWidth()
-                                .height(200.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(SurfaceElevated),
+                        CommunityPostMediaImage(
+                            mediaUrl = mediaUrl,
+                            modifier = Modifier.fillParentMaxWidth(),
                         )
                     }
                 }

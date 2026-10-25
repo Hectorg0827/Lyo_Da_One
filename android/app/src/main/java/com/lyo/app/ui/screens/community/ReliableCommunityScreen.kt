@@ -550,50 +550,53 @@ private fun ReliableCommunityPostCard(
                 Spacer(Modifier.height(10.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(post.mediaUrls.orEmpty()) { mediaUrl ->
-                        AsyncImage(
-                            model = mediaUrl,
-                            contentDescription = "Post image",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillParentMaxWidth()
-                                .height(200.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(SurfaceElevated),
+                        CommunityPostMediaImage(
+                            mediaUrl = mediaUrl,
+                            modifier = Modifier.fillParentMaxWidth(),
                         )
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                IconButton(onClick = onLike, enabled = !likePending) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onLike, enabled = !likePending) {
                     if (likePending) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
                         Icon(
                             if (liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = if (liked) "Unlike" else "Like",
+                            contentDescription = null,
                             tint = if (liked) LyoPink else TextSecondary,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
+                    Spacer(Modifier.width(4.dp))
+                    Text("Like", color = if (liked) LyoPink else TextSecondary)
                 }
-                Text((post.likeCount ?: 0).toString(), color = TextSecondary)
-                IconButton(onClick = onClick) {
-                    Icon(Icons.Outlined.ChatBubbleOutline, "Comments", tint = TextSecondary)
+                TextButton(onClick = onClick) {
+                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Comment", color = TextSecondary)
                 }
-                Text((post.commentCount ?: 0).toString(), color = TextSecondary)
-                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onShare) {
+                    Icon(Icons.Filled.Share, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Share", color = TextSecondary)
+                }
                 IconButton(onClick = onBookmark, enabled = !bookmarkPending) {
                     if (bookmarkPending) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                     } else {
                         Icon(
                             if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                            contentDescription = if (bookmarked) "Remove bookmark" else "Bookmark",
+                            contentDescription = if (bookmarked) "Remove saved post" else "Save post",
                             tint = if (bookmarked) LyoPurple else TextSecondary,
+                            modifier = Modifier.size(18.dp),
                         )
                     }
-                }
-                IconButton(onClick = onShare) {
-                    Icon(Icons.Filled.Share, "Share", tint = TextSecondary)
                 }
             }
         }
