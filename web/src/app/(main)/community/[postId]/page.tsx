@@ -357,7 +357,7 @@ export default function PostDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#050810]">
-      <div className="max-w-4xl mx-auto px-4 py-6">
+      <div className="max-w-[760px] mx-auto px-3 sm:px-4 py-5">
         {/* Back button */}
         <motion.button
           initial={{ opacity: 0, x: -8 }}
@@ -378,9 +378,9 @@ export default function PostDetailPage() {
             className="flex-1 min-w-0"
           >
             {/* Post card */}
-            <article className="glass-card p-5 mb-4">
+            <article className="glass-card overflow-hidden p-4 mb-4">
               {/* Header */}
-              <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex items-start justify-between gap-3 mb-3">
                 <div className="flex items-center gap-3">
                   <div className="relative shrink-0">
                     {post.author.avatar ? (
@@ -419,18 +419,16 @@ export default function PostDetailPage() {
                 {renderContent(post.content)}
               </div>
 
-              {/* Images */}
+              {/* Full-width media: preserve a photo, diagram, or worksheet without cropping it. */}
               {post.images && post.images.length > 0 && (
                 <div className={cn(
-                  'mt-4 gap-3 rounded-xl overflow-hidden grid',
+                  '-mx-4 mt-3 grid gap-1 bg-transparent',
                   post.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'
                 )}>
                   {post.images.map((img, i) => (
-                    <div key={i} className={cn(
-                      'relative bg-white/5 rounded-xl overflow-hidden',
-                      post.images!.length === 1 ? 'max-h-96' : 'h-48'
-                    )}>
-                      <img src={img} alt="" className="w-full h-full object-cover" />
+                    <div key={i} className="min-w-0 overflow-hidden">
+                      <img src={img} alt={`Post image ${i + 1} of ${post.images!.length}`}
+                        className="block h-auto w-full object-contain" />
                     </div>
                   ))}
                 </div>
@@ -450,63 +448,34 @@ export default function PostDetailPage() {
                 </div>
               )}
 
-              {/* Action bar */}
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-white/8 pt-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  {/* Like */}
-                  <motion.button
-                    whileTap={{ scale: 0.85 }}
-                    onClick={handleLike}
-                    disabled={postActionBusy}
-                    className={cn(
-                      'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200',
-                      isLiked
-                        ? 'text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20'
-                        : 'text-white/60 bg-white/5 hover:bg-white/10 border border-white/10'
-                    )}
-                  >
-                    <motion.div animate={isLiked ? { scale: [1, 1.4, 1] } : { scale: 1 }}>
-                      <Heart className={cn('w-4 h-4', isLiked && 'fill-current')} />
-                    </motion.div>
-                    <span>{formatNumber(likeCount)}</span>
+              <div className="mt-4 border-t border-white/10 pt-2">
+                <div className="flex items-center gap-1 text-sm font-medium text-white/65">
+                  <motion.button whileTap={{ scale: 0.96 }} onClick={handleLike} disabled={postActionBusy}
+                    aria-label={isLiked ? 'Unlike post' : 'Like post'}
+                    className={cn('flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 hover:bg-white/5', isLiked && 'text-red-400')}>
+                    <Heart className={cn('h-[18px] w-[18px]', isLiked && 'fill-current')} />
+                    Like{likeCount > 0 ? ` · ${formatNumber(likeCount)}` : ''}
                   </motion.button>
-
-                  {/* Comment count */}
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white/60 bg-white/5 border border-white/10">
-                    <MessageCircle className="w-4 h-4" />
-                    <span>{commentCount}</span>
-                  </div>
-
-                  {/* Share */}
-                  <button
-                    onClick={() => { handleShare().catch((error) => { if ((error as DOMException).name !== 'AbortError') console.error(error); }); }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-white/60 bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
-                  >
-                    <Share2 className="w-4 h-4" />
+                  <a href="#community-comments" className="flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 hover:bg-white/5">
+                    <MessageCircle className="h-[18px] w-[18px]" />
+                    Comment{commentCount > 0 ? ` · ${formatNumber(commentCount)}` : ''}
+                  </a>
+                  <button onClick={() => { handleShare().catch((error) => { if ((error as DOMException).name !== 'AbortError') console.error(error); }); }}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg py-2.5 hover:bg-white/5">
+                    <Share2 className="h-[18px] w-[18px]" />
                     Share
                   </button>
+                  <motion.button whileTap={{ scale: 0.96 }} onClick={handleBookmark} disabled={postActionBusy}
+                    aria-label={isBookmarked ? 'Remove bookmark' : 'Save post'}
+                    className={cn('rounded-lg p-2.5 hover:bg-white/5', isBookmarked ? 'text-lyo-300' : 'text-white/60')}>
+                    {isBookmarked ? <BookmarkCheck className="h-[18px] w-[18px]" /> : <Bookmark className="h-[18px] w-[18px]" />}
+                  </motion.button>
                 </div>
-
-                {/* Bookmark */}
-                <motion.button
-                  whileTap={{ scale: 0.85 }}
-                  onClick={handleBookmark}
-                  disabled={postActionBusy}
-                  className={cn(
-                    'flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border',
-                    isBookmarked
-                      ? 'text-lyo-400 bg-lyo-500/10 border-lyo-500/20'
-                      : 'text-white/60 bg-white/5 border-white/10 hover:bg-white/10'
-                  )}
-                >
-                  {isBookmarked ? <BookmarkCheck className="w-4 h-4 fill-current" /> : <Bookmark className="w-4 h-4" />}
-                  {isBookmarked ? 'Saved' : 'Save'}
-                </motion.button>
               </div>
             </article>
 
             {/* Comment Thread */}
-            <div className="glass-card overflow-hidden">
+            <div id="community-comments" className="glass-card overflow-hidden">
               <CommentThread
                 comments={comments}
                 currentUserId={currentUser?.id}

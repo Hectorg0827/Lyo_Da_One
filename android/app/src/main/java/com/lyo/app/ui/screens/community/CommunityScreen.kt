@@ -423,23 +423,41 @@ private fun CommunityPostCard(
                 Spacer(Modifier.height(10.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(post.mediaUrls.orEmpty()) { mediaUrl ->
-                        AsyncImage(
-                            model = mediaUrl,
-                            contentDescription = "Post image",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillParentMaxWidth().height(200.dp).clip(RoundedCornerShape(12.dp)).background(SurfaceElevated),
+                        CommunityPostMediaImage(
+                            mediaUrl = mediaUrl,
+                            modifier = Modifier.fillParentMaxWidth(),
                         )
                     }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                IconButton(onClick = onLike) { Icon(if (liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, "Like", tint = if (liked) LyoPink else TextSecondary) }
-                Text((post.likeCount ?: 0).toString(), color = TextSecondary)
-                IconButton(onClick = onClick) { Icon(Icons.Outlined.ChatBubbleOutline, "Comments", tint = TextSecondary) }
-                Text((post.commentCount ?: 0).toString(), color = TextSecondary)
-                Spacer(Modifier.weight(1f))
-                IconButton(onClick = onBookmark) { Icon(if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder, "Bookmark", tint = if (bookmarked) LyoPurple else TextSecondary) }
-                IconButton(onClick = onShare) { Icon(Icons.Filled.Share, "Share", tint = TextSecondary) }
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onLike) {
+                    Icon(if (liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder, contentDescription = null, tint = if (liked) LyoPink else TextSecondary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Like", color = if (liked) LyoPink else TextSecondary)
+                }
+                TextButton(onClick = onClick) {
+                    Icon(Icons.Outlined.ChatBubbleOutline, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Comment", color = TextSecondary)
+                }
+                TextButton(onClick = onShare) {
+                    Icon(Icons.Filled.Share, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Share", color = TextSecondary)
+                }
+                IconButton(onClick = onBookmark) {
+                    Icon(
+                        if (bookmarked) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
+                        contentDescription = if (bookmarked) "Remove saved post" else "Save post",
+                        tint = if (bookmarked) LyoPurple else TextSecondary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         }
     }

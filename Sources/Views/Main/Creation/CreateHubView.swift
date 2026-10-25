@@ -22,10 +22,12 @@ struct CreateHubView: View {
     @State private var showMediaPicker = false
     @State private var isLoadingSelection = false
     @State private var isCapturingPhoto = false
+    @State private var showPostCamera = false
+    @State private var postCapturedImage: UIImage?
 
     let onPublish: ((CreateMode) -> Void)?
 
-    init(initialMode: CreateMode = .reel, onPublish: ((CreateMode) -> Void)? = nil) {
+    init(initialMode: CreateMode = .clip, onPublish: ((CreateMode) -> Void)? = nil) {
         let supportedInitialMode: CreateMode = initialMode == .live ? .reel : initialMode
         _viewModel = StateObject(wrappedValue: CreateViewModel(initialMode: supportedInitialMode))
         self.onPublish = onPublish
@@ -74,6 +76,25 @@ struct CreateHubView: View {
             selection: $selectedPickerItem,
             matching: pickerFilter
         )
+        .sheet(isPresented: $showPostCamera) {
+            ImagePicker(sourceType: .camera, selectedImage: $postCapturedImage)
+        }
+        .onChange(of: postCapturedImage) { _, image in
+            guard let image, let data = image.jpegData(compressionQuality: 0.85) else { return }
+            do {
+                let file = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("lyo-post-camera-\(UUID().uuidString).jpg")
+                try data.write(to: file, options: .atomic)
+                if viewModel.attachedFiles.count < 10 {
+                    viewModel.attachedFiles.append(file)
+                } else {
+                    viewModel.state = .error("You can attach up to 10 photos.")
+                }
+            } catch {
+                viewModel.state = .error(error.localizedDescription)
+            }
+            postCapturedImage = nil
+        }
         .onChange(of: selectedPickerItem) { _, item in
             guard let item else { return }
             Task { await loadSelectedMedia(item) }
@@ -179,8 +200,14 @@ struct CreateHubView: View {
             Spacer()
 
             VStack(spacing: 2) {
-                Text("Create")
-                    .font(.headline.weight(.bold))
+                HStack(spacing: 6) {
+                    Image("AppLogo")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 25, height: 25)
+                    Text("Create")
+                        .font(.headline.weight(.bold))
+                }
                 Text(viewModel.selectedMode.description)
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.66))
@@ -421,7 +448,26 @@ struct CreateHubView: View {
 
     private var editorWorkspace: some View {
         ScrollView(showsIndicators: false) {
-            Group {
+            VStack(spacing: 14) {
+                if viewModel.selectedMode == .post || viewModel.selectedMode == .course {
+                    HStack(spacing: 12) {
+                        Image("Mascot_Standing")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 56, height: 64)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Create with Lyo")
+                                .font(.subheadline.weight(.bold))
+                            Text("Turn one great idea into something others can learn from.")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.65))
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(12)
+                    .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+                }
+                Group {
                 switch viewModel.selectedMode {
                 case .post:
                     postEditor
@@ -431,6 +477,7 @@ struct CreateHubView: View {
                     eventEditor
                 default:
                     EmptyView()
+                }
                 }
             }
             .padding(.horizontal, 18)
@@ -455,19 +502,41 @@ struct CreateHubView: View {
                         .padding(10)
                 }
 
-            Button {
-                showMediaPicker = true
-            } label: {
-                Label("Attach photo or video", systemImage: "paperclip")
-                    .frame(maxWidth: .infinity)
+            HStack(spacing: 10) {
+                Button {
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        showPostCamera = true
+                    } else {
+                        viewModel.state = .error("Camera is unavailable on this device.")
+                    }
+                } label: {
+                    Label("Camera", systemImage: "camera.fill").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(CreateSecondaryButtonStyle())
+                .disabled(viewModel.attachedFiles.count >= 10)
+
+                Button {
+                    showMediaPicker = true
+                } label: {
+                    Label("Library", systemImage: "photo.on.rectangle").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(CreateSecondaryButtonStyle())
+                .disabled(viewModel.attachedFiles.count >= 10)
             }
-            .buttonStyle(CreateSecondaryButtonStyle())
 
             if !viewModel.attachedFiles.isEmpty {
                 VStack(spacing: 8) {
                     ForEach(viewModel.attachedFiles, id: \.self) { fileURL in
                         HStack(spacing: 10) {
-                            Image(systemName: fileURL.pathExtension.lowercased() == "mov" || fileURL.pathExtension.lowercased() == "mp4" ? "video.fill" : "photo.fill")
+                            if let preview = UIImage(contentsOfFile: fileURL.path) {
+                                Image(uiImage: preview)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 48, height: 48)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            } else {
+                                Image(systemName: "video.fill")
+                            }
                             Text(fileURL.lastPathComponent)
                                 .font(.caption)
                                 .lineLimit(1)
@@ -484,6 +553,10 @@ struct CreateHubView: View {
                     }
                 }
             }
+
+            Text("Photos and text appear in Community. Add a caption before publishing.")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.6))
 
             publishButton(title: "Publish Post", enabled: !trimmed(viewModel.contentText).isEmpty)
         }
@@ -590,8 +663,10 @@ struct CreateHubView: View {
 
     private var pickerFilter: PHPickerFilter {
         switch viewModel.selectedMode {
-        case .story, .post:
+        case .story:
             return .any(of: [.images, .videos])
+        case .post:
+            return .images
         case .clip, .reel:
             return .videos
         default:
@@ -621,6 +696,9 @@ struct CreateHubView: View {
             try data.write(to: temporaryURL, options: .atomic)
 
             if viewModel.selectedMode == .post {
+                guard viewModel.attachedFiles.count < 10 else {
+                    throw CreateHubMediaError.tooManyAttachments
+                }
                 viewModel.attachedFiles.append(temporaryURL)
             } else if isVideo {
                 viewModel.captureVideo(temporaryURL)
@@ -795,9 +873,13 @@ private extension View {
 
 private enum CreateHubMediaError: LocalizedError {
     case unreadableSelection
+    case tooManyAttachments
 
     var errorDescription: String? {
-        "The selected photo or video could not be loaded."
+        switch self {
+        case .unreadableSelection: return "The selected photo or video could not be loaded."
+        case .tooManyAttachments: return "You can attach up to 10 photos."
+        }
     }
 }
 

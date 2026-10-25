@@ -53,11 +53,11 @@ import {
 import { cn } from '@/lib/utils'
 import type { CommunityPost, LearningNode, LearningNodeCategory, NearbyLearningResponse, User } from '@/types'
 
-type CommunityTab = 'Around Me' | 'My Community' | 'Activity'
+type CommunityTab = 'Posts' | 'Around Me' | 'My Community'
 type LocationState = 'locating' | 'granted' | 'denied' | 'unavailable'
 type Area = SearchArea & { label: string }
 
-const TABS: CommunityTab[] = ['Around Me', 'My Community', 'Activity']
+const TABS: CommunityTab[] = ['Posts', 'Around Me', 'My Community']
 
 // The map key, in marker order. Every category the backend can return.
 const MAP_KEY: LearningNodeCategory[] = [
@@ -165,7 +165,7 @@ function CreateMenu({ onCreateGroup, onCreateTutor, onCreatePost, tab, compact =
       document.removeEventListener('keydown', escape)
     }
   }, [open])
-  if (tab === 'Activity') {
+  if (tab === 'Posts') {
     return (
       <button type="button" onClick={onCreatePost} className="flex h-11 shrink-0 items-center gap-1.5 rounded-2xl bg-lyo-500 px-3.5 text-sm font-semibold text-white hover:bg-lyo-400">
         <Plus className="h-4 w-4" aria-hidden="true" />
@@ -257,7 +257,7 @@ function MapKey() {
 export default function CommunityPage() {
   const router = useRouter()
   const isDesktop = useIsDesktop()
-  const [tab, setTab] = useState<CommunityTab>('Around Me')
+  const [tab, setTab] = useState<CommunityTab>('Posts')
 
   // ── Where we are looking ───────────────────────────────────────────────
   const [locationState, setLocationState] = useState<LocationState>('locating')
@@ -315,12 +315,20 @@ export default function CommunityPage() {
 
   useEffect(() => {
     api.community.track('community_opened', { surface: window.innerWidth >= 1024 ? 'desktop' : 'mobile' })
+  }, [])
+
+  const locationRequested = useRef(false)
+  useEffect(() => {
+    // Reading posts never requires location permission. Ask only after the
+    // learner explicitly opens the map or their nearby Community.
+    if (tab === 'Posts' || locationRequested.current) return
+    locationRequested.current = true
     locate(false)
     // Never hold the map hostage to a permission prompt: show the fallback
     // area after a moment and move when (if) a location arrives.
     const timer = setTimeout(() => setReady(true), 1500)
     return () => clearTimeout(timer)
-  }, [locate])
+  }, [locate, tab])
 
   // ── What we are looking for ────────────────────────────────────────────
   const [queryText, setQueryText] = useState('')
@@ -339,11 +347,11 @@ export default function CommunityPage() {
   const requestRef = useRef<AbortController | null>(null)
 
   // Account state waits for the location decision so it is read once, and
-  // the Activity feed loads only when someone opens that tab.
+  // The Posts feed is the Community landing experience.
   const myCommunity = useApi(ready ? () => api.community.me(userLocation) : null, [ready, userLocation?.latitude, userLocation?.longitude])
-  const [feedWanted, setFeedWanted] = useState(false)
+  const [feedWanted, setFeedWanted] = useState(true)
   useEffect(() => {
-    if (tab === 'Activity') setFeedWanted(true)
+    if (tab === 'Posts') setFeedWanted(true)
   }, [tab])
   const feed = useApi(feedWanted ? () => api.community.posts(1, 20) : null, [feedWanted])
   const refreshAccount = myCommunity.refetch
@@ -541,7 +549,12 @@ export default function CommunityPage() {
   const [showCreatePost, setShowCreatePost] = useState(false)
   const [createItem, setCreateItem] = useState<'group' | 'tutor' | null>(null)
   const createPost = async (data: PostFormData) => {
-    await api.community.createPost({ content: data.content, tags: data.tags, post_type: data.type })
+    await api.community.createPost({
+      content: data.content,
+      tags: data.tags,
+      media_urls: data.mediaUrls,
+      post_type: data.type === 'text' && data.mediaUrls.length ? 'image' : data.type,
+    })
     feed.refetch()
   }
   const posts = (feed.data?.items ?? []).map(mapPost)
@@ -662,13 +675,19 @@ export default function CommunityPage() {
             />
           ) : (
             <section className="mx-auto max-w-3xl space-y-4">
+              <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-blue-500/15 to-cyan-500/5 p-5 sm:p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">LYO Community</p>
+                <h2 className="mt-1 font-rounded text-2xl font-bold text-white">Learn together. Share what you know.</h2>
+                <p className="mt-1 text-sm text-white/60">Post an idea, ask a question, or share photos from your learning journey.</p>
+                <button type="button" onClick={() => setShowCreatePost(true)} className="mt-4 flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 text-sm font-bold text-white"><Plus className="h-4 w-4" aria-hidden="true" /> Create a post</button>
+              </div>
               {!feed.data && !feed.error && <ResultSkeleton rows={3} />}
               {feed.error && (
                 <StateMessage icon={MessageCircle} title="We couldn't load Community activity." body="Please try again in a moment." tone="warning" action={{ label: 'Try again', onClick: feed.refetch }} />
               )}
               {feed.data && !feed.isLoading && !feed.error && !posts.length && (
                 <button type="button" onClick={() => setShowCreatePost(true)} className="w-full rounded-2xl border border-dashed border-white/15 px-6 py-16 text-center text-sm text-white/55 hover:border-lyo-500/50 hover:text-white">
-                  No activity yet. Share the first study tip or question.
+                  No posts yet. Share the first study tip or question.
                 </button>
               )}
               {posts.map((post) => <PostCard key={post.id} post={post} onClick={() => router.push(`/community/${post.id}`)} />)}

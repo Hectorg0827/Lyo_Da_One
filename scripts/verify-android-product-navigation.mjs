@@ -59,7 +59,9 @@ requireText(nav, 'composable(Routes.CREATE_POST) { CreatePostScreen(nav) }', 'An
 requireText(nav, 'composable(Routes.CREATE_GROUP)', 'Android group creator route');
 requireText(nav, 'composable(Routes.CREATE_EVENT)', 'Android event creator route');
 
-requireText(createHub, 'Every visible action is connected to a real service.', 'Android Create honesty');
+requireText(createHub, 'What will you create?', 'Android branded Create hub');
+requireText(createHub, 'Camera or gallery', 'Android Clip entry explains both capture options');
+requireText(createHub, 'Text and photos', 'Android Post entry explains photo creation');
 for (const route of [
   'Routes.CREATE_CLIP',
   'Routes.CREATE_POST',
@@ -76,7 +78,11 @@ rejectText(createHub, 'Coming soon', 'Android Create honesty');
 requireText(createClip, 'ApiClient.api.uploadMedia', 'Android clip upload');
 requireText(createClip, 'ApiClient.api.createClip', 'Android clip publish');
 requireText(createClip, 'ActivityResultContracts.GetContent()', 'Android system media picker');
+requireText(createClip, 'ActivityResultContracts.CaptureVideo()', 'Android device camera capture');
 requireText(createPost, 'ApiClient.api.createCommunityPost', 'Android community post publish');
+requireText(createPost, 'ActivityResultContracts.TakePicture()', 'Android post camera');
+requireText(createPost, 'ActivityResultContracts.GetMultipleContents()', 'Android multi-photo library');
+requireText(createPost, 'ApiClient.api.uploadMedia', 'Android real post media upload');
 requireText(createCommunity, 'ApiClient.api.createStudyGroup', 'Android study group publish');
 requireText(createCommunity, 'vm.createEvent(', 'Android event publish');
 requireText(communityViewModel, 'api.createCommunityEvent(request)', 'Android event publish request');

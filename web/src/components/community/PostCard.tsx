@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -11,6 +11,8 @@ import {
   HelpCircle,
   FileText,
   Lightbulb,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { cn, formatTimeAgo, formatNumber } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -36,6 +38,8 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(post.isBookmarked ?? false);
   const [showShareToast, setShowShareToast] = useState(false);
   const [actionBusy, setActionBusy] = useState<'like' | 'bookmark' | null>(null);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     setIsLiked(post.isLiked ?? false);
@@ -105,13 +109,13 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
       transition={{ duration: 0.3, ease: 'easeOut' }}
       onClick={onClick}
       className={cn(
-        'glass-card p-4 cursor-pointer hover:border-white/15 transition-all duration-200 hover:shadow-lg hover:shadow-lyo-500/5',
+        'glass-card !p-0 overflow-hidden cursor-pointer hover:border-white/15 transition-colors duration-200',
         className
       )}
     >
       {/* Header — iOS CommunityFeedPostCard: 44px letter avatar in an
           indigo tint, 15pt name over a 12pt relative timestamp. */}
-      <div className="flex items-start justify-between gap-3 mb-3">
+      <div className="flex items-start justify-between gap-3 px-4 pt-4 pb-3">
         <div className="flex items-center gap-3">
           {/* Avatar */}
           <div className="relative shrink-0">
@@ -140,63 +144,60 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
           </div>
         </div>
 
-        {/* Post type badge */}
-        {post.type !== 'post' && (
-          <span
-            className="flex shrink-0 items-center gap-1 rounded-xl px-2 py-1 text-[11px] font-medium"
-            style={{ backgroundColor: 'rgba(99,102,241,0.1)', color: '#a78bfa' }}
-          >
-            <TypeIcon className="h-3 w-3" />
-            {typeConfig.label}
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {post.type !== 'post' && (
+            <span className="flex shrink-0 items-center gap-1 rounded-lg bg-lyo-500/10 px-2 py-1 text-[11px] font-medium text-lyo-300">
+              <TypeIcon className="h-3 w-3" />
+              {typeConfig.label}
+            </span>
+          )}
+          <button type="button" onClick={handleBookmark} disabled={actionBusy === 'bookmark'}
+            aria-label={isBookmarked ? 'Remove saved post' : 'Save post'}
+            className={cn('rounded-full p-2 transition-colors hover:bg-white/10', isBookmarked ? 'text-lyo-300' : 'text-white/55')}>
+            {isBookmarked ? <BookmarkCheck className="h-[18px] w-[18px]" /> : <Bookmark className="h-[18px] w-[18px]" />}
+          </button>
+        </div>
       </div>
 
       {/* Title */}
       {post.title && (
-        <h3 className="text-base font-semibold text-white mb-2 leading-snug">
+        <h3 className="px-4 text-base font-semibold text-white mb-2 leading-snug">
           {post.title}
         </h3>
       )}
 
       {/* Content */}
-      <div className="text-sm text-white/70 leading-relaxed">
+      <div className="px-4 text-[15px] text-white/80 leading-relaxed">
         <p className="whitespace-pre-wrap break-words">{post.content}</p>
       </div>
 
-      {/* Images */}
+      {/* Swipeable photo carousel shared by mouse, touch and keyboard users. */}
       {post.images && post.images.length > 0 && (
         <div
-          className={cn(
-            'mt-3 gap-2 rounded-xl overflow-hidden grid',
-            post.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'
-          )}
+          className="relative mt-3 overflow-hidden bg-transparent"
+          role="group"
+          aria-label={`${post.images.length} post photo${post.images.length > 1 ? 's' : ''}`}
+          onClick={(event) => event.stopPropagation()}
+          onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX ?? null; }}
+          onTouchEnd={(event) => {
+            if (touchStartX.current === null || post.images!.length < 2) return;
+            const delta = (event.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current;
+            if (Math.abs(delta) > 45) setPhotoIndex((current) => Math.max(0, Math.min(post.images!.length - 1, current + (delta < 0 ? 1 : -1))));
+            touchStartX.current = null;
+          }}
         >
-          {post.images.slice(0, 4).map((img, i) => (
-            <div
-              key={i}
-              className={cn(
-                'relative bg-white/5 rounded-lg overflow-hidden',
-                post.images!.length === 1 ? 'h-48' : 'h-32',
-                post.images!.length === 3 && i === 0 ? 'col-span-2' : ''
-              )}
-            >
-              <img src={img} alt="" className="w-full h-full object-cover" />
-              {post.images!.length > 4 && i === 3 && (
-                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">
-                    +{post.images!.length - 4}
-                  </span>
-                </div>
-              )}
-            </div>
-          ))}
+          <img src={post.images[Math.min(photoIndex, post.images.length - 1)]} alt={`Post photo ${Math.min(photoIndex + 1, post.images.length)} of ${post.images.length}`} className="block h-auto w-full object-contain" />
+          {post.images.length > 1 && <>
+            <button type="button" onClick={() => setPhotoIndex((value) => Math.max(0, value - 1))} disabled={photoIndex === 0} aria-label="Previous photo" className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white disabled:opacity-30"><ChevronLeft className="h-5 w-5" /></button>
+            <button type="button" onClick={() => setPhotoIndex((value) => Math.min(post.images!.length - 1, value + 1))} disabled={photoIndex === post.images.length - 1} aria-label="Next photo" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
+            <span className="absolute right-3 top-3 rounded-full bg-black/65 px-2.5 py-1 text-xs text-white">{photoIndex + 1}/{post.images.length}</span>
+          </>}
         </div>
       )}
 
       {/* Tags */}
       {post.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mt-3">
+        <div className="flex flex-wrap gap-1.5 mt-3 px-4">
           {post.tags.map((tag) => (
             <span
               key={tag}
@@ -209,81 +210,37 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
         </div>
       )}
 
-      {/* Action bar — iOS uses four equal-width cells at 15pt. Only the
-          glyph takes the active tint; counts stay secondary throughout. */}
-      <div className="flex items-stretch mt-4 pt-1 border-t border-white/[0.06] text-[15px]">
-        {/* Like */}
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={handleLike}
-          disabled={actionBusy === 'like'}
-          aria-label={isLiked ? 'Unlike post' : 'Like post'}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-white/50 hover:bg-white/5 transition-colors duration-200"
-        >
-          <motion.span
-            animate={isLiked ? { scale: [1, 1.4, 1] } : { scale: 1 }}
-            transition={{ duration: 0.3 }}
-            className="flex"
-          >
-            <Heart
-              className={cn('w-[18px] h-[18px]', isLiked && 'fill-current text-red-500')}
-            />
-          </motion.span>
-          <span>{formatNumber(likeCount)}</span>
-        </motion.button>
-
-        {/* Comment */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick?.();
-          }}
-          aria-label="View comments"
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-white/50 hover:bg-white/5 transition-colors duration-200"
-        >
-          <MessageCircle className="w-[18px] h-[18px]" />
-          <span>{formatNumber(post.comments)}</span>
-        </button>
-
-        {/* Bookmark — no count on iOS */}
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={handleBookmark}
-          disabled={actionBusy === 'bookmark'}
-          aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark post'}
-          className={cn(
-            'flex-1 flex items-center justify-center py-2 rounded-lg hover:bg-white/5 transition-colors duration-200',
-            isBookmarked ? 'text-lyo-500' : 'text-white/50'
-          )}
-        >
-          {isBookmarked ? (
-            <BookmarkCheck className="w-[18px] h-[18px] fill-current" />
-          ) : (
-            <Bookmark className="w-[18px] h-[18px]" />
-          )}
-        </motion.button>
-
-        {/* Share — no count on iOS */}
-        <div className="flex-1 relative flex">
-          <button
-            onClick={handleShare}
-            aria-label="Share post"
-            className="flex-1 flex items-center justify-center py-2 rounded-lg text-white/50 hover:bg-white/5 transition-colors duration-200"
-          >
-            <Share2 className="w-[18px] h-[18px]" />
+      <div className="mt-3 border-t border-white/10 px-3 pb-2 pt-1">
+        <div className="flex items-center gap-1 text-[13px] font-medium text-white/65">
+          <motion.button whileTap={{ scale: 0.96 }} type="button" onClick={handleLike}
+            disabled={actionBusy === 'like'}
+            aria-label={isLiked ? 'Unlike post' : 'Like post'}
+            className={cn('flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg py-2.5 transition-colors hover:bg-white/5', isLiked && 'text-red-400')}>
+            <Heart className={cn('h-[18px] w-[18px]', isLiked && 'fill-current')} />
+            <span>Like{likeCount > 0 ? ` · ${formatNumber(likeCount)}` : ''}</span>
+          </motion.button>
+          <button type="button" onClick={(event) => { event.stopPropagation(); onClick?.(); }}
+            className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-lg py-2.5 transition-colors hover:bg-white/5"
+            aria-label="Open comments">
+            <MessageCircle className="h-[18px] w-[18px]" />
+            <span>Comment{post.comments > 0 ? ` · ${formatNumber(post.comments)}` : ''}</span>
           </button>
-          <AnimatePresence>
-            {showShareToast && (
-              <motion.div
-                initial={{ opacity: 0, y: 4, scale: 0.9 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-white/10 backdrop-blur-md rounded-lg text-xs text-white whitespace-nowrap border border-white/10 pointer-events-none"
-              >
-                Link copied!
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div className="relative flex min-w-0 flex-1">
+            <button type="button" onClick={handleShare}
+              className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 transition-colors hover:bg-white/5"
+              aria-label="Share post">
+              <Share2 className="h-[18px] w-[18px]" />
+              <span>Share</span>
+            </button>
+            <AnimatePresence>
+              {showShareToast && (
+                <motion.span initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 rounded-lg border border-white/10 bg-[#1b1b36] px-3 py-1.5 text-xs text-white whitespace-nowrap">
+                  Link copied!
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
     </motion.article>
