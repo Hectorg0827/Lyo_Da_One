@@ -48,12 +48,13 @@ function load(filename) {
   } }).outputText, filename);
   return mod.exports;
 }
-async function mount(t, route = '/chat', communityEnabled = false, discoverEnabled = true) {
+async function mount(t, route = '/chat', communityEnabled = false, discoverEnabled = true, previewShowDiscover = false) {
   pathname = route;
   // These are build-time flags: load each configuration as a fresh module.
   mocks['@/lib/launch-features'] = {
     COMMUNITY_LAUNCH_ENABLED: communityEnabled,
     DISCOVER_LAUNCH_ENABLED: discoverEnabled,
+    PREVIEW_SHOW_GATED_DISCOVER_TAB: previewShowDiscover,
   };
   modules.clear();
   const { Sidebar } = load(path.join(webRoot, 'src/components/layout/Sidebar.tsx'));
@@ -120,6 +121,18 @@ test('both navs leave Discover out while its launch flag is off', async t => {
   const withCommunity = await mount(t, '/chat', true, false);
   assert.equal(withCommunity.container.querySelectorAll('a[href="/discover"]').length, 0);
   assert.equal(withCommunity.container.querySelectorAll('a[href="/community"]').length, 2);
+});
+
+test('isolated preview shows five mobile positions but retains Discover playback containment', async t => {
+  const view = await mount(t, '/chat', true, false, true);
+  const bar = view.container.querySelector('nav[aria-label="Mobile navigation"]');
+  const [left, right] = [...bar.firstElementChild.children].filter(el => el.tagName === 'DIV');
+  assert.deepEqual([...left.querySelectorAll('a')].map(a => a.getAttribute('href')), ['/', '/discover']);
+  assert.deepEqual([...right.querySelectorAll('a')].map(a => a.getAttribute('href')), ['/community']);
+  assert.ok(right.querySelector('button[aria-label="Create"]'));
+  assert.equal(view.container.querySelectorAll('a[href="/discover"]').length, 2, 'desktop and mobile show Discover');
+  assert.equal(view.container.querySelectorAll('a[href="/community"]').length, 2, 'desktop and mobile show Community');
+  assert.equal(mocks['@/lib/launch-features'].DISCOVER_LAUNCH_ENABLED, false, 'the reel itself stays gated');
 });
 
 test('entering Classroom removes both navs and releases the rail keyboard shortcut', async t => {
