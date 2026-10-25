@@ -88,6 +88,9 @@ jobs:
       - name: Verify Discover Report and Block parity
         run: node scripts/verify-discover-safety-parity.mjs
 
+      - name: Verify Continue with Google on web, iOS and Android
+        run: node scripts/verify-google-sign-in.mjs
+
       - name: Verify Android Notifications reliability
         run: node scripts/verify-android-notifications-reliability.mjs
 
