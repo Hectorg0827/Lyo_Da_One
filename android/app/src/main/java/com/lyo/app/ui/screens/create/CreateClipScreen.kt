@@ -4,6 +4,7 @@ import android.net.Uri
 import android.widget.VideoView
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -33,7 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +62,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.ByteArrayOutputStream
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,21 +78,61 @@ fun CreateClipScreen(nav: NavHostController, topic: String? = null) {
     var subject by remember { mutableStateOf(ClipPrompt.draftSubject(topic) ?: "") }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var pickerOpened by remember { mutableStateOf(false) }
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var pendingCameraFile by remember { mutableStateOf<File?>(null) }
+    var recordedCameraFile by remember { mutableStateOf<File?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
+            recordedCameraFile?.delete()
+            recordedCameraFile = null
             videoUri = uri
             error = null
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (!pickerOpened) {
-            pickerOpened = true
-            picker.launch("video/*")
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { saved ->
+        val file = pendingCameraFile
+        val uri = pendingCameraUri
+        if (saved && file != null && uri != null && file.length() > 0L) {
+            recordedCameraFile?.delete()
+            recordedCameraFile = file
+            videoUri = uri
+            error = null
+        } else {
+            file?.delete()
+            if (saved) error = "Camera did not produce a readable video. Please try again."
+        }
+        pendingCameraFile = null
+        pendingCameraUri = null
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            // Temporary captures never outlive the editor. Selected gallery
+            // videos belong to the user and are never deleted.
+            pendingCameraFile?.delete()
+            recordedCameraFile?.delete()
+        }
+    }
+
+    fun recordWithCamera() {
+        if (submitting) return
+        var file: File? = null
+        try {
+            val directory = File(context.cacheDir, "camera_clips").apply { mkdirs() }
+            file = File.createTempFile("lyo_clip_", ".mp4", directory)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            pendingCameraFile = file
+            pendingCameraUri = uri
+            camera.launch(uri)
+        } catch (_: Exception) {
+            file?.delete()
+            pendingCameraFile = null
+            pendingCameraUri = null
+            error = "No compatible camera app could be opened. You can upload a video instead."
         }
     }
 
@@ -110,7 +154,21 @@ fun CreateClipScreen(nav: NavHostController, topic: String? = null) {
             runCatching {
                 val contentType = context.contentResolver.getType(uri) ?: "video/mp4"
                 val bytes = withContext(Dispatchers.IO) {
-                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        val output = ByteArrayOutputStream()
+                        val chunk = ByteArray(8192)
+                        var total = 0L
+                        while (true) {
+                            val count = input.read(chunk)
+                            if (count < 0) break
+                            total += count
+                            if (total > 200L * 1024 * 1024) {
+                                throw IllegalArgumentException("Videos must be 200 MB or smaller.")
+                            }
+                            output.write(chunk, 0, count)
+                        }
+                        output.toByteArray()
+                    }
                 } ?: throw IllegalStateException("The selected video could not be read.")
 
                 val extension = when (contentType) {
@@ -221,7 +279,7 @@ fun CreateClipScreen(nav: NavHostController, topic: String? = null) {
                         color = TextPrimary,
                     )
                     Text(
-                        text = "Android will open your system video picker. Camera recording will remain separate until a production CameraX workflow is implemented.",
+                        text = "Record a teaching clip with your camera or upload an existing video.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 6.dp),
@@ -229,14 +287,25 @@ fun CreateClipScreen(nav: NavHostController, topic: String? = null) {
                 }
             }
 
-            OutlinedButton(
-                onClick = { picker.launch("video/*") },
-                enabled = !submitting,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text(if (videoUri == null) "Choose video" else "Choose another video")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = ::recordWithCamera,
+                    enabled = !submitting,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Camera")
+                }
+                OutlinedButton(
+                    onClick = { picker.launch("video/*") },
+                    enabled = !submitting,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Upload")
+                }
             }
 
             OutlinedTextField(
