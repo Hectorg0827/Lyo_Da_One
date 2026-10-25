@@ -71,7 +71,7 @@ function GhostTab({
       href={href}
       aria-label={label}
       aria-current={isActive ? 'page' : undefined}
-      className="flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-200"
+      className="flex flex-col items-center justify-center gap-1 px-2 sm:px-4 py-2 transition-all duration-200"
     >
       <Icon
         className={cn(
@@ -115,8 +115,8 @@ export function MobileNav() {
       )}
       aria-label="Mobile navigation"
     >
-      <div className="flex items-center justify-between h-20 px-6">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between h-20 px-2 sm:px-6">
+        <div className="flex items-center gap-1 sm:gap-2">
           {leftItems.map((item) => (
             <GhostTab key={item.href} {...item} isActive={isItemActive(item.href)} />
           ))}
@@ -151,7 +151,7 @@ export function MobileNav() {
           </div>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           {rightItems.map((item) => (
             <GhostTab key={item.href} {...item} isActive={isItemActive(item.href)} />
           ))}
@@ -160,7 +160,7 @@ export function MobileNav() {
           <button
             onClick={() => setCreateOpen(true)}
             aria-label={NAV.create.label}
-            className="flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-200"
+            className="flex flex-col items-center justify-center gap-1 px-2 sm:px-4 py-2 transition-all duration-200"
           >
             <CreateIcon
               className={cn(
