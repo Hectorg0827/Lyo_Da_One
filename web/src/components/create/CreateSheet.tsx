@@ -93,7 +93,7 @@ export default function CreateSheet({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>('course');
+  const [mode, setMode] = useState<Mode>(COMMUNITY_LAUNCH_ENABLED ? 'post' : 'course');
   const visibleModes = MODES.filter(item => item.id === 'course' || (item.id === 'clip' && DISCOVER_LAUNCH_ENABLED) || ((item.id === 'post' || item.id === 'event') && COMMUNITY_LAUNCH_ENABLED));
   const [composingClip, setComposingClip] = useState(false);
   const [busy, setBusy] = useState(false);
