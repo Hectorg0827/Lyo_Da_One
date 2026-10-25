@@ -25,7 +25,7 @@ for (const [source, expected, label] of [
   [navigation, 'composable(Routes.EDIT_EVENT)', 'host edit route'],
   [community, 'val labels = listOf("Posts", "Around Me", "My Community")', 'shared tabs'],
   [community, 'var selectedTab by remember { mutableIntStateOf(0) }', 'Posts default'],
-  [community, 'CommunityPostsTab(posts = vm.posts, nav = nav)', 'Community post feed'],
+  [community, 'CommunityPostsTab(posts = vm.posts, loading = vm.postsLoading, error = vm.postsError, onRetry = { vm.loadPosts() }, nav = nav)', 'Community post feed'],
   [community, 'if (selectedTab == 1 && !vm.locationRequested)', 'location request deferred until map'],
   [community, 'AsyncImage(model = url', 'post photos displayed'],
   [community, 'val vm: CommunityMapViewModel = viewModel()', 'screen state survives opening a detail page'],
