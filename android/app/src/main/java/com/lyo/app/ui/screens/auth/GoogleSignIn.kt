@@ -93,6 +93,7 @@ internal fun GoogleSignInSection(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth(),
         ) {
             HorizontalDivider(modifier = Modifier.weight(1f), color = BorderColor)
             Text("or", color = TextSecondary, style = MaterialTheme.typography.bodySmall)

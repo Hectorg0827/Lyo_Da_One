@@ -36,6 +36,10 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+        // firebase-auth (Continue with Google) is compiled by a newer Kotlin than
+        // this project's 2.0.20, and the compiler refuses its metadata. Only its
+        // Java API is used; drop this once the project's Kotlin is 2.2 or newer.
+        freeCompilerArgs += "-Xskip-metadata-version-check"
     }
     buildFeatures {
         compose = true
