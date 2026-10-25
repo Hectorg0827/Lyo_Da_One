@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/auth-store';
-import { COMMUNITY_LAUNCH_ENABLED, DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
+import { COMMUNITY_LAUNCH_ENABLED, DISCOVER_LAUNCH_ENABLED, PREVIEW_SHOW_GATED_DISCOVER_TAB } from '@/lib/launch-features';
 import CreateSheet from '@/components/create/CreateSheet';
 import {
   NAV,
@@ -143,7 +143,7 @@ export function Sidebar() {
           {SIDEBAR_ITEMS.filter(
             (item) =>
               (item.key !== 'community' || COMMUNITY_LAUNCH_ENABLED) &&
-              (item.key !== 'discover' || DISCOVER_LAUNCH_ENABLED),
+              (item.key !== 'discover' || DISCOVER_LAUNCH_ENABLED || PREVIEW_SHOW_GATED_DISCOVER_TAB),
           ).map((item) => {
             const active = item.action === 'create' ? false : isActiveHref(item.href, pathname);
             const Icon = NAV_ICONS[item.key as keyof typeof NAV_ICONS];
