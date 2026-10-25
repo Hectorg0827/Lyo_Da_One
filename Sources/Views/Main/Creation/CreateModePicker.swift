@@ -5,7 +5,9 @@ struct CreateModePicker: View {
     let onModeSelected: (CreateMode) -> Void
 
     private var supportedModes: [CreateMode] {
-        CreateMode.allCases.filter { $0 != .live }
+        // Clip and Reel were aliases; showing both made + Create feel broken.
+        // Keep supported publishing modes, with camera-first controls.
+        [.clip, .post, .course, .event, .story]
     }
 
     var body: some View {
@@ -15,7 +17,7 @@ struct CreateModePicker: View {
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(height: 120)
+            .frame(height: 108)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -32,10 +34,10 @@ struct CreateModePicker: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 24)
+                .padding(.bottom, 20)
             }
         }
-        .frame(height: 120)
+        .frame(height: 108)
     }
 }
 
@@ -47,14 +49,14 @@ struct ModeButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Text(mode.iconForMode)
-                    .font(.system(size: 14))
+                Image(systemName: mode.icon)
+                    .font(.system(size: 14, weight: .semibold))
 
                 Text(mode.rawValue)
                     .font(.system(size: 13, weight: .bold))
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.vertical, 12)
             .background(
                 Group {
                     if isSelected {
@@ -73,6 +75,8 @@ struct ModeButton: View {
             .shadow(color: isSelected ? Color(hex: "3B82F6").opacity(0.5) : .clear, radius: 10)
             .scaleEffect(isSelected ? 1.05 : 1.0)
         }
+        .accessibilityLabel("Create \(mode.displayName)")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

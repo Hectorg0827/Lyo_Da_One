@@ -100,6 +100,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -126,11 +127,12 @@ import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.SurfaceElevated
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
+import coil.compose.AsyncImage
 import java.nio.charset.StandardCharsets
 
 /**
- * Community: Learning Around Me (map-first), My Community (account state),
- * and Activity. Every account-owned value comes from the backend through
+ * Community: Posts-first, Learning Around Me (map), and My Community.
+ * Every account-owned value comes from the backend through
  * [CommunityMapViewModel]; nothing here is stored on the device.
  */
 @Composable
@@ -190,17 +192,16 @@ fun LearningAroundCommunityScreen(nav: NavHostController) {
 
     LaunchedEffect(Unit) {
         vm.start()
-        if (!vm.locationRequested) {
-            vm.locationRequested = true
-            requestLocation(explicit = false)
-        } else {
-            // Back from a detail page: pick up changes made there or elsewhere.
-            vm.refreshAccount()
-            vm.loadNearby()
-        }
+        vm.refreshAccount()
     }
     LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
-    LaunchedEffect(selectedTab) { if (selectedTab == 2) vm.loadPosts() }
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 1 && !vm.locationRequested) {
+            vm.locationRequested = true
+            requestLocation(explicit = false)
+        }
+        if (selectedTab == 0) vm.loadPosts()
+    }
 
     Box(
         modifier = Modifier
@@ -222,7 +223,7 @@ fun LearningAroundCommunityScreen(nav: NavHostController) {
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.semantics { heading() },
                     )
-                    Text("Learn from the places and people around you", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    Text("Share ideas and learn from one another", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                 }
                 Box {
                     IconButton(onClick = { createMenuExpanded = true }) {
@@ -232,7 +233,7 @@ fun LearningAroundCommunityScreen(nav: NavHostController) {
                         DropdownMenuItem(text = { Text("Learning event") }, onClick = { createMenuExpanded = false; nav.navigate(Routes.CREATE_EVENT) })
                         DropdownMenuItem(text = { Text("Study group") }, onClick = { createMenuExpanded = false; nav.navigate(Routes.CREATE_GROUP) })
                         DropdownMenuItem(text = { Text("Offer tutoring") }, onClick = { createMenuExpanded = false; nav.navigate(Routes.CREATE_TUTOR) })
-                        DropdownMenuItem(text = { Text("Activity post") }, onClick = { createMenuExpanded = false; nav.navigate(Routes.CREATE_POST) })
+                        DropdownMenuItem(text = { Text("Post photos or thoughts") }, onClick = { createMenuExpanded = false; nav.navigate(Routes.CREATE_POST) })
                     }
                 }
             }
@@ -240,7 +241,8 @@ fun LearningAroundCommunityScreen(nav: NavHostController) {
             CommunityTabs(selectedTab = selectedTab, onSelect = { selectedTab = it })
 
             when (selectedTab) {
-                0 -> AroundMeTab(
+                0 -> CommunityPostsTab(posts = vm.posts, loading = vm.postsLoading, error = vm.postsError, onRetry = { vm.loadPosts() }, nav = nav)
+                1 -> AroundMeTab(
                     vm = vm,
                     openDetail = { node -> nav.navigate(Routes.communityNode(node.kind, node.id)) },
                     onLocate = { if (!vm.centerOnUser()) requestLocation(explicit = true) },
@@ -253,8 +255,7 @@ fun LearningAroundCommunityScreen(nav: NavHostController) {
                     },
                     onCreateEvent = { nav.navigate(Routes.CREATE_EVENT) },
                 )
-                1 -> MyCommunityTab(vm = vm, nav = nav)
-                else -> CommunityActivityTab(posts = vm.posts, nav = nav)
+                else -> MyCommunityTab(vm = vm, nav = nav)
             }
         }
         SnackbarHost(
@@ -268,7 +269,7 @@ fun LearningAroundCommunityScreen(nav: NavHostController) {
 
 @Composable
 private fun CommunityTabs(selectedTab: Int, onSelect: (Int) -> Unit) {
-    val labels = listOf("Around Me", "My Community", "Activity")
+    val labels = listOf("Posts", "Around Me", "My Community")
     Row(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier
@@ -1044,8 +1045,28 @@ private fun androidx.compose.foundation.lazy.LazyListScope.nodeSection(
 }
 
 @Composable
-private fun CommunityActivityTab(posts: List<CommunityPostDto>, nav: NavHostController) {
+private fun CommunityPostsTab(posts: List<CommunityPostDto>, loading: Boolean, error: String?, onRetry: () -> Unit, nav: NavHostController) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(14.dp), modifier = Modifier.fillMaxSize()) {
+        item {
+            Surface(color = SurfaceElevated, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth()) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(18.dp)) {
+                    Text("Learn together. Share what you know.", style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.Bold)
+                    Text("Post a photo, ask a question or share a study tip with your Community.", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                    Button(onClick = { nav.navigate(Routes.CREATE_POST) }) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Create post")
+                    }
+                }
+            }
+        }
+        if (loading && posts.isEmpty()) item { CircularProgressIndicator(modifier = Modifier.padding(16.dp), color = LyoPurple) }
+        if (error != null) item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(error, color = TextSecondary)
+                OutlinedButton(onClick = onRetry) { Text("Try again") }
+            }
+        }
         items(posts, key = { it.idStr }) { post ->
             Surface(
                 color = SurfaceElevated,
@@ -1057,11 +1078,18 @@ private fun CommunityActivityTab(posts: List<CommunityPostDto>, nav: NavHostCont
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(14.dp)) {
                     Text(post.authorName ?: "Member", color = TextPrimary, fontWeight = FontWeight.SemiBold)
                     Text(post.content.orEmpty(), color = TextSecondary, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                    if (!post.mediaUrls.isNullOrEmpty()) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(post.mediaUrls) { url ->
+                                AsyncImage(model = url, contentDescription = "Community post photo", contentScale = ContentScale.Crop, modifier = Modifier.size(220.dp).background(Color.Black, RoundedCornerShape(14.dp)))
+                            }
+                        }
+                    }
                     Text("${post.likeCount ?: 0} likes · ${post.commentCount ?: 0} comments", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
-        if (posts.isEmpty()) item { EmptyCommunityText("No Community activity yet.") }
+        if (posts.isEmpty() && !loading && error == null) item { EmptyCommunityText("No posts yet. Start the conversation!") }
     }
 }
 

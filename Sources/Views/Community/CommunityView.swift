@@ -14,15 +14,15 @@ struct CommunityCreateContext: Identifiable {
 
 struct CommunityView: View {
     @StateObject private var viewModel = CommunityViewModel()
-    @State private var selectedTab: CommunityTab = .aroundMe
+    @State private var selectedTab: CommunityTab = .posts
     @State private var path: [CommunityNodeRoute] = []
     @State private var createContext: CommunityCreateContext?
     @Environment(\.scenePhase) private var scenePhase
 
     enum CommunityTab: String, CaseIterable {
+        case posts = "Posts"
         case aroundMe = "Around Me"
         case mine = "My Community"
-        case activity = "Activity"
     }
 
     var body: some View {
@@ -38,6 +38,8 @@ struct CommunityView: View {
                 .padding(.vertical, 8)
 
                 switch selectedTab {
+                case .posts:
+                    CommunityFeedView()
                 case .aroundMe:
                     LearningAroundMeView(
                         viewModel: viewModel,
@@ -46,8 +48,6 @@ struct CommunityView: View {
                     )
                 case .mine:
                     MyCommunityAccountView(viewModel: viewModel, openRoute: { path.append($0) })
-                case .activity:
-                    CommunityFeedView()
                 }
             }
             .background(DesignTokens.Colors.background)

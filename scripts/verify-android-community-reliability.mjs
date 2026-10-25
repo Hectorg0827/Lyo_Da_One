@@ -19,12 +19,15 @@ function rejectText(source, forbidden, label) {
 }
 
 for (const [source, expected, label] of [
-  [navigation, 'import com.lyo.app.ui.screens.community.LearningAroundCommunityScreen', 'map-first Community route import'],
-  [navigation, 'composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }', 'map-first Community active route'],
+  [navigation, 'import com.lyo.app.ui.screens.community.LearningAroundCommunityScreen', 'Community route import'],
+  [navigation, 'composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }', 'Community active route'],
   [navigation, 'composable(Routes.COMMUNITY_NODE)', 'shareable detail route'],
   [navigation, 'composable(Routes.EDIT_EVENT)', 'host edit route'],
-  [community, 'val labels = listOf("Around Me", "My Community", "Activity")', 'shared tabs'],
-  [community, 'var selectedTab by remember { mutableIntStateOf(0) }', 'Around Me default'],
+  [community, 'val labels = listOf("Posts", "Around Me", "My Community")', 'shared tabs'],
+  [community, 'var selectedTab by remember { mutableIntStateOf(0) }', 'Posts default'],
+  [community, 'CommunityPostsTab(posts = vm.posts, nav = nav)', 'Community post feed'],
+  [community, 'if (selectedTab == 1 && !vm.locationRequested)', 'location request deferred until map'],
+  [community, 'AsyncImage(model = url', 'post photos displayed'],
   [community, 'val vm: CommunityMapViewModel = viewModel()', 'screen state survives opening a detail page'],
   [community, 'LearningMapWebView(', 'multi-marker map hero'],
   [community, 'L.marker([n.latitude,n.longitude]', 'multiple Leaflet markers'],
@@ -68,7 +71,7 @@ for (const [source, expected, label] of [
 ]) requireText(source, expected, label);
 
 for (const [source, forbidden, label] of [
-  [navigation, 'composable(Routes.COMMUNITY) { ReliableCommunityScreen(nav) }', 'feed-first Community must not be active'],
+  [navigation, 'composable(Routes.COMMUNITY) { ReliableCommunityScreen(nav) }', 'legacy Community must not be active'],
   [community, 'SharedPreferences', 'Community account state cannot be device-owned'],
   [viewModel, 'SharedPreferences', 'Community account state cannot be device-owned'],
   [community, 'rememberSaveable', 'Community account state cannot be navigation-owned'],
@@ -79,4 +82,4 @@ for (const [source, forbidden, label] of [
   [creation, 'localizedMessage', 'raw errors are never shown to learners'],
 ]) rejectText(source, forbidden, label);
 
-console.log('Android Community is map-first, account-owned, optimistic with rollback, and never shows raw errors.');
+console.log('Android Community is posts-first with a guarded map, account-owned state, optimistic rollback, and no raw errors.');

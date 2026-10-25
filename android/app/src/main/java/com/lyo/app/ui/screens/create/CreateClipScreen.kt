@@ -2,6 +2,7 @@ package com.lyo.app.ui.screens.create
 
 import android.net.Uri
 import android.widget.VideoView
+import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -18,7 +19,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,7 +35,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,6 +61,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,7 +76,7 @@ fun CreateClipScreen(nav: NavHostController, topic: String? = null) {
     var subject by remember { mutableStateOf(ClipPrompt.draftSubject(topic) ?: "") }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var pickerOpened by remember { mutableStateOf(false) }
+    var pendingCaptureUri by remember { mutableStateOf<Uri?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -85,10 +87,26 @@ fun CreateClipScreen(nav: NavHostController, topic: String? = null) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (!pickerOpened) {
-            pickerOpened = true
-            picker.launch("video/*")
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.CaptureVideo()) { captured ->
+        if (captured && pendingCaptureUri != null) {
+            videoUri = pendingCaptureUri
+            error = null
+        } else {
+            error = "Recording was cancelled or no video was saved."
+        }
+        pendingCaptureUri = null
+    }
+
+    fun recordVideo() {
+        try {
+            val directory = File(context.cacheDir, "create_clips").apply { mkdirs() }
+            val destination = File.createTempFile("lyo-recording-", ".mp4", directory)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", destination)
+            pendingCaptureUri = uri
+            camera.launch(uri)
+        } catch (reason: Exception) {
+            pendingCaptureUri = null
+            error = reason.message ?: "Unable to open the camera."
         }
     }
 
@@ -221,7 +239,7 @@ fun CreateClipScreen(nav: NavHostController, topic: String? = null) {
                         color = TextPrimary,
                     )
                     Text(
-                        text = "Android will open your system video picker. Camera recording will remain separate until a production CameraX workflow is implemented.",
+                        text = "Record using your camera or choose a video from your gallery. You'll preview it before publishing.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 6.dp),
@@ -229,14 +247,17 @@ fun CreateClipScreen(nav: NavHostController, topic: String? = null) {
                 }
             }
 
-            OutlinedButton(
-                onClick = { picker.launch("video/*") },
-                enabled = !submitting,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text(if (videoUri == null) "Choose video" else "Choose another video")
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = ::recordVideo, enabled = !submitting, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.Videocam, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Camera")
+                }
+                OutlinedButton(onClick = { picker.launch("video/*") }, enabled = !submitting, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.VideoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Gallery")
+                }
             }
 
             OutlinedTextField(

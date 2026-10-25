@@ -138,6 +138,10 @@ class CommunityMapViewModel : ViewModel() {
         private set
     var posts by mutableStateOf<List<CommunityPostDto>>(emptyList())
         private set
+    var postsLoading by mutableStateOf(false)
+        private set
+    var postsError by mutableStateOf<String?>(null)
+        private set
     var busyKeys by mutableStateOf(emptySet<String>())
         private set
     private val details = mutableStateMapOf<String, LearningNodeDetailDto>()
@@ -471,12 +475,17 @@ class CommunityMapViewModel : ViewModel() {
 
     fun loadPosts() {
         viewModelScope.launch {
+            postsLoading = true
+            postsError = null
             try {
                 posts = api.communityPosts(1, 30).items.orEmpty()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Community activity failed", e)
+                postsError = "We couldn't load posts. Please try again."
+            } finally {
+                postsLoading = false
             }
         }
     }
