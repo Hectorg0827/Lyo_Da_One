@@ -18,7 +18,7 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Loader2 } from 'lucide-react';
+import { Camera, Upload, X, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -95,7 +95,7 @@ export default function CreateSheet({
   const router = useRouter();
   const [mode, setMode] = useState<Mode>('course');
   const visibleModes = MODES.filter(item => item.id === 'course' || (item.id === 'clip' && DISCOVER_LAUNCH_ENABLED) || ((item.id === 'post' || item.id === 'event') && COMMUNITY_LAUNCH_ENABLED));
-  const [composingClip, setComposingClip] = useState(false);
+  const [clipSource, setClipSource] = useState<'camera' | 'upload' | null>(null);
   const [busy, setBusy] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -114,6 +114,11 @@ export default function CreateSheet({
   const [eventStart, setEventStart] = useState('');
 
   useEffect(() => setMounted(true), []);
+
+  // Do not reopen a stale camera/upload composer when the parent sheet closes.
+  useEffect(() => {
+    if (!isOpen) setClipSource(null);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -237,11 +242,12 @@ export default function CreateSheet({
             <span className="w-[42px] h-[42px]" />
           </div>
 
-          {composingClip && (
+          {clipSource && (
             <CreateClipModal
-              onClose={() => setComposingClip(false)}
+              initialSource={clipSource}
+              onClose={() => setClipSource(null)}
               onCreated={() => {
-                setComposingClip(false);
+                setClipSource(null);
                 onClose();
                 router.push('/discover');
               }}
@@ -257,12 +263,22 @@ export default function CreateSheet({
                     title="Teach something in a short video"
                     subtitle="Your clip goes to Discover, where people can watch it, comment, and turn it into a course."
                   />
-                  <button
-                    onClick={() => setComposingClip(true)}
-                    className="w-full rounded-2xl bg-white px-4 py-3 font-rounded text-[15px] font-bold text-[#0A0D16] transition-transform active:scale-[0.98]"
-                  >
-                    Choose a video
-                  </button>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => setClipSource('camera')}
+                      className="flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 font-rounded text-[15px] font-bold text-[#0A0D16] transition-transform active:scale-[0.98]"
+                    >
+                      <Camera className="h-5 w-5" /> Use camera
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClipSource('upload')}
+                      className="flex items-center justify-center gap-2 rounded-2xl border border-white/25 bg-white/10 px-4 py-3 font-rounded text-[15px] font-bold text-white transition-transform active:scale-[0.98]"
+                    >
+                      <Upload className="h-5 w-5" /> Upload video
+                    </button>
+                  </div>
                 </EditorCard>
               )}
 

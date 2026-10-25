@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Camera, Upload, Loader2, X } from 'lucide-react';
 import { api } from '@/lib/api';
+import CameraRecorder from './CameraRecorder';
 
 /**
  * Publish a clip.
@@ -19,12 +20,15 @@ export default function CreateClipModal({
   onCreated,
   initialTitle = '',
   initialSubject = '',
+  initialSource = null,
 }: {
   onClose: () => void;
   onCreated: () => void;
   /** Lets a caller arrive with the subject already known, e.g. from a finished course. */
   initialTitle?: string;
   initialSubject?: string;
+  /** Create can open directly on Camera or Upload. Discover can show both. */
+  initialSource?: 'camera' | 'upload' | null;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState(initialTitle);
@@ -32,6 +36,7 @@ export default function CreateClipModal({
   const [description, setDescription] = useState('');
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<'camera' | 'upload' | null>(initialSource);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
   const uploadRef = useRef<HTMLInputElement | null>(null);
@@ -119,22 +124,39 @@ export default function CreateClipModal({
         <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
           <div className="space-y-2">
             <p className="text-sm text-white/65">Video (MP4, MOV or WebM; maximum 200 MB)</p>
-            <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => cameraRef.current?.click()} disabled={!!progress}
-                className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 p-3 text-white hover:bg-white/15 disabled:opacity-50">
-                <Camera className="h-5 w-5" /> Record video
+            <div className="grid grid-cols-2 gap-3" role="group" aria-label="Video source">
+              <button type="button" onClick={() => setSource('camera')} disabled={!!progress}
+                aria-pressed={source === 'camera'}
+                className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-white disabled:opacity-50 ${source === 'camera' ? 'border-lyo-400 bg-lyo-500/25' : 'border-white/20 bg-white/10 hover:bg-white/15'}`}>
+                <Camera className="h-5 w-5" /> Camera
               </button>
-              <button type="button" onClick={() => uploadRef.current?.click()} disabled={!!progress}
-                className="flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 p-3 text-white hover:bg-white/15 disabled:opacity-50">
-                <Upload className="h-5 w-5" /> Upload video
+              <button type="button" onClick={() => setSource('upload')} disabled={!!progress}
+                aria-pressed={source === 'upload'}
+                className={`flex items-center justify-center gap-2 rounded-xl border p-3 text-white disabled:opacity-50 ${source === 'upload' ? 'border-lyo-400 bg-lyo-500/25' : 'border-white/20 bg-white/10 hover:bg-white/15'}`}>
+                <Upload className="h-5 w-5" /> Upload
               </button>
             </div>
+            {source === 'camera' && (
+              <>
+                <CameraRecorder onCaptured={chooseFile} onError={setError} disabled={!!progress} />
+                <button type="button" onClick={() => cameraRef.current?.click()} disabled={!!progress}
+                  className="w-full rounded-xl border border-white/20 px-3 py-2 text-sm text-white/75 hover:bg-white/10 disabled:opacity-50">
+                  Open device camera app instead
+                </button>
+              </>
+            )}
+            {source === 'upload' && (
+              <button type="button" onClick={() => uploadRef.current?.click()} disabled={!!progress}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/10 p-3 text-white hover:bg-white/15 disabled:opacity-50">
+                <Upload className="h-5 w-5" /> Choose existing video
+              </button>
+            )}
             <input ref={cameraRef} className="sr-only" type="file" accept="video/*" capture="environment"
               aria-label="Record video with camera" onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />
             <input ref={uploadRef} className="sr-only" type="file"
               accept="video/mp4,video/quicktime,video/webm"
               aria-label="Upload video from device" onChange={(event) => chooseFile(event.target.files?.[0] ?? null)} />
-            <p className="text-xs text-white/50">Camera recording opens your device's supported capture interface. On desktop, use upload.</p>
+            <p className="text-xs text-white/50">Use the browser camera to record on desktop or mobile, your phone's camera app, or upload an existing file.</p>
           </div>
           {file && previewUrl && (
             <video
