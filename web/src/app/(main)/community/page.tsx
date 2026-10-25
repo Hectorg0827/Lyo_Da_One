@@ -32,6 +32,7 @@ import { BottomSheet, CommunitySearchBar, FilterChips, type SheetState } from '@
 import { useApi } from '@/hooks/use-api'
 import { useSyncEvents } from '@/hooks/use-sync'
 import { useCommunityActions } from '@/hooks/use-community-actions'
+import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { FRESH_MS, nearbyCacheKey, readNearby, writeNearby } from '@/lib/community-cache'
 import {
@@ -257,6 +258,14 @@ function MapKey() {
 export default function CommunityPage() {
   const router = useRouter()
   const isDesktop = useIsDesktop()
+  const { isAuthenticated, isLoading: authLoading } = useAuthStore()
+  // Community is account-owned end to end — even the map's own /nearby needs a
+  // signed-in learner. So nothing here runs until we know who is asking:
+  // `request()` treats a 401 on a required call as a dead session and sets
+  // window.location to /auth/login, so a visitor was asked for their device
+  // location and then, as soon as the first call came back, yanked to a login
+  // page that had forgotten they were heading for Community.
+  const signedIn = isAuthenticated && !authLoading
   const [tab, setTab] = useState<CommunityTab>('Around Me')
 
   // ── Where we are looking ───────────────────────────────────────────────
@@ -314,13 +323,14 @@ export default function CommunityPage() {
   }, [moveTo])
 
   useEffect(() => {
+    if (!signedIn) return
     api.community.track('community_opened', { surface: window.innerWidth >= 1024 ? 'desktop' : 'mobile' })
     locate(false)
     // Never hold the map hostage to a permission prompt: show the fallback
     // area after a moment and move when (if) a location arrives.
     const timer = setTimeout(() => setReady(true), 1500)
     return () => clearTimeout(timer)
-  }, [locate])
+  }, [locate, signedIn])
 
   // ── What we are looking for ────────────────────────────────────────────
   const [queryText, setQueryText] = useState('')
@@ -340,12 +350,12 @@ export default function CommunityPage() {
 
   // Account state waits for the location decision so it is read once, and
   // the Activity feed loads only when someone opens that tab.
-  const myCommunity = useApi(ready ? () => api.community.me(userLocation) : null, [ready, userLocation?.latitude, userLocation?.longitude])
+  const myCommunity = useApi(ready && signedIn ? () => api.community.me(userLocation) : null, [ready, signedIn, userLocation?.latitude, userLocation?.longitude])
   const [feedWanted, setFeedWanted] = useState(false)
   useEffect(() => {
     if (tab === 'Activity') setFeedWanted(true)
   }, [tab])
-  const feed = useApi(feedWanted ? () => api.community.posts(1, 20) : null, [feedWanted])
+  const feed = useApi(feedWanted && signedIn ? () => api.community.posts(1, 20) : null, [feedWanted, signedIn])
   const refreshAccount = myCommunity.refetch
   const actions = useCommunityActions(refreshAccount)
   const { clearSettled, withOverride } = actions
@@ -353,7 +363,7 @@ export default function CommunityPage() {
   const radiusKm = filterQuery.nearby ? Math.min(area.radiusKm, NEARBY_RADIUS_KM) : area.radiusKm
 
   useEffect(() => {
-    if (!ready) return
+    if (!ready || !signedIn) return
     const key = nearbyCacheKey({ latitude: area.latitude, longitude: area.longitude, radiusKm, filters: filterKey, query: activeQuery })
     const cached = readNearby(key)
     if (cached) {
@@ -406,7 +416,7 @@ export default function CommunityPage() {
         if (requestRef.current === controller) setLoading(false)
       })
     return () => controller.abort()
-  }, [ready, area.latitude, area.longitude, radiusKm, filterKey, activeQuery, filterQuery, reloadTick, clearSettled])
+  }, [ready, signedIn, area.latitude, area.longitude, radiusKm, filterKey, activeQuery, filterQuery, reloadTick, clearSettled])
 
   const retry = useCallback(() => setReloadTick((tick) => tick + 1), [])
   const refreshAll = useCallback(() => {
@@ -641,6 +651,29 @@ export default function CommunityPage() {
   // The sheet reports its real height (it scales with the screen), so pins,
   // attribution, and controls always stay above it.
   const sheetPx = sheetHeight
+
+  // Signed out: ask, rather than letting a refused request bounce them to a
+  // login that has lost the destination. `authReturnPath` already allows
+  // /community, so signing in from here comes back to this page.
+  if (!authLoading && !isAuthenticated) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-16">
+        <h1 className="text-2xl font-semibold text-white">Find learning around you</h1>
+        <p className="mt-3 text-white/70">
+          Sign in to see the classes, study groups, tutors and libraries near you, save the
+          ones worth coming back to, and keep track of what you are going to.
+        </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link href="/auth/login?next=%2Fcommunity" className="rounded-xl bg-white px-5 py-3 font-medium text-black">
+            Sign in
+          </Link>
+          <Link href="/auth/signup?next=%2Fcommunity" className="rounded-xl border border-white/15 px-5 py-3 font-medium text-white">
+            Create account
+          </Link>
+        </div>
+      </main>
+    )
+  }
 
   if (tab !== 'Around Me') {
     return (
