@@ -10,6 +10,7 @@ import AVFoundation
 import Photos
 import MapKit
 import PhotosUI
+import UniformTypeIdentifiers
 import os
 
 // MARK: - Creation Modes
@@ -219,6 +220,7 @@ class CreateViewModel: ObservableObject {
         progress = 0
         contentText = ""
         charCount = 0
+        attachedFiles = []
         capturedImage = nil
         capturedVideoURL = nil
         videoThumbnail = nil
@@ -433,31 +435,40 @@ class CreateViewModel: ObservableObject {
     }
     
     private func publishPost() async throws {
-        guard !contentText.isEmpty else {
+        let caption = contentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !caption.isEmpty else {
             throw CreateError.missingContent
         }
         
-        progress = 0.5
-        
-        // Upload attachments if any
-        var attachmentIds: [String] = []
-        for fileURL in attachedFiles {
-            let attachment = try await repository.uploadFile(url: fileURL)
-            attachmentIds.append(attachment.id)
+        // Community posts and their photos must use the same store as the
+        // Community feed across web, Android and iOS. The old /posts endpoint
+        // produced posts that never appeared in Community.
+        var mediaURLs: [String] = []
+        for (index, fileURL) in attachedFiles.prefix(10).enumerated() {
+            let contentType = UTType(filenameExtension: fileURL.pathExtension)?.preferredMIMEType ?? "image/jpeg"
+            let data = try Data(contentsOf: fileURL)
+            guard data.count <= 10 * 1024 * 1024 else { throw CreateError.imageTooLarge }
+            let upload = try await CloudStorageService.shared.uploadFile(
+                data: data,
+                filename: fileURL.lastPathComponent,
+                contentType: contentType,
+                folder: "community"
+            )
+            guard upload.success, let url = upload.publicURL else { throw CloudStorageError.uploadFailed }
+            mediaURLs.append(url)
+            progress = Double(index + 1) / Double(max(attachedFiles.count, 1)) * 0.75
         }
         
-        progress = 0.7
-        
-        // Create post
-        let _ = try await repository.createPost(
-            content: contentText,
-            attachments: attachmentIds.isEmpty ? nil : attachmentIds
+        let postType: CommunityPostType = mediaURLs.isEmpty ? .text : .image
+        _ = try await CommunityService.shared.createPost(
+            CommunityCreatePostRequest(
+                content: caption,
+                mediaURLs: mediaURLs.isEmpty ? nil : mediaURLs,
+                postType: postType
+            )
         )
         
         progress = 1.0
-        
-        // Add to Stack
-        await addToStack(type: .video, title: "Post", subtitle: contentText.prefix(50).description)
     }
     
     private func generateAndPublishCourse() async throws {
@@ -679,6 +690,7 @@ enum CreateError: LocalizedError {
     case missingContent
     case missingTitle
     case invalidImage
+    case imageTooLarge
     case uploadFailed
     case permissionDenied
     
@@ -690,6 +702,8 @@ enum CreateError: LocalizedError {
             return "Please add a title for your clip"
         case .invalidImage:
             return "Invalid image format"
+        case .imageTooLarge:
+            return "Photos must be 10 MB or smaller"
         case .uploadFailed:
             return "Failed to upload media"
         case .permissionDenied:

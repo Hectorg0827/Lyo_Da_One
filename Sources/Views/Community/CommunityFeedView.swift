@@ -31,13 +31,11 @@ struct CommunityFeedView: View {
                 toastView(message: message, type: viewModel.toastType)
             }
         }
-        .sheet(isPresented: $showCreatePost) {
-            CreatePostSheet { content, tags, postType in
-                try await viewModel.createPost(
-                    content: content,
-                    tags: tags,
-                    postType: postType
-                )
+        .fullScreenCover(isPresented: $showCreatePost) {
+            CreateHubView(initialMode: .post) { mode in
+                if mode == .post {
+                    Task { await viewModel.refresh() }
+                }
             }
         }
         .task {

@@ -1,5 +1,9 @@
 package com.lyo.app.ui.screens.create
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,9 +15,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -36,6 +46,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.lyo.app.data.api.ApiClient
@@ -44,7 +56,15 @@ import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.TextPrimary
+import coil.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.ByteArrayOutputStream
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,9 +72,44 @@ fun CreatePostScreen(nav: NavHostController) {
     var content by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf("") }
     var postType by remember { mutableStateOf("text") }
+    var selectedImages by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    var pendingCaptureUri by remember { mutableStateOf<Uri?>(null) }
     var submitting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+
+    val gallery = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { selected ->
+        if (selectedImages.size + selected.size > 10) {
+            error = "You can attach up to 10 photos."
+        } else {
+            selectedImages = (selectedImages + selected).distinct()
+            error = null
+        }
+    }
+    val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
+        if (captured && pendingCaptureUri != null) {
+            selectedImages = (selectedImages + pendingCaptureUri!!).distinct().take(10)
+            error = null
+        } else {
+            error = "Photo capture was cancelled."
+        }
+        pendingCaptureUri = null
+    }
+
+    fun takePhoto() {
+        if (selectedImages.size >= 10) return
+        try {
+            val directory = File(context.cacheDir, "create_photos").apply { mkdirs() }
+            val destination = File.createTempFile("lyo-photo-", ".jpg", directory)
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", destination)
+            pendingCaptureUri = uri
+            camera.launch(uri)
+        } catch (reason: Exception) {
+            pendingCaptureUri = null
+            error = reason.message ?: "Unable to open camera."
+        }
+    }
 
     fun publish() {
         val trimmedContent = content.trim()
@@ -75,11 +130,39 @@ fun CreatePostScreen(nav: NavHostController) {
 
         scope.launch {
             runCatching {
+                val mediaUrls = mutableListOf<String>()
+                for ((index, uri) in selectedImages.withIndex()) {
+                    val contentType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                    if (!contentType.startsWith("image/")) throw IllegalArgumentException("Only images can be attached to a post.")
+                    val bytes = withContext(Dispatchers.IO) {
+                        context.contentResolver.openInputStream(uri)?.use { stream ->
+                            val result = ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            while (true) {
+                                val read = stream.read(buffer)
+                                if (read <= 0) break
+                                if (result.size() + read > 10 * 1024 * 1024) throw IllegalArgumentException("Photos must be 10 MB or smaller.")
+                                result.write(buffer, 0, read)
+                            }
+                            result.toByteArray()
+                        }
+                    } ?: throw IllegalStateException("Photo ${index + 1} could not be read.")
+                    val extension = when (contentType) {
+                        "image/png" -> "png"
+                        "image/webp" -> "webp"
+                        "image/heic", "image/heif" -> "heic"
+                        else -> "jpg"
+                    }
+                    val file = MultipartBody.Part.createFormData("file", "lyo-post-${index + 1}.$extension", bytes.toRequestBody(contentType.toMediaType()))
+                    val uploaded = ApiClient.api.uploadMedia(file, "community".toRequestBody("text/plain".toMediaType()))
+                    mediaUrls.add(uploaded.url ?: throw IllegalStateException("The photo upload did not return a URL."))
+                }
                 ApiClient.api.createCommunityPost(
                     CommunityCreatePostRequest(
                         content = trimmedContent,
                         tags = parsedTags.takeIf { it.isNotEmpty() },
-                        postType = postType,
+                        mediaUrls = mediaUrls.takeIf { it.isNotEmpty() },
+                        postType = if (postType == "text" && mediaUrls.isNotEmpty()) "image" else postType,
                     ),
                 )
             }.onSuccess {
@@ -121,6 +204,7 @@ fun CreatePostScreen(nav: NavHostController) {
                 .fillMaxSize()
                 .background(Background)
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
         ) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -150,6 +234,32 @@ fun CreatePostScreen(nav: NavHostController) {
                 enabled = !submitting,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Text("Add photos", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(onClick = ::takePhoto, enabled = !submitting && selectedImages.size < 10, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Camera")
+                }
+                OutlinedButton(onClick = { gallery.launch("image/*") }, enabled = !submitting && selectedImages.size < 10, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Filled.Image, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Gallery")
+                }
+            }
+            if (selectedImages.isNotEmpty()) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(selectedImages) { uri ->
+                        Column {
+                            AsyncImage(model = uri, contentDescription = "Selected photo", contentScale = ContentScale.Crop, modifier = Modifier.size(110.dp).background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(14.dp)))
+                            OutlinedButton(onClick = { selectedImages = selectedImages.filterNot { it == uri } }, enabled = !submitting) {
+                                Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Text("Remove")
+                            }
+                        }
+                    }
+                }
+            }
             OutlinedTextField(
                 value = tags,
                 onValueChange = { tags = it },

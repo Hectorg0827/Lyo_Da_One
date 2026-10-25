@@ -32,6 +32,7 @@ import { BottomSheet, CommunitySearchBar, FilterChips, type SheetState } from '@
 import { useApi } from '@/hooks/use-api'
 import { useSyncEvents } from '@/hooks/use-sync'
 import { useCommunityActions } from '@/hooks/use-community-actions'
+import { useAuthStore } from '@/stores/auth-store'
 import { api } from '@/lib/api'
 import { FRESH_MS, nearbyCacheKey, readNearby, writeNearby } from '@/lib/community-cache'
 import {
@@ -53,11 +54,11 @@ import {
 import { cn } from '@/lib/utils'
 import type { CommunityPost, LearningNode, LearningNodeCategory, NearbyLearningResponse, User } from '@/types'
 
-type CommunityTab = 'Around Me' | 'My Community' | 'Activity'
+type CommunityTab = 'Posts' | 'Around Me' | 'My Community'
 type LocationState = 'locating' | 'granted' | 'denied' | 'unavailable'
 type Area = SearchArea & { label: string }
 
-const TABS: CommunityTab[] = ['Around Me', 'My Community', 'Activity']
+const TABS: CommunityTab[] = ['Posts', 'Around Me', 'My Community']
 
 // The map key, in marker order. Every category the backend can return.
 const MAP_KEY: LearningNodeCategory[] = [
@@ -165,7 +166,7 @@ function CreateMenu({ onCreateGroup, onCreateTutor, onCreatePost, tab, compact =
       document.removeEventListener('keydown', escape)
     }
   }, [open])
-  if (tab === 'Activity') {
+  if (tab === 'Posts') {
     return (
       <button type="button" onClick={onCreatePost} className="flex h-11 shrink-0 items-center gap-1.5 rounded-2xl bg-lyo-500 px-3.5 text-sm font-semibold text-white hover:bg-lyo-400">
         <Plus className="h-4 w-4" aria-hidden="true" />
@@ -257,7 +258,15 @@ function MapKey() {
 export default function CommunityPage() {
   const router = useRouter()
   const isDesktop = useIsDesktop()
-  const [tab, setTab] = useState<CommunityTab>('Around Me')
+  const { isAuthenticated, isLoading: authLoading, user } = useAuthStore()
+  // Community is account-owned end to end — even the map's own /nearby needs a
+  // signed-in learner. So nothing here runs until we know who is asking:
+  // `request()` treats a 401 on a required call as a dead session and sets
+  // window.location to /auth/login, so a visitor was asked for their device
+  // location and then, as soon as the first call came back, yanked to a login
+  // page that had forgotten they were heading for Community.
+  const signedIn = isAuthenticated && !authLoading
+  const [tab, setTab] = useState<CommunityTab>('Posts')
 
   // ── Where we are looking ───────────────────────────────────────────────
   const [locationState, setLocationState] = useState<LocationState>('locating')
@@ -314,13 +323,22 @@ export default function CommunityPage() {
   }, [moveTo])
 
   useEffect(() => {
+    if (!signedIn) return
     api.community.track('community_opened', { surface: window.innerWidth >= 1024 ? 'desktop' : 'mobile' })
+  }, [signedIn])
+
+  const locationRequested = useRef(false)
+  useEffect(() => {
+    // Reading posts never requires location permission. Ask only after the
+    // learner explicitly opens the map or their nearby Community.
+    if (!signedIn || tab === 'Posts' || locationRequested.current) return
+    locationRequested.current = true
     locate(false)
     // Never hold the map hostage to a permission prompt: show the fallback
     // area after a moment and move when (if) a location arrives.
     const timer = setTimeout(() => setReady(true), 1500)
     return () => clearTimeout(timer)
-  }, [locate])
+  }, [locate, signedIn, tab])
 
   // ── What we are looking for ────────────────────────────────────────────
   const [queryText, setQueryText] = useState('')
@@ -339,13 +357,13 @@ export default function CommunityPage() {
   const requestRef = useRef<AbortController | null>(null)
 
   // Account state waits for the location decision so it is read once, and
-  // the Activity feed loads only when someone opens that tab.
-  const myCommunity = useApi(ready ? () => api.community.me(userLocation) : null, [ready, userLocation?.latitude, userLocation?.longitude])
-  const [feedWanted, setFeedWanted] = useState(false)
+  // The Posts feed is the Community landing experience.
+  const myCommunity = useApi(ready && signedIn ? () => api.community.me(userLocation) : null, [ready, signedIn, userLocation?.latitude, userLocation?.longitude])
+  const [feedWanted, setFeedWanted] = useState(true)
   useEffect(() => {
-    if (tab === 'Activity') setFeedWanted(true)
+    if (tab === 'Posts') setFeedWanted(true)
   }, [tab])
-  const feed = useApi(feedWanted ? () => api.community.posts(1, 20) : null, [feedWanted])
+  const feed = useApi(feedWanted && signedIn ? () => api.community.posts(1, 20) : null, [feedWanted, signedIn])
   const refreshAccount = myCommunity.refetch
   const actions = useCommunityActions(refreshAccount)
   const { clearSettled, withOverride } = actions
@@ -353,8 +371,8 @@ export default function CommunityPage() {
   const radiusKm = filterQuery.nearby ? Math.min(area.radiusKm, NEARBY_RADIUS_KM) : area.radiusKm
 
   useEffect(() => {
-    if (!ready) return
-    const key = nearbyCacheKey({ latitude: area.latitude, longitude: area.longitude, radiusKm, filters: filterKey, query: activeQuery })
+    if (!ready || !signedIn) return
+    const key = nearbyCacheKey({ account: String(user?.id ?? ''), latitude: area.latitude, longitude: area.longitude, radiusKm, filters: filterKey, query: activeQuery })
     const cached = readNearby(key)
     if (cached) {
       setNearby(cached.response)
@@ -406,7 +424,7 @@ export default function CommunityPage() {
         if (requestRef.current === controller) setLoading(false)
       })
     return () => controller.abort()
-  }, [ready, area.latitude, area.longitude, radiusKm, filterKey, activeQuery, filterQuery, reloadTick, clearSettled])
+  }, [ready, signedIn, user?.id, area.latitude, area.longitude, radiusKm, filterKey, activeQuery, filterQuery, reloadTick, clearSettled])
 
   const retry = useCallback(() => setReloadTick((tick) => tick + 1), [])
   const refreshAll = useCallback(() => {
@@ -541,7 +559,12 @@ export default function CommunityPage() {
   const [showCreatePost, setShowCreatePost] = useState(false)
   const [createItem, setCreateItem] = useState<'group' | 'tutor' | null>(null)
   const createPost = async (data: PostFormData) => {
-    await api.community.createPost({ content: data.content, tags: data.tags, post_type: data.type })
+    await api.community.createPost({
+      content: data.content,
+      tags: data.tags,
+      media_urls: data.mediaUrls,
+      post_type: data.type === 'text' && data.mediaUrls.length ? 'image' : data.type,
+    })
     feed.refetch()
   }
   const posts = (feed.data?.items ?? []).map(mapPost)
@@ -642,6 +665,43 @@ export default function CommunityPage() {
   // attribution, and controls always stay above it.
   const sheetPx = sheetHeight
 
+  // Still reading the session: show neither the map nor the prompt. The map's
+  // controls act the moment they are on screen — the locate button asks for
+  // GPS, the search box calls resolveSearch — and a call made before we know
+  // who is asking is the same 401 bounce to a destination-less login that this
+  // page exists to avoid. Test Prep holds its render the same way.
+  if (authLoading) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-16 text-center text-white/60">
+        <Loader2 className="mx-auto h-6 w-6 animate-spin" aria-hidden />
+        <p className="mt-3 text-sm">Loading Community…</p>
+      </main>
+    )
+  }
+
+  // Signed out: ask, rather than letting a refused request bounce them to a
+  // login that has lost the destination. `authReturnPath` already allows
+  // /community, so signing in from here comes back to this page.
+  if (!isAuthenticated) {
+    return (
+      <main className="mx-auto max-w-2xl px-4 py-16">
+        <h1 className="text-2xl font-semibold text-white">Find learning around you</h1>
+        <p className="mt-3 text-white/70">
+          Sign in to see the classes, study groups, tutors and libraries near you, save the
+          ones worth coming back to, and keep track of what you are going to.
+        </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link href="/auth/login?next=%2Fcommunity" className="rounded-xl bg-white px-5 py-3 font-medium text-black">
+            Sign in
+          </Link>
+          <Link href="/auth/signup?next=%2Fcommunity" className="rounded-xl border border-white/15 px-5 py-3 font-medium text-white">
+            Create account
+          </Link>
+        </div>
+      </main>
+    )
+  }
+
   if (tab !== 'Around Me') {
     return (
       <div className="h-full overflow-y-auto px-4 pb-28 pt-4 md:px-6 md:pb-8">
@@ -662,13 +722,19 @@ export default function CommunityPage() {
             />
           ) : (
             <section className="mx-auto max-w-3xl space-y-4">
+              <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-blue-500/15 to-cyan-500/5 p-5 sm:p-6">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-300">LYO Community</p>
+                <h2 className="mt-1 font-rounded text-2xl font-bold text-white">Learn together. Share what you know.</h2>
+                <p className="mt-1 text-sm text-white/60">Post an idea, ask a question, or share photos from your learning journey.</p>
+                <button type="button" onClick={() => setShowCreatePost(true)} className="mt-4 flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 px-5 text-sm font-bold text-white"><Plus className="h-4 w-4" aria-hidden="true" /> Create a post</button>
+              </div>
               {!feed.data && !feed.error && <ResultSkeleton rows={3} />}
               {feed.error && (
                 <StateMessage icon={MessageCircle} title="We couldn't load Community activity." body="Please try again in a moment." tone="warning" action={{ label: 'Try again', onClick: feed.refetch }} />
               )}
               {feed.data && !feed.isLoading && !feed.error && !posts.length && (
                 <button type="button" onClick={() => setShowCreatePost(true)} className="w-full rounded-2xl border border-dashed border-white/15 px-6 py-16 text-center text-sm text-white/55 hover:border-lyo-500/50 hover:text-white">
-                  No activity yet. Share the first study tip or question.
+                  No posts yet. Share the first study tip or question.
                 </button>
               )}
               {posts.map((post) => <PostCard key={post.id} post={post} onClick={() => router.push(`/community/${post.id}`)} />)}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Heart,
@@ -11,6 +11,8 @@ import {
   HelpCircle,
   FileText,
   Lightbulb,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { cn, formatTimeAgo, formatNumber } from '@/lib/utils';
 import { api } from '@/lib/api';
@@ -36,6 +38,8 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
   const [isBookmarked, setIsBookmarked] = useState(post.isBookmarked ?? false);
   const [showShareToast, setShowShareToast] = useState(false);
   const [actionBusy, setActionBusy] = useState<'like' | 'bookmark' | null>(null);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const touchStartX = useRef<number | null>(null);
 
   useEffect(() => {
     setIsLiked(post.isLiked ?? false);
@@ -164,33 +168,27 @@ export default function PostCard({ post, onClick, className }: PostCardProps) {
         <p className="whitespace-pre-wrap break-words">{post.content}</p>
       </div>
 
-      {/* Images */}
+      {/* Swipeable photo carousel shared by mouse, touch and keyboard users. */}
       {post.images && post.images.length > 0 && (
         <div
-          className={cn(
-            'mt-3 gap-2 rounded-xl overflow-hidden grid',
-            post.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'
-          )}
+          className="relative mt-3 overflow-hidden rounded-2xl border border-white/10 bg-black/30"
+          role="group"
+          aria-label={`${post.images.length} post photo${post.images.length > 1 ? 's' : ''}`}
+          onClick={(event) => event.stopPropagation()}
+          onTouchStart={(event) => { touchStartX.current = event.touches[0]?.clientX ?? null; }}
+          onTouchEnd={(event) => {
+            if (touchStartX.current === null || post.images!.length < 2) return;
+            const delta = (event.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current;
+            if (Math.abs(delta) > 45) setPhotoIndex((current) => Math.max(0, Math.min(post.images!.length - 1, current + (delta < 0 ? 1 : -1))));
+            touchStartX.current = null;
+          }}
         >
-          {post.images.slice(0, 4).map((img, i) => (
-            <div
-              key={i}
-              className={cn(
-                'relative bg-white/5 rounded-lg overflow-hidden',
-                post.images!.length === 1 ? 'h-48' : 'h-32',
-                post.images!.length === 3 && i === 0 ? 'col-span-2' : ''
-              )}
-            >
-              <img src={img} alt="" className="w-full h-full object-cover" />
-              {post.images!.length > 4 && i === 3 && (
-                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">
-                    +{post.images!.length - 4}
-                  </span>
-                </div>
-              )}
-            </div>
-          ))}
+          <img src={post.images[Math.min(photoIndex, post.images.length - 1)]} alt={`Post photo ${Math.min(photoIndex + 1, post.images.length)} of ${post.images.length}`} className="aspect-[4/3] max-h-[480px] w-full object-contain" />
+          {post.images.length > 1 && <>
+            <button type="button" onClick={() => setPhotoIndex((value) => Math.max(0, value - 1))} disabled={photoIndex === 0} aria-label="Previous photo" className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white disabled:opacity-30"><ChevronLeft className="h-5 w-5" /></button>
+            <button type="button" onClick={() => setPhotoIndex((value) => Math.min(post.images!.length - 1, value + 1))} disabled={photoIndex === post.images.length - 1} aria-label="Next photo" className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
+            <span className="absolute right-3 top-3 rounded-full bg-black/65 px-2.5 py-1 text-xs text-white">{photoIndex + 1}/{post.images.length}</span>
+          </>}
         </div>
       )}
 

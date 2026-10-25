@@ -18,31 +18,31 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Loader2 } from 'lucide-react';
+import Image from 'next/image';
+import { X, Loader2, BookOpen, Camera, Clapperboard, Users, Sparkles, Lightbulb, ArrowRight, type LucideIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 import CreateClipModal from '@/components/clips/CreateClipModal';
+import { PostComposer, type PostFormData } from '@/components/community/CreatePostModal';
 import { COMMUNITY_LAUNCH_ENABLED, DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 
 type Mode = 'post' | 'clip' | 'course' | 'event';
 
 // Colors and copy from iOS CreateViewModel
-const MODES: { id: Mode; emoji: string; label: string; color: string; description: string }[] = [
-  { id: 'post', emoji: '✏️', label: 'Post', color: '#3b82f6', description: 'Share to your feed' },
-  { id: 'clip', emoji: '🎬', label: 'Clip', color: '#8b5cf6', description: 'Teach something in a short video' },
-  { id: 'course', emoji: '📚', label: 'Course', color: '#10b981', description: 'AI-generated course' },
-  { id: 'event', emoji: '🎉', label: 'Event/Group', color: '#ec4899', description: 'Create event or group' },
+const MODES: { id: Mode; icon: LucideIcon; label: string; color: string; description: string }[] = [
+  { id: 'post', icon: Camera, label: 'Post', color: '#3b82f6', description: 'Photos, thoughts and questions' },
+  { id: 'clip', icon: Clapperboard, label: 'Clip', color: '#8b5cf6', description: 'Record or upload a learning video' },
+  { id: 'course', icon: BookOpen, label: 'Course', color: '#10b981', description: 'Build a course with Lyo' },
+  { id: 'event', icon: Users, label: 'Community', color: '#ec4899', description: 'Plan an event or group' },
 ];
-
-const MAX_POST_CHARS = 2000;
 
 function EditorCard({ children }: { children: React.ReactNode }) {
   // iOS `.createEditorCard()`: padding 20, glass, r24, white/12 hairline
   return (
-    <div className="p-5 rounded-3xl bg-white/[0.07] backdrop-blur-2xl border border-white/[0.12] text-white">
-      <div className="flex flex-col gap-4">{children}</div>
+    <div className="rounded-[28px] border border-white/[0.12] bg-[#111e26]/90 p-5 text-white shadow-[0_24px_80px_rgba(0,0,0,.25)] backdrop-blur-2xl sm:p-7">
+      <div className="flex flex-col gap-5">{children}</div>
     </div>
   );
 }
@@ -50,8 +50,8 @@ function EditorCard({ children }: { children: React.ReactNode }) {
 function EditorTitle({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div className="flex flex-col gap-[5px]">
-      <h2 className="font-rounded text-xl font-bold text-white">{title}</h2>
-      <p className="text-[15px] text-white/60">{subtitle}</p>
+      <h2 className="font-rounded text-2xl font-bold tracking-tight text-white sm:text-3xl">{title}</h2>
+      <p className="text-sm leading-relaxed text-white/60 sm:text-[15px]">{subtitle}</p>
     </div>
   );
 }
@@ -73,7 +73,7 @@ function PrimaryButton({
     <button
       onClick={onClick}
       disabled={disabled || busy}
-      className="flex items-center justify-center gap-2 w-full py-3.5 px-[18px] rounded-[14px] text-[15px] font-bold text-white transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+      className="flex min-h-12 w-full items-center justify-center gap-2 rounded-[14px] px-[18px] py-3.5 text-[15px] font-bold text-white transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
       style={{ backgroundColor: color }}
     >
       {busy && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -83,7 +83,7 @@ function PrimaryButton({
 }
 
 const fieldClass =
-  'w-full p-3 rounded-[13px] bg-white/[0.08] text-white placeholder-white/40 text-[15px] focus:outline-none focus:ring-1 focus:ring-white/30';
+  'min-h-12 w-full rounded-[13px] border border-white/10 bg-white/[0.08] p-3.5 text-[15px] text-white placeholder-white/40 focus:border-cyan-400 focus:outline-none';
 
 export default function CreateSheet({
   isOpen,
@@ -98,10 +98,6 @@ export default function CreateSheet({
   const [composingClip, setComposingClip] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mounted, setMounted] = useState(false);
-
-  // Post
-  const [postContent, setPostContent] = useState('');
-  const [postTags, setPostTags] = useState('');
 
   // Course
   const [courseTopic, setCourseTopic] = useState('');
@@ -130,8 +126,6 @@ export default function CreateSheet({
 
   const finish = (message: string, destination?: string) => {
     toast.success(message);
-    setPostContent('');
-    setPostTags('');
     setCourseTopic('');
     setEventTitle('');
     setEventDescription('');
@@ -140,20 +134,18 @@ export default function CreateSheet({
     if (destination) router.push(destination);
   };
 
-  const submitPost = async () => {
+  const submitPost = async (data: PostFormData) => {
     setBusy(true);
     try {
       await api.community.createPost({
-        content: postContent.trim(),
-        tags: postTags
-          .split(',')
-          .map((t) => t.trim())
-          .filter(Boolean),
-        post_type: 'text',
+        content: data.content,
+        tags: data.tags,
+        media_urls: data.mediaUrls,
+        post_type: data.type === 'text' && data.mediaUrls.length ? 'image' : data.type,
       });
       finish('Post published', '/community');
-    } catch {
-      toast.error("Couldn't publish that post. Please try again.");
+    } catch (reason) {
+      throw reason;
     } finally {
       setBusy(false);
     }
@@ -221,20 +213,23 @@ export default function CreateSheet({
             }}
           />
 
-          {/* Top bar */}
-          <div className="relative flex items-center justify-between px-4 pt-3 pb-2">
+          {/* Brand-led studio header. The logo is quiet; the creator's work is the hero. */}
+          <div className="relative mx-auto flex w-full max-w-5xl items-center justify-between px-4 pb-3 pt-4 sm:px-6">
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-[42px] h-[42px] rounded-full bg-white/10 backdrop-blur-xl flex items-center justify-center text-white"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white backdrop-blur-xl hover:bg-white/20"
             >
               <X className="w-[17px] h-[17px]" strokeWidth={2.5} />
             </button>
-            <div className="flex flex-col items-center gap-0.5">
-              <span className="text-[17px] font-bold text-white">Create</span>
-              <span className="text-xs text-white/[0.66]">{active.description}</span>
+            <div className="flex items-center gap-2.5">
+              <Image src="/brand/lyo-logo.png" alt="LYO" width={42} height={42} className="h-9 w-9 object-contain" />
+              <div className="flex flex-col gap-0.5">
+                <span className="font-rounded text-lg font-bold text-white">Create</span>
+                <span className="text-[11px] text-white/60">Make something worth sharing</span>
+              </div>
             </div>
-            <span className="w-[42px] h-[42px]" />
+            <span className="h-11 w-11" aria-hidden="true" />
           </div>
 
           {composingClip && (
@@ -248,72 +243,64 @@ export default function CreateSheet({
             />
           )}
 
-          {/* Editor */}
-          <div className="relative flex-1 overflow-y-auto px-[18px] py-3">
-            <div className="max-w-xl mx-auto">
+          <div className="relative flex-1 overflow-y-auto px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 sm:px-6">
+            <div className="mx-auto max-w-5xl space-y-5">
+              <div className="text-center sm:pb-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">LYO Create Studio</p>
+                <h1 className="mt-2 font-rounded text-3xl font-bold tracking-tight text-white sm:text-4xl">What will you create today?</h1>
+                <p className="mt-2 text-sm text-white/60">Choose a format and bring your ideas to life.</p>
+              </div>
+              {/* Familiar + Create switch: all available formats are together, within thumb reach. */}
+              <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.06] p-1.5 no-scrollbar" role="group" aria-label="Choose what to create">
+                {visibleModes.map((item) => {
+                  const Icon = item.icon;
+                  return <button key={item.id} type="button" onClick={() => setMode(item.id)} aria-pressed={active.id === item.id} className={cn('flex min-h-12 flex-1 shrink-0 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition-all duration-200', active.id === item.id ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-cyan-500/15' : 'text-white/65 hover:bg-white/10 hover:text-white')}>
+                    <Icon className="h-4 w-4" aria-hidden="true" /> {item.label}
+                  </button>;
+                })}
+              </div>
+
+              <div className="mx-auto grid max-w-4xl gap-5 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
+              <div>
               {mode === 'clip' && (
                 <EditorCard>
                   <EditorTitle
-                    title="Teach something in a short video"
-                    subtitle="Your clip goes to Discover, where people can watch it, comment, and turn it into a course."
+                    title="Share what you know"
+                    subtitle="Record with your camera or upload an educational video to Discover."
                   />
                   <button
                     onClick={() => setComposingClip(true)}
-                    className="w-full rounded-2xl bg-white px-4 py-3 font-rounded text-[15px] font-bold text-[#0A0D16] transition-transform active:scale-[0.98]"
+                    className="flex min-h-24 w-full items-center justify-center gap-3 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-4 font-rounded text-base font-bold text-white transition-transform hover:bg-cyan-400/15 active:scale-[0.98]"
                   >
-                    Choose a video
+                    <Camera className="h-6 w-6 text-cyan-300" aria-hidden="true" /> Record or upload a video <ArrowRight className="h-5 w-5" aria-hidden="true" />
                   </button>
+                  <p className="text-xs text-white/50">Camera recording is available on supported devices. You can preview before publishing.</p>
                 </EditorCard>
               )}
 
               {mode === 'post' && (
                 <EditorCard>
-                  <EditorTitle
-                    title="Share a useful idea"
-                    subtitle="Your post will be saved to the shared Community feed."
-                  />
-                  <div className="relative">
-                    <textarea
-                      value={postContent}
-                      onChange={(e) => setPostContent(e.target.value.slice(0, MAX_POST_CHARS))}
-                      placeholder="What have you been learning?"
-                      aria-label="Post content"
-                      className={cn(fieldClass, 'min-h-[190px] resize-none')}
-                    />
-                    <span className="absolute bottom-2.5 right-2.5 text-[11px] font-mono text-white/45">
-                      {MAX_POST_CHARS - postContent.length}
-                    </span>
-                  </div>
-                  <input
-                    value={postTags}
-                    onChange={(e) => setPostTags(e.target.value)}
-                    placeholder="Tags, comma separated"
-                    aria-label="Post tags"
-                    className={fieldClass}
-                  />
-                  <PrimaryButton
-                    label="Publish Post"
-                    color={active.color}
-                    busy={busy}
-                    disabled={!postContent.trim()}
-                    onClick={submitPost}
-                  />
+                  <EditorTitle title="Share with the community" subtitle="Write a thought, ask a question, or post photos from your learning journey." />
+                  <PostComposer onSubmit={submitPost} />
                 </EditorCard>
               )}
 
               {mode === 'course' && (
                 <EditorCard>
                   <EditorTitle
-                    title="Build an AI course"
-                    subtitle="LYO will generate the curriculum through the course-generation service."
+                    title="What will you teach today?"
+                    subtitle="Give Lyo a topic and build a personalized course together."
                   />
                   <input
                     value={courseTopic}
                     onChange={(e) => setCourseTopic(e.target.value)}
-                    placeholder="Course topic"
+                    placeholder="e.g. The Solar System"
                     aria-label="Course topic"
                     className={fieldClass}
                   />
+                  <div className="flex flex-wrap gap-2" aria-label="Suggested course topics">
+                    {['Algebra', 'Biology', 'World History'].map((topic) => <button key={topic} onClick={() => setCourseTopic(topic)} className="min-h-9 rounded-full border border-white/15 bg-white/[0.05] px-3 text-xs font-semibold text-white/75 hover:bg-white/10">{topic}</button>)}
+                  </div>
                   <div className="flex flex-col gap-2">
                     <span className="text-xs font-semibold text-white/65">Difficulty</span>
                     <div className="flex gap-2">
@@ -324,7 +311,7 @@ export default function CreateSheet({
                           className={cn(
                             'flex-1 py-2 rounded-[10px] text-[13px] font-semibold capitalize transition-colors duration-200',
                             difficulty === d
-                              ? 'bg-white text-black'
+                              ? 'bg-cyan-500/20 text-cyan-100 ring-1 ring-cyan-400/70'
                               : 'bg-white/[0.08] text-white/70 hover:bg-white/[0.14]'
                           )}
                         >
@@ -334,10 +321,10 @@ export default function CreateSheet({
                     </div>
                   </div>
                   <p className="text-[13px] text-white/[0.58]">
-                    This opens a chat with Lyo, who builds the course with you.
+                    Lyo will open a chat and help you shape the course step by step.
                   </p>
                   <PrimaryButton
-                    label="Generate Course"
+                    label="Build with Lyo →"
                     color={active.color}
                     busy={false}
                     disabled={!courseTopic.trim()}
@@ -402,40 +389,14 @@ export default function CreateSheet({
                   />
                 </EditorCard>
               )}
-            </div>
-          </div>
-
-          {/* Mode picker — iOS CreateModePicker */}
-          <div
-            className="relative h-[120px] flex items-center px-4 pb-6"
-            style={{ background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.9))' }}
-          >
-            <div className="flex gap-2 overflow-x-auto no-scrollbar w-full max-w-xl mx-auto">
-              {visibleModes.map((m) => {
-                const selected = m.id === mode;
-                return (
-                  <button
-                    key={m.id}
-                    onClick={() => setMode(m.id)}
-                    aria-pressed={selected}
-                    className={cn(
-                      'flex items-center gap-1.5 shrink-0 px-4 py-2 rounded-full text-[13px] font-bold transition-all duration-200',
-                      selected ? 'text-white scale-105' : 'bg-white/10 text-white/60'
-                    )}
-                    style={
-                      selected
-                        ? {
-                            background: 'linear-gradient(135deg, #3b82f6, #06b6d4)',
-                            boxShadow: '0 0 20px rgba(59,130,246,0.5)',
-                          }
-                        : undefined
-                    }
-                  >
-                    <span className="text-sm">{m.emoji}</span>
-                    {m.label}
-                  </button>
-                );
-              })}
+              </div>
+              <aside className="hidden rounded-[28px] border border-white/10 bg-gradient-to-b from-cyan-400/10 to-white/[0.03] p-5 text-white lg:block">
+                <Image src="/mascot/mascot_standing.png" alt="Lyo, your learning companion" width={180} height={180} className="mx-auto h-40 w-40 object-contain" />
+                <p className="mt-3 flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-cyan-300" aria-hidden="true" /> Create with Lyo</p>
+                <p className="mt-2 text-sm leading-relaxed text-white/60">{active.description}. Bring your curiosity; Lyo will help you make something meaningful.</p>
+                <div className="mt-4 flex items-start gap-2 rounded-xl bg-white/[0.05] p-3 text-xs leading-relaxed text-white/60"><Lightbulb className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" /> Start small. Great learning content begins with one useful idea.</div>
+              </aside>
+              </div>
             </div>
           </div>
         </motion.div>
