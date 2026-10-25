@@ -272,6 +272,22 @@ export const api = {
       return { user: adaptUser(data.user), accessToken: data.access_token };
     },
 
+    /** Signs in with Firebase's ID token from Google, creating the account the first time. */
+    async firebase(idToken: string) {
+      const data = await request<{
+        user: Record<string, unknown>;
+        access_token: string;
+        refresh_token?: string;
+        is_new_user?: boolean;
+      }>('/auth/firebase', {
+        method: 'POST',
+        body: JSON.stringify({ id_token: idToken }),
+        skipAuth: true,
+      });
+      setTokens(data.access_token, data.refresh_token);
+      return { user: adaptUser(data.user), accessToken: data.access_token, isNewUser: Boolean(data.is_new_user) };
+    },
+
     /** Emails a one-time reset link when the address has an account; the answer is the same either way. */
     async requestPasswordReset(email: string) {
       return request<{ message: string }>('/auth/password-reset/request', {

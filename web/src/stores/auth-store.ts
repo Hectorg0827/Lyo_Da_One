@@ -4,6 +4,7 @@ import { api, getAccessToken, clearTokens, adaptUser } from '@/lib/api';
 
 interface AuthStore extends AuthState {
   login: (email: string, password: string) => Promise<void>;
+  loginWithFirebase: (idToken: string) => Promise<void>;
   signup: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => void;
   setUser: (user: User) => void;
@@ -22,6 +23,18 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     set({ isLoading: true });
     try {
       const { user, accessToken } = await api.auth.login(email, password);
+      set({ user, token: accessToken, isAuthenticated: true, isLoading: false });
+      get().enrichWithGamification();
+    } catch (err) {
+      set({ isLoading: false });
+      throw err;
+    }
+  },
+
+  loginWithFirebase: async (idToken: string) => {
+    set({ isLoading: true });
+    try {
+      const { user, accessToken } = await api.auth.firebase(idToken);
       set({ user, token: accessToken, isAuthenticated: true, isLoading: false });
       get().enrichWithGamification();
     } catch (err) {
