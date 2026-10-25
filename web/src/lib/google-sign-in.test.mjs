@@ -45,8 +45,12 @@ test('login and sign-up offer Google, which signs in through POST /auth/firebase
   assert.ok(button.includes('prepareGoogleSignIn()'), 'Firebase loads when the button appears, so a tap opens the window at once');
   assert.ok(browser.includes('loaded ?? (await prepareGoogleSignIn())'));
   assert.ok(browser.includes('persistence: sdk.inMemoryPersistence'), 'Firebase keeps no session of its own');
+  const dockerfile = read('../../Dockerfile');
   for (const name of ['API_KEY', 'AUTH_DOMAIN', 'PROJECT_ID', 'APP_ID']) {
     assert.ok(browser.includes(`process.env.NEXT_PUBLIC_FIREBASE_${name}`), `${name} is written out for Next to inline`);
+    // Railway's Docker build sees only the service variables the Dockerfile declares.
+    assert.ok(dockerfile.includes(`ARG NEXT_PUBLIC_FIREBASE_${name}=`) && dockerfile.includes(`ENV NEXT_PUBLIC_FIREBASE_${name}=$NEXT_PUBLIC_FIREBASE_${name}`),
+      `the Dockerfile passes ${name} to the build`);
   }
   assert.ok(api.includes("'/auth/firebase'") && api.includes('JSON.stringify({ id_token: idToken })'));
 });
