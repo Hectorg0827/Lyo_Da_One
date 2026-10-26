@@ -41,8 +41,8 @@ const MODES: { id: Mode; icon: LucideIcon; label: string; color: string; descrip
 function EditorCard({ children }: { children: React.ReactNode }) {
   // iOS `.createEditorCard()`: padding 20, glass, r24, white/12 hairline
   return (
-    <div className="rounded-[28px] border border-white/[0.12] bg-[#111e26]/90 p-5 text-white shadow-[0_24px_80px_rgba(0,0,0,.25)] backdrop-blur-2xl sm:p-7">
-      <div className="flex flex-col gap-5">{children}</div>
+    <div className="rounded-[24px] border border-white/[0.12] bg-[#111e26]/90 p-4 text-white shadow-[0_24px_80px_rgba(0,0,0,.25)] backdrop-blur-2xl sm:p-6">
+      <div className="flex flex-col gap-4">{children}</div>
     </div>
   );
 }
@@ -214,7 +214,7 @@ export default function CreateSheet({
           />
 
           {/* Brand-led studio header. The logo is quiet; the creator's work is the hero. */}
-          <div className="relative mx-auto flex w-full max-w-5xl items-center justify-between px-4 pb-3 pt-4 sm:px-6">
+          <div className="relative mx-auto flex w-full max-w-7xl items-center justify-between px-4 pb-2 pt-3 sm:px-6">
             <button
               onClick={onClose}
               aria-label="Close"
@@ -243,15 +243,15 @@ export default function CreateSheet({
             />
           )}
 
-          <div className="relative flex-1 overflow-y-auto px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-4 sm:px-6">
-            <div className="mx-auto max-w-5xl space-y-5">
+          <div className="relative flex-1 overflow-y-auto px-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] pt-2 sm:px-6">
+            <div className="mx-auto max-w-7xl space-y-4">
               <div className="text-center sm:pb-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">LYO Create Studio</p>
                 <h1 className="mt-2 font-rounded text-3xl font-bold tracking-tight text-white sm:text-4xl">What will you create today?</h1>
                 <p className="mt-2 text-sm text-white/60">Choose a format and bring your ideas to life.</p>
               </div>
               {/* Familiar + Create switch: all available formats are together, within thumb reach. */}
-              <div className="mx-auto flex w-full max-w-3xl gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.06] p-1.5 no-scrollbar" role="group" aria-label="Choose what to create">
+              <div className="mx-auto flex w-full max-w-4xl gap-2 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.06] p-1.5 no-scrollbar" role="group" aria-label="Choose what to create">
                 {visibleModes.map((item) => {
                   const Icon = item.icon;
                   return <button key={item.id} type="button" onClick={() => setMode(item.id)} aria-pressed={active.id === item.id} className={cn('flex min-h-12 flex-1 shrink-0 items-center justify-center gap-2 rounded-xl px-3 text-sm font-bold transition-all duration-200', active.id === item.id ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-cyan-500/15' : 'text-white/65 hover:bg-white/10 hover:text-white')}>
@@ -260,7 +260,7 @@ export default function CreateSheet({
                 })}
               </div>
 
-              <div className="mx-auto grid max-w-4xl gap-5 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
+              <div className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-start">
               <div>
               {mode === 'clip' && (
                 <EditorCard>
@@ -390,11 +390,11 @@ export default function CreateSheet({
                 </EditorCard>
               )}
               </div>
-              <aside className="hidden rounded-[28px] border border-white/10 bg-gradient-to-b from-cyan-400/10 to-white/[0.03] p-5 text-white lg:block">
-                <Image src="/mascot/mascot_standing.png" alt="Lyo, your learning companion" width={180} height={180} className="mx-auto h-40 w-40 object-contain" />
+              <aside className="hidden rounded-[24px] border border-white/10 bg-gradient-to-b from-cyan-400/10 to-white/[0.03] p-4 text-white lg:block">
+                <Image src="/mascot/mascot_standing.png" alt="Lyo, your learning companion" width={112} height={112} className="mx-auto h-28 w-28 object-contain" />
                 <p className="mt-3 flex items-center gap-2 text-sm font-bold"><Sparkles className="h-4 w-4 text-cyan-300" aria-hidden="true" /> Create with Lyo</p>
-                <p className="mt-2 text-sm leading-relaxed text-white/60">{active.description}. Bring your curiosity; Lyo will help you make something meaningful.</p>
-                <div className="mt-4 flex items-start gap-2 rounded-xl bg-white/[0.05] p-3 text-xs leading-relaxed text-white/60"><Lightbulb className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" /> Start small. Great learning content begins with one useful idea.</div>
+                <p className="mt-2 text-xs leading-relaxed text-white/65">{active.description}. Lyo is here when you need a little inspiration.</p>
+                <div className="mt-3 flex items-start gap-2 rounded-xl bg-white/[0.05] p-2.5 text-[11px] leading-relaxed text-white/60"><Lightbulb className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" /> One useful idea is a great place to start.</div>
               </aside>
               </div>
             </div>

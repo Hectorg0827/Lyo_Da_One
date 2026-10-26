@@ -88,7 +88,7 @@ export function PostComposer({ onSubmit, onCancel }: PostComposerProps) {
   }
 
   return (
-    <div className="space-y-4 text-white">
+    <div className="space-y-3 text-white">
       <div className="flex gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-1" role="group" aria-label="Post type">
         {POST_TYPES.map((option) => (
           <button
@@ -108,12 +108,18 @@ export function PostComposer({ onSubmit, onCancel }: PostComposerProps) {
         <span className="sr-only">Post caption</span>
         <textarea
           autoFocus
-          rows={5}
+          rows={3}
           maxLength={5000}
           value={content}
-          onChange={(event) => setContent(event.target.value)}
+          onChange={(event) => {
+            setContent(event.target.value)
+            // Start compact, then grow with the caption instead of reserving
+            // a tall empty box for every short Facebook-style post.
+            event.currentTarget.style.height = 'auto'
+            event.currentTarget.style.height = `${Math.min(event.currentTarget.scrollHeight, 300)}px`
+          }}
           placeholder={type === 'question_discussion' ? 'What would you like the community to help with?' : 'What would you like to share with LYO?'}
-          className="min-h-36 w-full resize-y rounded-2xl border border-white/10 bg-white/[0.05] p-4 text-base text-white placeholder:text-white/35 focus:border-cyan-400 focus:outline-none"
+          className="max-h-[300px] min-h-[104px] w-full resize-none overflow-y-auto rounded-2xl border border-white/10 bg-white/[0.05] p-4 text-base text-white placeholder:text-white/35 focus:border-cyan-400 focus:outline-none"
         />
         <span className="mt-1 block text-right text-xs text-white/40">{content.length}/5000</span>
       </label>
@@ -142,13 +148,19 @@ export function PostComposer({ onSubmit, onCancel }: PostComposerProps) {
         <input ref={galleryRef} type="file" accept="image/*" multiple className="sr-only" aria-label="Choose photos" onChange={(event) => { selectImages(event.target.files); event.target.value = '' }} />
       </div>
 
-      <div className="space-y-2">
-        <label htmlFor="post-composer-tags" className="block text-sm font-medium text-white/65">Topics</label>
-        {tags.length > 0 && <div className="flex flex-wrap gap-2">{tags.map((tag) => <button key={tag} type="button" disabled={submitting} onClick={() => setTags((current) => current.filter((item) => item !== tag))} className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-200">#{tag} ×</button>)}</div>}
-        <input id="post-composer-tags" value={tagInput} onChange={(event) => setTagInput(event.target.value)} onBlur={addTag} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTag() } }} disabled={submitting} placeholder="Add a subject and press Enter" className="min-h-11 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm text-white placeholder:text-white/35 focus:border-cyan-400 focus:outline-none" />
-      </div>
+      <details className="group rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5">
+        <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-medium text-white/65 marker:hidden [&::-webkit-details-marker]:hidden">
+          <span>Add topics <span className="font-normal text-white/40">(optional)</span>{tags.length > 0 && <span className="ml-2 text-cyan-300">{tags.length} added</span>}</span>
+          <span aria-hidden="true" className="text-white/50 transition-transform group-open:rotate-45">+</span>
+        </summary>
+        <div className="mt-3 space-y-2">
+          <label htmlFor="post-composer-tags" className="sr-only">Topics</label>
+          {tags.length > 0 && <div className="flex flex-wrap gap-2">{tags.map((tag) => <button key={tag} type="button" disabled={submitting} onClick={() => setTags((current) => current.filter((item) => item !== tag))} className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-200">#{tag} ×</button>)}</div>}
+          <input id="post-composer-tags" value={tagInput} onChange={(event) => setTagInput(event.target.value)} onBlur={addTag} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTag() } }} disabled={submitting} placeholder="Add a subject and press Enter" className="min-h-11 w-full rounded-xl border border-white/10 bg-white/[0.05] px-4 text-sm text-white placeholder:text-white/35 focus:border-cyan-400 focus:outline-none" />
+        </div>
+      </details>
 
-      <p className="flex items-center gap-2 text-xs text-white/50"><Sparkles className="h-4 w-4 text-cyan-300" aria-hidden="true" /> Posts appear in Community after publishing. Add a caption even when sharing a photo.</p>
+      <p className="flex items-center gap-2 text-xs text-white/50"><Sparkles className="h-4 w-4 shrink-0 text-cyan-300" aria-hidden="true" /> Posts appear in Community after publishing.</p>
       {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
       <div className="flex gap-3 border-t border-white/10 pt-4">
         {onCancel && <button type="button" onClick={onCancel} disabled={submitting} className="min-h-12 rounded-xl border border-white/15 px-5 text-sm text-white/70 hover:bg-white/10">Cancel</button>}

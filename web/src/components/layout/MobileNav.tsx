@@ -134,18 +134,18 @@ export function MobileNav() {
           aria-current={isChat ? 'page' : undefined}
           className="relative flex w-full min-w-0 min-h-[60px] flex-col items-center justify-center gap-0.5 touch-manipulation"
         >
-          <span className="absolute left-1/2 top-0 h-[54px] w-[54px] -translate-x-1/2 rounded-full mascot-fab-glow opacity-50 pointer-events-none" />
-          <div className="relative flex h-[44px] w-[44px] items-center justify-center transition-transform duration-200 active:scale-95">
+          <span className="pointer-events-none absolute left-1/2 top-1 h-10 w-10 -translate-x-1/2 rounded-full mascot-fab-glow opacity-30" />
+          <div className="relative flex h-9 w-9 items-center justify-center transition-transform duration-200 active:scale-95">
             {!isChat ? (
               <motion.div
                 layoutId={LYO_MASCOT_LAYOUT_ID}
                 transition={{ layout: { type: 'spring', bounce: 0.35, duration: 0.6 } }}
                 className="flex items-center justify-center"
               >
-                <MascotAvatar idle size={44} />
+                <MascotAvatar size={34} />
               </motion.div>
             ) : (
-              <MascotAvatar size={44} />
+              <MascotAvatar size={34} />
             )}
           </div>
           <span className={cn(

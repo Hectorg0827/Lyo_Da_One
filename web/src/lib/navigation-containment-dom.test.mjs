@@ -22,7 +22,7 @@ const mocks = {
   'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
   'next/image': { default: ({ priority, ...props }) => React.createElement('img', props) },
   '@/stores/auth-store': { useAuthStore: () => ({ user: null }) },
-  '@/components/chat/MascotAvatar': { default: () => React.createElement('span', { 'data-mascot': true }) },
+  '@/components/chat/MascotAvatar': { default: ({ size, idle }) => React.createElement('span', { 'data-mascot': true, 'data-size': size, 'data-idle': !!idle }) },
   '@/components/create/CreateSheet': { default: ({ isOpen }) => isOpen ? React.createElement('div', { role: 'dialog' }, 'Create') : null },
 };
 const modules = new Map();
@@ -151,8 +151,10 @@ test('isolated preview keeps five labeled, equal-width phone actions and a compa
     assert.ok(action.textContent.trim(), 'each destination has a visible label');
   }
   const askLyo = bar.querySelector('a[aria-label="Ask Lyo chat"]');
-  assert.ok(askLyo.querySelector('div').className.includes('h-[44px]'));
-  assert.ok(askLyo.querySelector('div').className.includes('w-[44px]'));
+  assert.ok(askLyo.querySelector('div').className.includes('h-9'));
+  assert.ok(askLyo.querySelector('div').className.includes('w-9'));
+  assert.equal(askLyo.querySelector('[data-mascot]').getAttribute('data-size'), '34');
+  assert.equal(askLyo.querySelector('[data-mascot]').getAttribute('data-idle'), 'false', 'the center icon must not float into neighboring hit targets');
   assert.ok(!askLyo.className.includes('-mt-'), 'mascot stays within the bar');
 });
 
