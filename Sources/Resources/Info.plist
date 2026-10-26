@@ -25,7 +25,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.127709691161-r1oqbd1hs3fbr03feq1u9o4junnr254b</string>
+				<string>com.googleusercontent.apps.689766559983-bnbvun3e33q1l1p1r3b9ogs26ph7gs5n</string>
 			</array>
 		</dict>
 		<dict>
@@ -42,7 +42,7 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>GIDClientID</key>
-	<string>127709691161-r1oqbd1hs3fbr03feq1u9o4junnr254b.apps.googleusercontent.com</string>
+	<string>689766559983-bnbvun3e33q1l1p1r3b9ogs26ph7gs5n.apps.googleusercontent.com</string>
 	<!-- Non-empty values override AppConfig defaults. Prefer Xcode env vars for temporary backend hosts.
 	     Left empty so the canonical AppConfig host (api.lyoai.app) applies. -->
 	<key>LyoAPIBaseURL</key>
@@ -52,7 +52,7 @@
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>google</string>
-		<string>com.googleusercontent.apps.127709691161-r1oqbd1hs3fbr03feq1u9o4junnr254b</string>
+		<string>com.googleusercontent.apps.689766559983-bnbvun3e33q1l1p1r3b9ogs26ph7gs5n</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>

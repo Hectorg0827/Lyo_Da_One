@@ -24,6 +24,18 @@ for (const [source, label] of [[authService, 'AuthService'], [loginView, 'LoginV
   forbid(source, 'handleAppleSignIn', `iOS ${label} must not fake Sign in with Apple`);
   forbid(source, 'SignInWithAppleButton', `iOS ${label} has no Apple Developer account for Sign in with Apple yet`);
 }
+// The Google client the app signs in with must belong to the Firebase project
+// (lyo-app) that issues its tokens; one from another project is refused.
+const plistValue = (source, key) => source.match(new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`))?.[1];
+const firebasePlist = read('Sources/Resources/GoogleService-Info.plist');
+const infoPlist = read('Sources/Resources/Info.plist');
+const clientId = plistValue(firebasePlist, 'CLIENT_ID') ?? '';
+if (plistValue(firebasePlist, 'PROJECT_ID') !== 'lyo-app') failures.push('iOS GoogleService-Info.plist is not project lyo-app');
+if (plistValue(firebasePlist, 'BUNDLE_ID') !== 'com.lyo.app') failures.push('iOS GoogleService-Info.plist is not for com.lyo.app');
+if (!clientId.startsWith(`${plistValue(firebasePlist, 'GCM_SENDER_ID')}-`)) failures.push(`iOS CLIENT_ID ${clientId} is from another Google project than lyo-app`);
+if (plistValue(infoPlist, 'GIDClientID') !== clientId) failures.push('iOS Info.plist GIDClientID differs from GoogleService-Info.plist CLIENT_ID');
+need(infoPlist, `<string>${plistValue(firebasePlist, 'REVERSED_CLIENT_ID')}</string>`, 'iOS Info.plist URL scheme for Google\'s sign-in redirect');
+if (read('Sources/Resources/GoogleService-Info (2).plist') !== firebasePlist) failures.push('iOS GoogleService-Info (2).plist differs from GoogleService-Info.plist');
 need(loginView, 'await authService.signInWithGoogle()', 'iOS login waits for Google');
 need(onboarding, 'await authService.signInWithGoogle()', 'iOS onboarding waits for Google');
 forbid(onboarding, 'DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {\n                if authService.isAuthenticated', 'iOS onboarding must not guess when Google finished');
