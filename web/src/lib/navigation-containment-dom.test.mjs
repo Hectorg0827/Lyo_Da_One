@@ -135,6 +135,27 @@ test('isolated preview shows five mobile positions but retains Discover playback
   assert.equal(mocks['@/lib/launch-features'].DISCOVER_LAUNCH_ENABLED, false, 'the reel itself stays gated');
 });
 
+test('isolated preview keeps five labeled, equal-width phone actions and a compact mascot', async t => {
+  const view = await mount(t, '/', true, false, true);
+  const bar = view.container.querySelector('nav[aria-label="Mobile navigation"]');
+  const grid = bar.firstElementChild;
+  assert.match(grid.className, /grid-cols-5/, 'all five actions share the same grid');
+  assert.ok(grid.className.includes('h-[68px]'), 'navigation is compact');
+
+  const actions = [...bar.querySelectorAll('a, button')]
+    .filter(el => ['Focus', 'Discover', 'Ask Lyo chat', 'Community', 'Create']
+      .includes(el.getAttribute('aria-label')));
+  assert.deepEqual(actions.map(el => el.getAttribute('aria-label')),
+    ['Focus', 'Discover', 'Ask Lyo chat', 'Community', 'Create']);
+  for (const action of actions) {
+    assert.ok(action.textContent.trim(), 'each destination has a visible label');
+  }
+  const askLyo = bar.querySelector('a[aria-label="Ask Lyo chat"]');
+  assert.ok(askLyo.querySelector('div').className.includes('h-[44px]'));
+  assert.ok(askLyo.querySelector('div').className.includes('w-[44px]'));
+  assert.ok(!askLyo.className.includes('-mt-'), 'mascot stays within the bar');
+});
+
 test('entering Classroom removes both navs and releases the rail keyboard shortcut', async t => {
   const view = await mount(t);
   assert.ok(view.container.querySelector('aside'));
