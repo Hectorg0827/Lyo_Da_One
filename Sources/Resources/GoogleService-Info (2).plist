@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>127709691161-r1oqbd1hs3fbr03feq1u9o4junnr254b.apps.googleusercontent.com</string>
+	<string>689766559983-bnbvun3e33q1l1p1r3b9ogs26ph7gs5n.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.127709691161-r1oqbd1hs3fbr03feq1u9o4junnr254b</string>
+	<string>com.googleusercontent.apps.689766559983-bnbvun3e33q1l1p1r3b9ogs26ph7gs5n</string>
 	<key>API_KEY</key>
-	<string>AIzaSyBtJIHEn-fULlOJafrItoRfFIPmX7b9g54</string>
+	<string>AIzaSyCVo5oJySM8mAfXb4aTIh0XZVI46Obko9w</string>
 	<key>GCM_SENDER_ID</key>
 	<string>689766559983</string>
 	<key>PLIST_VERSION</key>
@@ -19,15 +19,15 @@
 	<key>STORAGE_BUCKET</key>
 	<string>lyo-app.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
-	<false/>
+	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
-	<false/>
+	<false></false>
 	<key>IS_APPINVITE_ENABLED</key>
-	<true/>
+	<true></true>
 	<key>IS_GCM_ENABLED</key>
-	<true/>
+	<true></true>
 	<key>IS_SIGNIN_ENABLED</key>
-	<true/>
+	<true></true>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:689766559983:ios:309fdee02ee7b5420d2b1a</string>
 </dict>
