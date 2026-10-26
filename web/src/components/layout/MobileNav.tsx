@@ -19,10 +19,9 @@ import {
   type NavIconProps,
 } from './NavIcons';
 
-// Mirrors iOS LivingHubTabBar (MainTabView.swift): two icon groups flanking
-// the center mascot FAB — Focus, Discover · Community, Create. Icon-only
-// ghost tabs with a dot indicator, mascot floats in the middle with a
-// breathing glow.
+// Mirrors the five iOS LivingHubTabBar destinations: Focus, Discover,
+// Ask Lyo, Community, Create. The five equal-width mobile slots and compact
+// in-bar mascot keep each tap target balanced on narrow phone screens.
 //
 // The labels come from `nav-items.mjs`, the same file the desktop rail reads.
 // They used to be written out here and in the sidebar separately, which is
@@ -71,23 +70,25 @@ function GhostTab({
       href={href}
       aria-label={label}
       aria-current={isActive ? 'page' : undefined}
-      className="flex flex-col items-center justify-center gap-1 px-2 sm:px-4 py-2 transition-all duration-200"
+      className="flex w-full min-w-0 min-h-[58px] flex-col items-center justify-center gap-1 py-2 transition-colors duration-200 touch-manipulation"
     >
       <Icon
         className={cn(
           'w-6 h-6 text-white transition-all duration-200',
           isActive
-            ? 'opacity-100 scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'
-            : 'opacity-50',
+            ? 'opacity-100 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'
+            : 'opacity-70',
         )}
         accent={isActive ? NAV_ACCENT : undefined}
       />
       <span
         className={cn(
-          'w-1 h-1 rounded-full bg-white transition-opacity duration-200',
-          isActive ? 'opacity-100' : 'opacity-0',
+          'max-w-full whitespace-nowrap text-[10px] leading-3 font-medium tracking-tight',
+          isActive ? 'text-white' : 'text-white/65',
         )}
-      />
+      >
+        {label}
+      </span>
     </Link>
   );
 }
@@ -115,68 +116,69 @@ export function MobileNav() {
       )}
       aria-label="Mobile navigation"
     >
-      <div className="flex items-center justify-between h-20 px-2 sm:px-6">
-        <div className="flex items-center gap-1 sm:gap-2">
+      <div className="grid h-[68px] grid-cols-5 items-center px-1">
+        {/* Display: contents keeps the DOM groups for navigation tests while
+            giving each action its own equal-width column on small phones. */}
+        <div className="contents">
           {leftItems.map((item) => (
             <GhostTab key={item.href} {...item} isActive={isItemActive(item.href)} />
           ))}
+          {leftItems.length < 2 && <span aria-hidden="true" />}
         </div>
 
-        {/* Center mascot FAB — floats above the bar in a glow, breathing.
-            Lyo "lives" here when not in chat and flies to the chat header
-            on tap (shared layoutId). */}
+        {/* Lyo stays the recognizable center action without covering the feed.
+            No oversized float, and the touch target remains at least 60px. */}
         <Link
           href="/chat"
           aria-label={`${NAV.askLyo.label} chat`}
           aria-current={isChat ? 'page' : undefined}
-          className="relative flex items-center justify-center -mt-10"
+          className="relative flex w-full min-w-0 min-h-[60px] flex-col items-center justify-center gap-0.5 touch-manipulation"
         >
-          <span className="absolute w-28 h-28 rounded-full mascot-fab-glow pointer-events-none" />
-          <div
-            className={cn(
-              'relative w-[70px] h-[70px] rounded-full flex items-center justify-center',
-              'animate-breathe transition-transform duration-200 active:scale-95',
-              'drop-shadow-[0_5px_10px_rgba(167,139,250,0.6)]',
-            )}
-          >
-            {!isChat && (
+          <span className="absolute left-1/2 top-0 h-[54px] w-[54px] -translate-x-1/2 rounded-full mascot-fab-glow opacity-50 pointer-events-none" />
+          <div className="relative flex h-[44px] w-[44px] items-center justify-center transition-transform duration-200 active:scale-95">
+            {!isChat ? (
               <motion.div
                 layoutId={LYO_MASCOT_LAYOUT_ID}
                 transition={{ layout: { type: 'spring', bounce: 0.35, duration: 0.6 } }}
                 className="flex items-center justify-center"
               >
-                <MascotAvatar idle size={64} />
+                <MascotAvatar idle size={44} />
               </motion.div>
+            ) : (
+              <MascotAvatar size={44} />
             )}
           </div>
+          <span className={cn(
+            'relative whitespace-nowrap text-[10px] leading-3 font-semibold tracking-tight',
+            isChat ? 'text-white' : 'text-white/70',
+          )}>Ask Lyo</span>
         </Link>
 
-        <div className="flex items-center gap-1 sm:gap-2">
+        <div className="contents">
+          {rightItems.length === 0 && <span aria-hidden="true" />}
           {rightItems.map((item) => (
             <GhostTab key={item.href} {...item} isActive={isItemActive(item.href)} />
           ))}
 
-          {/* Create — opens the creation sheet, mirroring the iOS plus tab */}
+          {/* Create opens the existing creation sheet. */}
           <button
             onClick={() => setCreateOpen(true)}
             aria-label={NAV.create.label}
-            className="flex flex-col items-center justify-center gap-1 px-2 sm:px-4 py-2 transition-all duration-200"
+            className="flex w-full min-w-0 min-h-[58px] flex-col items-center justify-center gap-1 py-2 transition-colors duration-200 touch-manipulation"
           >
             <CreateIcon
               className={cn(
                 'w-6 h-6 text-white transition-all duration-200',
                 createOpen
-                  ? 'opacity-100 scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'
-                  : 'opacity-50'
+                  ? 'opacity-100 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]'
+                  : 'opacity-70',
               )}
               accent={createOpen ? NAV_ACCENT : undefined}
             />
-            <span
-              className={cn(
-                'w-1 h-1 rounded-full bg-white transition-opacity duration-200',
-                createOpen ? 'opacity-100' : 'opacity-0'
-              )}
-            />
+            <span className={cn(
+              'whitespace-nowrap text-[10px] leading-3 font-medium tracking-tight',
+              createOpen ? 'text-white' : 'text-white/65',
+            )}>Create</span>
           </button>
         </div>
       </div>
