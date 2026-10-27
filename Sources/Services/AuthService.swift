@@ -253,7 +253,7 @@ class AuthService: NSObject, ObservableObject {
                 change.displayName = appleName
                 try? await change.commitChanges()
             }
-            let firebaseIdToken = try await firebaseUser.getIDTokenForcingRefresh(appleName != nil)
+            let firebaseIdToken = try await firebaseUser.idTokenForcingRefresh(appleName != nil)
             let user = try await repository.loginWithFirebase(idToken: firebaseIdToken)
             // A learner who hid their email signs in with an Apple relay
             // address (…@privaterelay.appleid.com); it is a working address, so
