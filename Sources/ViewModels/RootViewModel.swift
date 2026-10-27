@@ -79,6 +79,10 @@ class RootViewModel: ObservableObject {
     func login(email: String, password: String) async throws {
         // Clear any stale tokens before attempting new login
         await tokenManager.clearTokens()
+        // A Google/Firebase session or cached replies from a previous
+        // learner must not carry over to this account.
+        AuthService.signOutOfIdentityProviders()
+        await NetworkCache.shared.clearAll()
         
         do {
             currentUser = try await authRepository.login(email: email, password: password)
@@ -97,6 +101,10 @@ class RootViewModel: ObservableObject {
     func register(email: String, password: String, name: String) async throws {
         // Clear any stale tokens before attempting registration
         await tokenManager.clearTokens()
+        // A Google/Firebase session or cached replies from a previous
+        // learner must not carry over to this account.
+        AuthService.signOutOfIdentityProviders()
+        await NetworkCache.shared.clearAll()
         
         do {
             currentUser = try await authRepository.register(email: email, password: password, name: name)
@@ -167,10 +175,13 @@ class RootViewModel: ObservableObject {
             handleError(error)
         }
 
-        // Clear local state
+        // Clear local state, including the Google/Firebase session and cached
+        // replies (GET /auth/me...), so the next learner on this device starts clean.
         currentUser = nil
         isAuthenticated = false
         await tokenManager.clearTokens()
+        AuthService.signOutOfIdentityProviders()
+        await NetworkCache.shared.clearAll()
         
         Log.app.debugLine("✅ User logged out - services cleaned up")
     }

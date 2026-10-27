@@ -170,14 +170,26 @@ object Session {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            return accountDeletionFailureMessage(error)
+            return deletionFailed(accountDeletionFailureMessage(error))
         }
-        if (!accountDeletionSucceeded(code)) return accountDeletionFailureMessage(code)
+        if (!accountDeletionSucceeded(code)) return deletionFailed(accountDeletionFailureMessage(code))
 
         RecentCourseStore.clear(context)
         com.lyo.app.data.classroom.ClassroomSessionStore.clearAll()
         clearLocalSession()
         return null
+    }
+
+    /**
+     * The account was not deleted. If renewing an expired login failed along
+     * the way, ApiClient's authenticator has already cleared the saved tokens;
+     * the learner then has no session left, so the app shows login (where the
+     * message asks them to log in again) instead of a signed-in screen that
+     * can no longer reach the server.
+     */
+    private fun deletionFailed(message: String): String {
+        if (TokenManager.accessToken == null) clearLocalSession()
+        return message
     }
 
     private fun clearLocalSession() {
