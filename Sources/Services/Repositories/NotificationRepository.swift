@@ -23,16 +23,9 @@ class DefaultNotificationRepository: NotificationRepository {
             return notifications
         } catch {
             let duration = CFAbsoluteTimeGetCurrent() - startTime
-            Log.net.warning("Failed to fetch notifications from backend: \(error). Using mock data. (Duration: \(String(format: "%.3f", duration))s)")
-            
-            // Fallback to mock data
-            return [
-                NotificationItem(title: "New Course Available", message: "Calculus II has been added to your library.", time: "2h ago", isRead: false),
-                NotificationItem(title: "Streak Freeze", message: "You used a streak freeze yesterday!", time: "1d ago", isRead: true),
-                NotificationItem(title: "Assignment Due", message: "Physics lab report due tomorrow.", time: "2d ago", isRead: true),
-                NotificationItem(title: "Lyo Update", message: "Check out the new features in Lyo.", time: "3d ago", isRead: true),
-                NotificationItem(title: "System", message: "Your profile was updated.", time: "1w ago", isRead: true)
-            ]
+            Log.net.warning("Failed to fetch notifications from backend: \(error). (Duration: \(String(format: "%.3f", duration))s)")
+            // The screen shows its own empty/error state; no invented notifications.
+            throw error
         }
     }
     

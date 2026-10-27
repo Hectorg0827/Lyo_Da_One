@@ -32,9 +32,8 @@ class DiscoveryService: ObservableObject {
             print("✅ Loaded \(myDiscoveries.count) my discoveries from backend")
         } catch {
             print("❌ Failed to load my discoveries: \(error.localizedDescription)")
+            // The error is shown; invented discoveries never stand in for real ones.
             self.error = error.localizedDescription
-            // Fallback to mock data
-            loadMockDiscoveries()
         }
         
         isLoading = false

@@ -86,33 +86,8 @@ class RootViewModel: ObservableObject {
             // ✅ Trigger post-login services
             await onUserAuthenticated()
         } catch {
-            // Check if it's a credential error that should be shown to user
-            if let lyoError = error as? LyoError {
-                switch lyoError {
-                case .network(.unauthorized):
-                    // Invalid credentials - throw to show error to user
-                    throw lyoError
-                case .rateLimitExceeded:
-                    // Rate limit - throw to show error to user
-                    throw lyoError
-                case .validation:
-                    // Validation error - throw to show error to user
-                    throw lyoError
-                default:
-                    break
-                }
-            }
-            
-            // Fallback: If backend is down/unreachable (network error, timeout, etc.)
-            // But NOT for credential/validation errors
-            print("⚠️ Backend login failed, using fallback mode: \(error.localizedDescription)")
-            currentUser = createFallbackUser(email: email)
-            isAuthenticated = true
-            self.error = nil  // Clear error so UI doesn't show backend messages
-            // Don't throw error - allow app to continue
-            
-            // ✅ Still trigger services for fallback mode
-            await onUserAuthenticated()
+            // No offline "fallback" account: without the API there is no session.
+            throw error
         }
     }
 
@@ -129,35 +104,11 @@ class RootViewModel: ObservableObject {
             // ✅ Trigger post-registration services, same as login
             await onUserAuthenticated()
         } catch {
-            // Check for specific backend errors that should be shown to the user
-            if let lyoError = error as? LyoError {
-                switch lyoError {
-                case .network(.unauthorized):
-                    // Invalid credentials - throw to show error to user
-                    throw lyoError
-                case .rateLimitExceeded:
-                    // Rate limit - throw to show error to user
-                    throw lyoError
-                case .validation:
-                    // Validation error - throw to show error to user
-                    throw lyoError
-                default:
-                    break
-                }
-            }
-            
-            // Fallback: If backend is down/unreachable, use local mock user
-            print("⚠️ Backend registration failed, using fallback mode: \(error.localizedDescription)")
-            currentUser = createFallbackUser(email: email, name: name)
-            isAuthenticated = true
-            self.error = nil  // Clear error so UI doesn't show backend messages
-            // Don't throw error - allow app to continue
-            
-            // ✅ Still trigger services for fallback mode
-            await onUserAuthenticated()
+            // No offline "fallback" account: without the API there is no session.
+            throw error
         }
     }
-    
+
     // MARK: - Signed In
 
     /// Called by the sign-in screens once AuthService holds a session the API
@@ -200,23 +151,6 @@ class RootViewModel: ObservableObject {
         }
         
         print("✅ Post-authentication services initialized")
-    }
-
-    // MARK: - Fallback Authentication
-    
-    private func createFallbackUser(email: String, name: String? = nil) -> User {
-        return User(
-            id: Int.random(in: 5000...9999),
-            email: email,
-            name: name ?? "User",
-            avatarURL: nil,
-            createdAt: Date(),
-            level: 1,
-            xp: 0,
-            streak: 0,
-            totalLessonsCompleted: 0,
-            achievements: []
-        )
     }
 
     // MARK: - Logout

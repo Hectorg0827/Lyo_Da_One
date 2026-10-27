@@ -47,12 +47,8 @@ class PostService: ObservableObject {
             print("✅ Loaded \(response.posts.count) posts from backend")
         } catch {
             print("❌ Failed to load posts: \(error.localizedDescription)")
+            // The error is shown; invented posts never stand in for the feed.
             self.error = error.localizedDescription
-            
-            // Fallback to mock data only on first load
-            if postsFeed.isEmpty {
-                loadMockPosts()
-            }
         }
         
         isLoading = false

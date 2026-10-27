@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Course Generation Request
 
@@ -140,17 +141,10 @@ final class CourseGenerationService: ObservableObject {
                 generatedCourse = course
                 return course
             } catch {
-                print("❌ OpenAI fallback failed: \(error)")
-                
-                // Fallback to mock (Last Resort)
-                print("🛠 LAST RESORT: Generating mock course")
-                let course = generateMockCourse(topic: topic)
-                
-                currentStep = "Course ready (Offline Mode)!"
-                progress = 1.0
-                
-                generatedCourse = course
-                return course
+                Log.ai.error("Course generation fallback failed: \(error.localizedDescription)")
+                // No placeholder course: the learner is told it didn't work.
+                self.error = "Couldn't create your course right now. Please try again."
+                throw error
             }
         }
     }

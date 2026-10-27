@@ -57,7 +57,7 @@ struct HybridPostCard: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                     
-                    Text("2h ago") // Mock time
+                    Text(post.createdAt.formatted(.relative(presentation: .named)))
                         .font(.caption)
                         .foregroundColor(Color("LyoTextSecondary"))
                 }

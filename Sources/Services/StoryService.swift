@@ -48,9 +48,8 @@ class StoryService: ObservableObject {
             print("✅ Loaded \(stories.count) stories from backend")
         } catch {
             print("❌ Failed to load stories: \(error.localizedDescription)")
+            // The error is shown; invented stories never stand in for real ones.
             self.error = error.localizedDescription
-            // Fallback to mock data
-            loadMockStories()
         }
         
         isLoading = false
