@@ -41,4 +41,6 @@ gradle :app:assembleDebug        # or ./gradlew after `gradle wrapper`
 
 APK output: `app/build/outputs/apk/debug/app-debug.apk`.
 
-The backend base URL is a `buildConfigField` in `app/build.gradle.kts` (`API_BASE_URL`) — change it there for staging/local backends.
+Which server the app talks to depends on the build type: `release` uses production (`https://api.lyoai.app`); `debug` and `staging` use the staging server once `LYO_STAGING_API_BASE_URL` is set (as a `-P` Gradle property or an environment variable), and production until then. See `docs/STAGING.md`.
+
+Play Store builds (signing, version numbers, `google-services.json`): see `RELEASE.md`.

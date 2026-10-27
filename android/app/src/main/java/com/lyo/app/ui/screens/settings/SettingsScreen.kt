@@ -277,6 +277,16 @@ fun SettingsScreen(nav: NavHostController) {
                     description = BuildConfig.VERSION_NAME,
                     showChevron = false,
                 )
+                // Test builds say which server they talk to; the Play Store
+                // build (production) shows nothing extra.
+                if (BuildConfig.API_ENVIRONMENT != "production") {
+                    ActionRow(
+                        icon = Icons.Filled.Info,
+                        title = "Server",
+                        description = "${BuildConfig.API_ENVIRONMENT} · ${BuildConfig.API_BASE_URL}",
+                        showChevron = false,
+                    )
+                }
             }
         }
 

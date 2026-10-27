@@ -112,6 +112,9 @@ jobs:
       - name: Verify Delete account parity (DELETE /auth/me)
         run: node scripts/verify-account-deletion.mjs
 
+      - name: Verify Android release and staging configuration
+        run: node scripts/verify-android-release-config.mjs
+
   ios:
     name: Build & Test (iOS)
     runs-on: macos-14
