@@ -158,6 +158,19 @@ class RootViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Signed In
+
+    /// Called by the sign-in screens once AuthService holds a session the API
+    /// confirmed (its tokens are already in the keychain). Opens the app and
+    /// starts the same services a restored session starts, push included.
+    func didSignIn() async {
+        isAuthenticated = true
+        await onUserAuthenticated()
+        if let user = try? await authRepository.getCurrentUser() {
+            currentUser = user
+        }
+    }
+
     // MARK: - Post-Authentication Services
     
     /// Called after successful authentication to initialize services

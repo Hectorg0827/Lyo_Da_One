@@ -43,8 +43,8 @@ struct RegisterView: View {
                     Task {
                         await authService.register(name: name, email: email, password: password)
                         if authService.isAuthenticated {
-                            rootViewModel.isAuthenticated = true
                             isPresented = false
+                            await rootViewModel.didSignIn()
                         }
                     }
                 }) {

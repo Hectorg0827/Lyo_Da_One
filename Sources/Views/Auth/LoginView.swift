@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 struct LoginView: View {
     @EnvironmentObject var rootViewModel: RootViewModel
@@ -81,7 +82,7 @@ struct LoginView: View {
                                         Task {
                                             await authService.login(email: email, password: password)
                                             if authService.isAuthenticated {
-                                                rootViewModel.isAuthenticated = true
+                                                await rootViewModel.didSignIn()
                                             }
                                         }
                                     }
@@ -103,14 +104,31 @@ struct LoginView: View {
                             .padding(.horizontal, 40)
                             
                             VStack(spacing: 12) {
-                                // Sign in with Apple returns once the app has an Apple Developer
-                                // account to switch it on; until then it could only pretend.
+                                // Apple's own button (Human Interface Guidelines), listed
+                                // first and the same size as Google's. App Store
+                                // guideline 4.8 requires it wherever Google is offered.
+                                SignInWithAppleButton(.continue) { request in
+                                    authService.prepareAppleSignIn(request)
+                                } onCompletion: { result in
+                                    Task {
+                                        await authService.finishAppleSignIn(result)
+                                        if authService.isAuthenticated {
+                                            await rootViewModel.didSignIn()
+                                        }
+                                    }
+                                }
+                                .signInWithAppleButtonStyle(.white)
+                                .frame(maxWidth: 340)
+                                .frame(height: 50)
+                                .cornerRadius(16)
+                                .disabled(authService.isLoading)
+
                                 Button(action: {
                                     Task {
                                         // Waits for the learner to finish in Google's sheet.
                                         await authService.signInWithGoogle()
                                         if authService.isAuthenticated {
-                                            rootViewModel.isAuthenticated = true
+                                            await rootViewModel.didSignIn()
                                         }
                                     }
                                 }) {
@@ -127,7 +145,9 @@ struct LoginView: View {
                                 }
                                 .disabled(authService.isLoading)
                                 
-                                // Demo Mode Button
+                                #if DEBUG
+                                // Demo Mode is a developer tool. App Store builds have no
+                                // way into the app without an account the API confirmed.
                                 Button(action: {
                                     AuthService.shared.enterDemoMode()
                                     rootViewModel.isAuthenticated = true
@@ -147,6 +167,7 @@ struct LoginView: View {
                                             .stroke(Color.white.opacity(0.3), lineWidth: 1)
                                     )
                                 }
+                                #endif
                             }
                             .padding(.horizontal, 24)
                         }

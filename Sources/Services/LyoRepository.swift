@@ -43,6 +43,11 @@ class LyoRepository: ObservableObject {
     }
 
     func loginWithGoogle(idToken: String) async throws -> User {
+        try await loginWithFirebase(idToken: idToken)
+    }
+
+    /// Exchanges a Firebase ID token (from Google or Apple) for LYO's tokens.
+    func loginWithFirebase(idToken: String) async throws -> User {
         let response: LoginResponse = try await NetworkClient.shared.request(Endpoints.Auth.firebase(idToken: idToken))
         
         self.authToken = response.accessToken
