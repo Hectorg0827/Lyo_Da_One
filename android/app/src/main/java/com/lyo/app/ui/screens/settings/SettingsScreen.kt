@@ -78,8 +78,9 @@ fun SettingsScreen(nav: NavHostController) {
     var deleteError by remember { mutableStateOf<String?>(null) }
 
     // Tokens and local data are cleared inside Session.deleteAccount only after
-    // the server confirms; on failure the learner stays here with the message
-    // (signed in, unless an expired login could not be renewed).
+    // the server confirms; on failure the learner stays here, signed in, with
+    // the message. If an expired login could not be renewed the session ends
+    // and the login screen shows the message instead (Session.takeLoginMessage).
     fun deleteAccount() {
         if (deletingAccount) return
         deletingAccount = true

@@ -62,7 +62,7 @@ fun LoginScreen(nav: NavHostController) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf(Session.takeLoginMessage()) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 

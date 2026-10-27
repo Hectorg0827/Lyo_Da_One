@@ -34,6 +34,17 @@ object Session {
     var hydrationError by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * A message for the login screen after the session ended outside it (a
+     * failed account deletion whose expired login could not be renewed). The
+     * nav graph swaps to login as soon as the session ends, so the screen that
+     * started it cannot show the message itself.
+     */
+    private var pendingLoginMessage: String? = null
+
+    /** Returns the pending login message once, then forgets it. */
+    fun takeLoginMessage(): String? = pendingLoginMessage.also { pendingLoginMessage = null }
+
     suspend fun hydrate() {
         isLoading = true
         hydrationError = null
@@ -183,12 +194,15 @@ object Session {
     /**
      * The account was not deleted. If renewing an expired login failed along
      * the way, ApiClient's authenticator has already cleared the saved tokens;
-     * the learner then has no session left, so the app shows login (where the
-     * message asks them to log in again) instead of a signed-in screen that
-     * can no longer reach the server.
+     * the learner then has no session left, so the app shows login, carrying
+     * the message (account not deleted, log in again) instead of a signed-in
+     * screen that can no longer reach the server.
      */
     private fun deletionFailed(message: String): String {
-        if (TokenManager.accessToken == null) clearLocalSession()
+        if (TokenManager.accessToken == null) {
+            pendingLoginMessage = message
+            clearLocalSession()
+        }
         return message
     }
 
