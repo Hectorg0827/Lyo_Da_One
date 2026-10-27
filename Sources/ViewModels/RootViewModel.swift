@@ -240,6 +240,16 @@ class RootViewModel: ObservableObject {
         print("✅ User logged out - services cleaned up")
     }
 
+    /// Called after AuthService.deleteAccount() succeeded. The account no
+    /// longer exists, so unlike logout() nothing is sent to /auth/logout.
+    func didDeleteAccount() async {
+        await PushNotificationService.shared.onUserLogout()
+        SyncService.shared.disconnect()
+        await tokenManager.clearTokens()
+        currentUser = nil
+        isAuthenticated = false
+    }
+
     // MARK: - User Update
 
     func updateUser(_ updatedUser: User) {

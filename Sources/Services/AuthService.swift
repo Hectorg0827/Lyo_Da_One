@@ -322,8 +322,152 @@ class AuthService: NSObject, ObservableObject {
     }
 }
 
+// MARK: - Account Deletion
+
+/// Why an account could not be deleted, in words for the learner.
+enum AccountDeletionError: LocalizedError {
+    case appleConfirmationNeeded
+    case server(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .appleConfirmationNeeded:
+            return "Your account was not deleted. Because you signed in with Apple, please confirm with Apple to delete it."
+        case .server(let error):
+            if case .network(.noInternetConnection)? = error as? LyoError {
+                return "Your account was not deleted. You're offline; please connect to the internet and try again."
+            }
+            return "Your account was not deleted. Something went wrong on our side; please try again in a moment."
+        }
+    }
+}
+
 extension AuthService {
+    /// Permanently deletes the learner's LYO account (DELETE /auth/me).
+    ///
+    /// Only after the API confirms (200/204) does this sign out of Apple,
+    /// Google and Firebase and erase this device's tokens and caches. If the
+    /// API refuses or can't be reached it throws and changes nothing: the
+    /// learner stays signed in and can try again.
+    @MainActor
     func deleteAccount() async throws {
+        // Apple requires apps to revoke Sign in with Apple when the account is
+        // deleted. That needs a fresh authorization code, so a learner who
+        // signed in with Apple confirms once more before anything is deleted.
+        var appleAuthorizationCode: String?
+        #if canImport(FirebaseAuth)
+        if Auth.auth().currentUser?.providerData.contains(where: { $0.providerID == "apple.com" }) == true {
+            appleAuthorizationCode = try await Self.confirmWithApple()
+        }
+        #endif
+
+        do {
+            _ = try await NetworkClient.shared.requestRawData(Endpoints.Auth.deleteAccount)
+        } catch {
+            Log.auth.error("Account deletion failed: \(error.localizedDescription)")
+            throw AccountDeletionError.server(error)
+        }
+        Log.auth.info("Account deleted on the server")
+
+        #if canImport(FirebaseAuth)
+        if let appleAuthorizationCode {
+            do {
+                try await Auth.auth().revokeToken(withAuthorizationCode: appleAuthorizationCode)
+            } catch {
+                // The LYO account is already gone; the learner can still remove
+                // LYO under Settings > Apple ID > Sign in with Apple.
+                Log.auth.error("Apple token revocation failed: \(error.localizedDescription)")
+            }
+        }
+        try? await Auth.auth().currentUser?.delete()
+        try? Auth.auth().signOut()
+        #endif
+        #if canImport(GoogleSignIn)
+        GIDSignIn.sharedInstance.signOut()
+        #endif
+
+        await Self.eraseLocalAccountData()
         logout()
+    }
+
+    /// Erases everything this device kept about the deleted account.
+    @MainActor
+    private static func eraseLocalAccountData() async {
+        await TokenManager.shared.clearAll()
+        await NetworkCache.shared.clearAll()
+        URLCache.shared.removeAllCachedResponses()
+        UnifiedChatPersistence.shared.clearAllConversations()
+        GeneratedContentStore.shared.clearAll()
+        UIStackStore.shared.removeAll()
+        LearningProfileService.shared.clear()
+        if let domain = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: domain)
+        }
+    }
+
+    /// Asks Apple for a fresh authorization code (Face ID / passcode sheet).
+    /// Closing the sheet throws `appleConfirmationNeeded`, so nothing is deleted.
+    @MainActor
+    private static func confirmWithApple() async throws -> String {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = []
+        let authorization: ASAuthorization
+        do {
+            authorization = try await AppleAuthorizationRequester().perform(request)
+        } catch {
+            if (error as? ASAuthorizationError)?.code != .canceled {
+                Log.auth.error("Apple confirmation failed: \(error.localizedDescription)")
+            }
+            throw AccountDeletionError.appleConfirmationNeeded
+        }
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let codeData = credential.authorizationCode,
+              let code = String(data: codeData, encoding: .utf8) else {
+            throw AccountDeletionError.appleConfirmationNeeded
+        }
+        return code
+    }
+}
+
+/// Runs one Apple ID request outside the SwiftUI button (account deletion
+/// asks Apple to confirm again) and hands back its result.
+private final class AppleAuthorizationRequester: NSObject,
+    ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    private var continuation: CheckedContinuation<ASAuthorization, Error>?
+    private var controller: ASAuthorizationController?
+    private var anchor: ASPresentationAnchor!
+
+    @MainActor
+    func perform(_ request: ASAuthorizationAppleIDRequest) async throws -> ASAuthorization {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        guard let window = scene?.windows.first(where: \.isKeyWindow) ?? scene?.windows.first else {
+            throw ASAuthorizationError(.failed)
+        }
+        anchor = window
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = self
+            controller.presentationContextProvider = self
+            self.controller = controller
+            controller.performRequests()
+        }
+    }
+
+    func authorizationController(controller: ASAuthorizationController,
+                                 didCompleteWithAuthorization authorization: ASAuthorization) {
+        continuation?.resume(returning: authorization)
+        continuation = nil
+        self.controller = nil
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        continuation?.resume(throwing: error)
+        continuation = nil
+        self.controller = nil
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        anchor
     }
 }

@@ -12,6 +12,8 @@ struct SettingsView: View {
     @State private var showingSubscriptionSheet = false
     @State private var notificationPreferences: NotificationPreferences?
     @State private var showingDeleteConfirmation = false
+    @State private var isDeletingAccount = false
+    @State private var deleteAccountError: String?
 
     var body: some View {
         NavigationView {
@@ -137,22 +139,43 @@ struct SettingsView: View {
                 }
 
                 // Account Section
-                Section("Account") {
-                    Button("Delete Account") {
+                Section {
+                    Button {
                         showingDeleteConfirmation = true
+                    } label: {
+                        HStack {
+                            Text("Delete Account")
+                            if isDeletingAccount {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
                     }
                     .foregroundColor(.red)
+                    .disabled(isDeletingAccount)
+                } header: {
+                    Text("Account")
+                } footer: {
+                    Text("Permanently deletes your LYO account and its data.")
                 }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .alert("Delete Account", isPresented: $showingDeleteConfirmation) {
+            .alert("Delete your account permanently?", isPresented: $showingDeleteConfirmation) {
                 Button("Cancel", role: .cancel) { }
-                Button("Delete", role: .destructive) {
+                Button("Delete Permanently", role: .destructive) {
                     deleteAccount()
                 }
             } message: {
-                Text("Are you sure you want to delete your account? This action cannot be undone.")
+                Text("This permanently deletes your LYO account and everything in it: your profile, courses, progress, chats and posts. It can't be undone. If you signed in with Apple, you'll be asked to confirm with Apple.")
+            }
+            .alert("Couldn't delete your account", isPresented: Binding(
+                get: { deleteAccountError != nil },
+                set: { if !$0 { deleteAccountError = nil } }
+            )) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(deleteAccountError ?? "")
             }
 
             .navigationBarTitleDisplayMode(.inline)
@@ -208,12 +231,19 @@ struct SettingsView: View {
     }
     
     private func deleteAccount() {
-        Task {
+        isDeletingAccount = true
+        Task { @MainActor in
             do {
                 try await AuthService.shared.deleteAccount()
-                // dismiss() // Usually Logout triggers root view change, so dismiss might be redundant or fail
+                isDeletingAccount = false
+                dismiss()
+                // Only now, with the account gone, does the app return to sign-in.
+                await rootViewModel.didDeleteAccount()
             } catch {
+                // Nothing was deleted and the learner stays signed in.
+                isDeletingAccount = false
                 Log.ui.error("Failed to delete account: \(error.localizedDescription)")
+                deleteAccountError = error.localizedDescription
             }
         }
     }
