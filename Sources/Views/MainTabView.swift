@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 /// New 5-button navigation with center FAB (Lyo Avatar)
 /// Design: Focus | Discover | [Lyo FAB] | Post | Profile
@@ -428,7 +429,7 @@ extension MainTabView {
             .onReceive(NotificationCenter.default.publisher(for: .saveCourseToLibrary)) { notification in
                 if let userInfo = notification.userInfo,
                    let topic = userInfo["topic"] as? String {
-                    print("📚 Saving course stack: \(topic)")
+                    Log.ui.debugLine("📚 Saving course stack: \(topic)")
                     Task {
                         // Create a stack for this course
                         await stackService.createStackItem(
@@ -1368,7 +1369,7 @@ struct AppDrawerOverlay: View {
                     startingStoryId: story.id,
                     onAskLio: { context in
                         // Future: Open Lio Chat with context
-                        print("Asked Lio about: \(context)")
+                        Log.ui.debugLine("Asked Lio about: \(context)")
                     }
                 )
             } else {

@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import MapKit
 import AVKit
 
@@ -1621,7 +1622,7 @@ struct CourseDetailSheet: View {
                     
                     Button(action: {
                         // TODO: Navigate to course content/player
-                        print("📚 Starting course: \\(course.title)")
+                        Log.ui.debugLine("📚 Starting course: \\(course.title)")
                         HapticManager.shared.medium()
                         isPresented = false
                     }) {

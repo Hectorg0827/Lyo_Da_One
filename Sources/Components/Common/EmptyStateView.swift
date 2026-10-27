@@ -7,6 +7,7 @@
 //
 
 import SwiftUI
+import os
 
 struct EmptyStateView: View {
     let iconName: String
@@ -100,6 +101,6 @@ struct EmptyStateView: View {
         message: "You haven't generated or saved any learning paths. Ask LYO to create your first course!",
         actionTitle: "Generate Course"
     ) {
-        print("Action tapped")
+        Log.ui.debugLine("Action tapped")
     }
 }

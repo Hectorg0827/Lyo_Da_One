@@ -869,11 +869,11 @@ struct PollBlockView: View {
                             Text(options[index])
                                 .foregroundColor(.primary)
                             Spacer()
-                            if hasVoted {
-                                // Show mock percentage
-                                Text("\(Int.random(in: 10...50))%")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
+                            // There are no real vote totals to show, so only the
+                            // learner's own choice is marked (never invented percentages).
+                            if hasVoted && selectedIndex == index {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.blue)
                             }
                         }
                         .padding()

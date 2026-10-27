@@ -204,8 +204,7 @@ class NotificationCenterViewModel: ObservableObject {
             Log.ui.info("Loaded \\(notifications.count) notifications")
         } catch {
             Log.ui.error("Failed to load notifications: \\(error.localizedDescription)")
-            // Create some mock notifications for demo
-            notifications = createMockNotifications()
+            // Keep what was loaded; never show invented notifications.
         }
 
         isLoading = false

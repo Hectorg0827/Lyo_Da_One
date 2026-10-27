@@ -7,6 +7,7 @@
 //
 
 import Foundation
+import os
 
 // MARK: - Backend AI Request/Response Models
 
@@ -242,7 +243,7 @@ final class BackendAIService {
     private var currentResourceId: String = "general_learning"
 
     private init() {
-        print("🧠 BackendAIService initialized - using hybrid AI (Gemini + OpenAI)")
+        Log.ai.debugLine("🧠 BackendAIService initialized - using hybrid AI (Gemini + OpenAI)")
     }
 
     func chatModeHint(for mode: String) -> String {
@@ -339,7 +340,7 @@ final class BackendAIService {
                             switch eventType {
                             case "start":
                                 let primaryAI = event["primary_ai"] as? String ?? "unknown"
-                                print("🚀 Stream started with \(primaryAI)")
+                                Log.ai.debugLine("🚀 Stream started with \(primaryAI)")
 
                             case "chunk":
                                 if let content = event["content"] as? String {
@@ -349,7 +350,7 @@ final class BackendAIService {
 
                             case "done":
                                 responseTime = event["response_time_ms"] as? Double ?? 0
-                                print("✅ Stream completed in \(responseTime)ms")
+                                Log.ai.debugLine("✅ Stream completed in \(responseTime)ms")
 
                                 // Update conversation history
                                 self.conversationHistory.append(ConversationMessage(role: "user", content: message))
@@ -363,7 +364,7 @@ final class BackendAIService {
 
                             case "error":
                                 let errorMsg = event["message"] as? String ?? "Unknown error"
-                                print("❌ Stream error: \(errorMsg)")
+                                Log.ai.debugLine("❌ Stream error: \(errorMsg)")
                                 onError(BackendAIError.serverError(errorMsg))
 
                             default:
@@ -437,10 +438,10 @@ final class BackendAIService {
                 return recordChatTurn(message: message, response: response)
             }
 
-            print("⚠️ Backend AI failed: \(error). Will fallback to local.")
+            Log.ai.debugLine("⚠️ Backend AI failed: \(error). Will fallback to local.")
             throw error
         } catch {
-            print("⚠️ Backend AI failed: \(error). Will fallback to local.")
+            Log.ai.debugLine("⚠️ Backend AI failed: \(error). Will fallback to local.")
             throw error
         }
     }
@@ -463,7 +464,7 @@ final class BackendAIService {
         )
 
         let routerEndpoint = "\(baseURL)/api/v1/lyo2/chat"
-        print("↪️ /api/v1/ai/chat not found. Trying \(routerEndpoint)")
+        Log.ai.debugLine("↪️ /api/v1/ai/chat not found. Trying \(routerEndpoint)")
         return try await postPublic(endpoint: routerEndpoint, body: routerRequest)
     }
 

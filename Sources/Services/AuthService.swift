@@ -6,7 +6,11 @@ import GoogleSignIn
 #if canImport(FirebaseAuth)
 import FirebaseAuth
 #endif
+import AuthenticationServices
+import CryptoKit
+import Security
 import UIKit
+import os
 
 class AuthService: NSObject, ObservableObject {
     @Published var isAuthenticated = false
@@ -89,7 +93,7 @@ class AuthService: NSObject, ObservableObject {
             }
         } catch {
             // Backend failed - Show error instead of falling back to mock
-            print("❌ Backend login failed: \(error.localizedDescription)")
+            Log.auth.debugLine("❌ Backend login failed: \(error.localizedDescription)")
             await MainActor.run {
                 self.error = error.localizedDescription
                 self.isLoading = false
@@ -111,7 +115,7 @@ class AuthService: NSObject, ObservableObject {
             }
         } catch {
             // Backend failed - Show error instead of falling back to mock
-            print("❌ Backend registration failed: \(error.localizedDescription)")
+            Log.auth.debugLine("❌ Backend registration failed: \(error.localizedDescription)")
             await MainActor.run {
                 self.error = error.localizedDescription
                 self.isLoading = false
@@ -179,12 +183,121 @@ class AuthService: NSObject, ObservableObject {
             // The learner closed Google's sheet; nothing went wrong.
         } catch {
             // No fallback: without the API's confirmation there is no LYO session.
-            print("❌ Google sign-in failed: \(error.localizedDescription)")
+            Log.auth.debugLine("❌ Google sign-in failed: \(error.localizedDescription)")
             self.error = "Couldn't sign you in with Google. Please try again."
         }
         #else
         error = "Google sign-in isn't available in this version of the app."
         #endif
+    }
+
+    // MARK: - Sign in with Apple
+
+    /// The unhashed nonce of the Apple request in progress. Apple signs its
+    /// SHA-256 into the identity token; Firebase checks it against this one.
+    private var currentAppleNonce: String?
+
+    /// Fills in the request the Sign in with Apple button is about to send
+    /// (on the main thread, from the button's onRequest).
+    func prepareAppleSignIn(_ request: ASAuthorizationAppleIDRequest) {
+        let nonce = Self.randomNonce()
+        currentAppleNonce = nonce
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = Self.sha256(nonce)
+        error = nil
+    }
+
+    /// Signs in with Apple: Apple confirms the account, Firebase turns that
+    /// into an ID token, and the API exchanges it for LYO's tokens
+    /// (POST /auth/firebase) exactly as it does for Google.
+    @MainActor
+    func finishAppleSignIn(_ result: Result<ASAuthorization, Error>) async {
+        #if canImport(FirebaseAuth)
+        let appleCredential: ASAuthorizationAppleIDCredential
+        switch result {
+        case .failure(let failure):
+            if (failure as? ASAuthorizationError)?.code != .canceled {
+                Log.auth.error("Apple sign-in failed: \(failure.localizedDescription)")
+                error = "Couldn't sign you in with Apple. Please try again."
+            }
+            // Otherwise the learner closed Apple's sheet; nothing went wrong.
+            return
+        case .success(let authorization):
+            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
+                error = "Couldn't sign you in with Apple. Please try again."
+                return
+            }
+            appleCredential = credential
+        }
+        guard let nonce = currentAppleNonce,
+              let tokenData = appleCredential.identityToken,
+              let appleIdToken = String(data: tokenData, encoding: .utf8) else {
+            error = "Apple didn't confirm your account. Please try again."
+            return
+        }
+        currentAppleNonce = nil
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+        do {
+            let credential = OAuthProvider.appleCredential(withIDToken: appleIdToken,
+                                                           rawNonce: nonce,
+                                                           fullName: appleCredential.fullName)
+            let firebaseUser = try await Auth.auth().signIn(with: credential).user
+            // Apple shares the learner's name only the very first time. Keep it
+            // on the Firebase account so the ID token (and the LYO account the
+            // API creates from it) carries it, even if this attempt fails later.
+            let appleName = Self.displayName(from: appleCredential.fullName)
+            if let appleName, (firebaseUser.displayName ?? "").isEmpty {
+                let change = firebaseUser.createProfileChangeRequest()
+                change.displayName = appleName
+                try? await change.commitChanges()
+            }
+            let firebaseIdToken = try await firebaseUser.idTokenForcingRefresh(appleName != nil)
+            let user = try await repository.loginWithFirebase(idToken: firebaseIdToken)
+            // A learner who hid their email signs in with an Apple relay
+            // address (…@privaterelay.appleid.com); it is a working address, so
+            // it is kept as is. Never show that relay address as the name.
+            let name = user.name.trimmingCharacters(in: .whitespaces).isEmpty
+                ? (appleName ?? firebaseUser.displayName ?? "")
+                : user.name
+            currentUserName = name
+            currentUserEmail = user.email
+            isDemoMode = false
+            UserDefaults.standard.set(false, forKey: demoModeKey)
+            saveUserSession(name: name, email: user.email)
+            isAuthenticated = true
+        } catch {
+            // No fallback: without the API's confirmation there is no LYO session.
+            Log.auth.error("Apple sign-in failed: \(error.localizedDescription)")
+            self.error = "Couldn't sign you in with Apple. Please try again."
+        }
+        #else
+        error = "Sign in with Apple isn't available in this version of the app."
+        #endif
+    }
+
+    /// "Ada Lovelace" from Apple's name parts, or nil when Apple sent none
+    /// (every sign-in after the first).
+    private static func displayName(from components: PersonNameComponents?) -> String? {
+        guard let components else { return nil }
+        let name = PersonNameComponentsFormatter.localizedString(from: components, style: .default)
+            .trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? nil : name
+    }
+
+    private static func randomNonce(length: Int = 32) -> String {
+        let charset = Array("0123456789ABCDEFGHIJKLMNOPQRSTUVXYZabcdefghijklmnopqrstuvwxyz-._")
+        var bytes = [UInt8](repeating: 0, count: length)
+        if SecRandomCopyBytes(kSecRandomDefault, length, &bytes) != errSecSuccess {
+            // SecRandom effectively never fails; fall back to Swift's CSPRNG.
+            bytes = (0..<length).map { _ in UInt8.random(in: 0...255) }
+        }
+        return String(bytes.map { charset[Int($0) % charset.count] })
+    }
+
+    private static func sha256(_ input: String) -> String {
+        SHA256.hash(data: Data(input.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     /// The screen on top, so Google's sheet opens above any sheet already showing.
@@ -209,8 +322,152 @@ class AuthService: NSObject, ObservableObject {
     }
 }
 
+// MARK: - Account Deletion
+
+/// Why an account could not be deleted, in words for the learner.
+enum AccountDeletionError: LocalizedError {
+    case appleConfirmationNeeded
+    case server(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .appleConfirmationNeeded:
+            return "Your account was not deleted. Because you signed in with Apple, please confirm with Apple to delete it."
+        case .server(let error):
+            if case .network(.noInternetConnection)? = error as? LyoError {
+                return "Your account was not deleted. You're offline; please connect to the internet and try again."
+            }
+            return "Your account was not deleted. Something went wrong on our side; please try again in a moment."
+        }
+    }
+}
+
 extension AuthService {
+    /// Permanently deletes the learner's LYO account (DELETE /auth/me).
+    ///
+    /// Only after the API confirms (200/204) does this sign out of Apple,
+    /// Google and Firebase and erase this device's tokens and caches. If the
+    /// API refuses or can't be reached it throws and changes nothing: the
+    /// learner stays signed in and can try again.
+    @MainActor
     func deleteAccount() async throws {
+        // Apple requires apps to revoke Sign in with Apple when the account is
+        // deleted. That needs a fresh authorization code, so a learner who
+        // signed in with Apple confirms once more before anything is deleted.
+        var appleAuthorizationCode: String?
+        #if canImport(FirebaseAuth)
+        if Auth.auth().currentUser?.providerData.contains(where: { $0.providerID == "apple.com" }) == true {
+            appleAuthorizationCode = try await Self.confirmWithApple()
+        }
+        #endif
+
+        do {
+            _ = try await NetworkClient.shared.requestRawData(Endpoints.Auth.deleteAccount)
+        } catch {
+            Log.auth.error("Account deletion failed: \(error.localizedDescription)")
+            throw AccountDeletionError.server(error)
+        }
+        Log.auth.info("Account deleted on the server")
+
+        #if canImport(FirebaseAuth)
+        if let appleAuthorizationCode {
+            do {
+                try await Auth.auth().revokeToken(withAuthorizationCode: appleAuthorizationCode)
+            } catch {
+                // The LYO account is already gone; the learner can still remove
+                // LYO under Settings > Apple ID > Sign in with Apple.
+                Log.auth.error("Apple token revocation failed: \(error.localizedDescription)")
+            }
+        }
+        try? await Auth.auth().currentUser?.delete()
+        try? Auth.auth().signOut()
+        #endif
+        #if canImport(GoogleSignIn)
+        GIDSignIn.sharedInstance.signOut()
+        #endif
+
+        await Self.eraseLocalAccountData()
         logout()
+    }
+
+    /// Erases everything this device kept about the deleted account.
+    @MainActor
+    private static func eraseLocalAccountData() async {
+        await TokenManager.shared.clearAll()
+        await NetworkCache.shared.clearAll()
+        URLCache.shared.removeAllCachedResponses()
+        UnifiedChatPersistence.shared.clearAllConversations()
+        GeneratedContentStore.shared.clearAll()
+        UIStackStore.shared.removeAll()
+        LearningProfileService.shared.clear()
+        if let domain = Bundle.main.bundleIdentifier {
+            UserDefaults.standard.removePersistentDomain(forName: domain)
+        }
+    }
+
+    /// Asks Apple for a fresh authorization code (Face ID / passcode sheet).
+    /// Closing the sheet throws `appleConfirmationNeeded`, so nothing is deleted.
+    @MainActor
+    private static func confirmWithApple() async throws -> String {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = []
+        let authorization: ASAuthorization
+        do {
+            authorization = try await AppleAuthorizationRequester().perform(request)
+        } catch {
+            if (error as? ASAuthorizationError)?.code != .canceled {
+                Log.auth.error("Apple confirmation failed: \(error.localizedDescription)")
+            }
+            throw AccountDeletionError.appleConfirmationNeeded
+        }
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let codeData = credential.authorizationCode,
+              let code = String(data: codeData, encoding: .utf8) else {
+            throw AccountDeletionError.appleConfirmationNeeded
+        }
+        return code
+    }
+}
+
+/// Runs one Apple ID request outside the SwiftUI button (account deletion
+/// asks Apple to confirm again) and hands back its result.
+private final class AppleAuthorizationRequester: NSObject,
+    ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
+    private var continuation: CheckedContinuation<ASAuthorization, Error>?
+    private var controller: ASAuthorizationController?
+    private var anchor: ASPresentationAnchor!
+
+    @MainActor
+    func perform(_ request: ASAuthorizationAppleIDRequest) async throws -> ASAuthorization {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        guard let window = scene?.windows.first(where: \.isKeyWindow) ?? scene?.windows.first else {
+            throw ASAuthorizationError(.failed)
+        }
+        anchor = window
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = self
+            controller.presentationContextProvider = self
+            self.controller = controller
+            controller.performRequests()
+        }
+    }
+
+    func authorizationController(controller: ASAuthorizationController,
+                                 didCompleteWithAuthorization authorization: ASAuthorization) {
+        continuation?.resume(returning: authorization)
+        continuation = nil
+        self.controller = nil
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: Error) {
+        continuation?.resume(throwing: error)
+        continuation = nil
+        self.controller = nil
+    }
+
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        anchor
     }
 }

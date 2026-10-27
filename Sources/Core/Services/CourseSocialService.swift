@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 import Combine
 
 // MARK: - Course Social Service
@@ -41,7 +42,7 @@ final class CourseSocialService: ObservableObject {
             let response = try await repository.likeCourse(courseId: courseId)
             courseLikes[courseId] = response.totalLikes
             saveToCache()
-            print("✅ Liked course: \(courseId) (total: \(response.totalLikes))")
+            Log.course.debugLine("✅ Liked course: \(courseId) (total: \(response.totalLikes))")
         } catch {
             // Rollback on error
             userLikedCourses.remove(courseId)
@@ -61,7 +62,7 @@ final class CourseSocialService: ObservableObject {
         // Backend sync
         do {
             try await repository.unlikeCourse(courseId: courseId)
-            print("✅ Unliked course: \(courseId)")
+            Log.course.debugLine("✅ Unliked course: \(courseId)")
         } catch {
             // Rollback on error
             userLikedCourses.insert(courseId)
@@ -109,7 +110,7 @@ final class CourseSocialService: ObservableObject {
             courseRatings[courseId] = response.averageRating
             saveToCache()
             
-            print("✅ Rated course \(courseId): \(rating) stars (avg: \(response.averageRating))")
+            Log.course.debugLine("✅ Rated course \(courseId): \(rating) stars (avg: \(response.averageRating))")
         } catch {
             // Rollback on error
             if let prev = previousRating {

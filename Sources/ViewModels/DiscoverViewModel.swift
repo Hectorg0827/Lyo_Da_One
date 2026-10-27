@@ -107,7 +107,7 @@ final class DiscoverViewModel: ObservableObject {
             
             \(item.subtitle ?? "")
             
-            Download Lyo to watch: https://lyo.app
+            Download Lyo to watch: https://lyoai.app
             """
             
             if let url = item.videoURL ?? item.thumbnailURL {
@@ -192,7 +192,7 @@ final class DiscoverViewModel: ObservableObject {
                     try await DiscoveryService.shared.unlikeDiscovery(discoveryId: item.id)
                 }
             } catch {
-                print("Failed to toggle like: \(error)")
+                Log.discover.debugLine("Failed to toggle like: \(error)")
                 // Revert
                 await MainActor.run {
                     if let revertIndex = items.firstIndex(where: { $0.id == item.id }) {

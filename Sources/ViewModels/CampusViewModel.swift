@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftUI
 import Combine
 import CoreLocation
@@ -97,9 +98,9 @@ class CampusViewModel: ObservableObject {
         items = await DataService.shared.fetchCampusEvents()
         
         if AuthService.shared.isDemoMode {
-            print("📱 CampusViewModel: Loaded \(items.count) events (Demo Mode)")
+            Log.general.debugLine("📱 CampusViewModel: Loaded \(items.count) events (Demo Mode)")
         } else {
-            print("🌐 CampusViewModel: Loaded \(items.count) events from backend")
+            Log.general.debugLine("🌐 CampusViewModel: Loaded \(items.count) events from backend")
         }
         
         isLoading = false
@@ -125,7 +126,7 @@ class CampusViewModel: ObservableObject {
             // All content flattened
             allContent = try await contentRepository.getAllContent()
         } catch {
-            print("Error loading library data: \(error)")
+            Log.general.debugLine("Error loading library data: \(error)")
             // Optionally set errorMessage state here
         }
     }

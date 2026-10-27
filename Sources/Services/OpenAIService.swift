@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 
 // Note: This service uses models from Models/LyoChat.swift (LyoMessage, SuggestionChip)
 
@@ -20,9 +21,9 @@ class OpenAIService {
     
     private init() {
         if useMockMode {
-            print("⚠️ Leo AI: Running in MOCK mode (no backend URL)")
+            Log.ai.debugLine("⚠️ Leo AI: Running in MOCK mode (no backend URL)")
         } else {
-            print("✅ Leo AI: Using Backend AI")
+            Log.ai.debugLine("✅ Leo AI: Using Backend AI")
         }
     }
     
@@ -49,7 +50,7 @@ class OpenAIService {
         } catch {
             // Backend unavailable or response unexpected.
             if AppConfig.allowMockFallbacks {
-                print("⚠️ Backend AI failed: \(error.localizedDescription). Falling back to mock because LYO_ALLOW_MOCKS=1")
+                Log.ai.debugLine("⚠️ Backend AI failed: \(error.localizedDescription). Falling back to mock because LYO_ALLOW_MOCKS=1")
                 return try await getMockResponse(for: message, history: conversationHistory)
             }
             throw error

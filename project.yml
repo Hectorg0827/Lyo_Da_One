@@ -42,6 +42,9 @@ targets:
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.lyo.app
       INFOPLIST_FILE: Sources/Resources/Info.plist
+      # Push notifications (aps-environment) and Sign in with Apple. Xcode
+      # switches aps-environment to production when signing for the App Store.
+      CODE_SIGN_ENTITLEMENTS: Lyo.entitlements
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       SWIFT_VERSION: "5.0"
       IPHONEOS_DEPLOYMENT_TARGET: "17.0"

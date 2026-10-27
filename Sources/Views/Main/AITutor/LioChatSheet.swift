@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 typealias LioChatMessage = LyoMessage
 
@@ -119,7 +120,7 @@ struct LioChatSheet: View {
                 
                 // Check if we need to load a specific history session
                 if #available(iOS 17.0, *), let sessionToLoad = uiState.chatSessionToLoad as? ChatSession {
-                    print("Loading chat history: \(sessionToLoad.title)")
+                    Log.ai.debugLine("Loading chat history: \(sessionToLoad.title)")
                     viewModel.loadHistory(from: sessionToLoad)
                     // Clear state so it doesn't reload on next appear if not intended
                     uiState.chatSessionToLoad = nil

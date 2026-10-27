@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import Combine
 
 // MARK: - Discovery Service
@@ -29,12 +30,11 @@ class DiscoveryService: ObservableObject {
         
         do {
             myDiscoveries = try await apiClient.fetchMyDiscoveries()
-            print("✅ Loaded \(myDiscoveries.count) my discoveries from backend")
+            Log.discover.debugLine("✅ Loaded \(myDiscoveries.count) my discoveries from backend")
         } catch {
-            print("❌ Failed to load my discoveries: \(error.localizedDescription)")
+            Log.discover.debugLine("❌ Failed to load my discoveries: \(error.localizedDescription)")
+            // The error is shown; invented discoveries never stand in for real ones.
             self.error = error.localizedDescription
-            // Fallback to mock data
-            loadMockDiscoveries()
         }
         
         isLoading = false
@@ -43,9 +43,9 @@ class DiscoveryService: ObservableObject {
     func loadSavedDiscoveries() async {
         do {
             savedDiscoveries = try await apiClient.fetchSavedDiscoveries()
-            print("✅ Loaded \(savedDiscoveries.count) saved discoveries from backend")
+            Log.discover.debugLine("✅ Loaded \(savedDiscoveries.count) saved discoveries from backend")
         } catch {
-            print("❌ Failed to load saved discoveries: \(error.localizedDescription)")
+            Log.discover.debugLine("❌ Failed to load saved discoveries: \(error.localizedDescription)")
         }
     }
     
@@ -68,9 +68,9 @@ class DiscoveryService: ObservableObject {
             // Update local state
             myDiscoveries.insert(newDiscovery, at: 0)
             
-            print("✅ Discovery created: \(title)")
+            Log.discover.debugLine("✅ Discovery created: \(title)")
         } catch {
-            print("❌ Failed to create discovery: \(error.localizedDescription)")
+            Log.discover.debugLine("❌ Failed to create discovery: \(error.localizedDescription)")
             self.error = error.localizedDescription
             isLoading = false
             throw error
@@ -85,9 +85,9 @@ class DiscoveryService: ObservableObject {
         do {
             try await apiClient.saveDiscovery(discoveryId: discoveryId)
             await loadSavedDiscoveries()
-            print("✅ Discovery saved")
+            Log.discover.debugLine("✅ Discovery saved")
         } catch {
-            print("❌ Failed to save discovery: \(error.localizedDescription)")
+            Log.discover.debugLine("❌ Failed to save discovery: \(error.localizedDescription)")
             throw error
         }
     }
@@ -96,9 +96,9 @@ class DiscoveryService: ObservableObject {
         do {
             try await apiClient.unsaveDiscovery(discoveryId: discoveryId)
             savedDiscoveries.removeAll { String($0.id) == discoveryId }
-            print("✅ Discovery unsaved")
+            Log.discover.debugLine("✅ Discovery unsaved")
         } catch {
-            print("❌ Failed to unsave discovery: \(error.localizedDescription)")
+            Log.discover.debugLine("❌ Failed to unsave discovery: \(error.localizedDescription)")
             throw error
         }
     }
@@ -110,9 +110,9 @@ class DiscoveryService: ObservableObject {
                 myDiscoveries[index].isLiked = true
                 myDiscoveries[index].likes += 1
             }
-            print("✅ Discovery liked")
+            Log.discover.debugLine("✅ Discovery liked")
         } catch {
-            print("❌ Failed to like discovery: \(error.localizedDescription)")
+            Log.discover.debugLine("❌ Failed to like discovery: \(error.localizedDescription)")
             throw error
         }
     }
@@ -124,9 +124,9 @@ class DiscoveryService: ObservableObject {
                 myDiscoveries[index].isLiked = false
                 myDiscoveries[index].likes = max(0, myDiscoveries[index].likes - 1)
             }
-            print("✅ Discovery unliked")
+            Log.discover.debugLine("✅ Discovery unliked")
         } catch {
-            print("❌ Failed to unlike discovery: \(error.localizedDescription)")
+            Log.discover.debugLine("❌ Failed to unlike discovery: \(error.localizedDescription)")
             throw error
         }
     }
@@ -144,7 +144,7 @@ class DiscoveryService: ObservableObject {
         do {
             try await apiClient.recordClipShare(clipId: discoveryId)
         } catch {
-            print("⚠️ Failed to record clip share: \(error.localizedDescription)")
+            Log.discover.debugLine("⚠️ Failed to record clip share: \(error.localizedDescription)")
         }
     }
     

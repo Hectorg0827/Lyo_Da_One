@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import PhotosUI
 
 struct PostEditorView: View {
@@ -198,7 +199,7 @@ struct PostEditorView: View {
                 await MainActor.run { isImageLoading = false }
             }
         } catch {
-            print("Failed to load image: \(error.localizedDescription)")
+            Log.social.debugLine("Failed to load image: \(error.localizedDescription)")
             await MainActor.run { isImageLoading = false }
         }
     }

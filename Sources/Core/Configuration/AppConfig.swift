@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - App Configuration
 /// Centralized configuration for the Lyo app
@@ -87,7 +88,7 @@ struct AppConfig {
         }
 
         #if DEBUG
-        print("⚠️ AppConfig.apiKey is empty — set LYO_API_KEY via the Xcode scheme or an xcconfig/CI secret")
+        Log.app.debugLine("⚠️ AppConfig.apiKey is empty — set LYO_API_KEY via the Xcode scheme or an xcconfig/CI secret")
         #endif
         return ""
     }
@@ -283,14 +284,16 @@ struct AppConfig {
     static let thumbnailSize: CGFloat = 200
 
     // MARK: - URLs
-    static let privacyPolicyURL = URL(string: "https://lyo.app/privacy")!
-    static let termsOfServiceURL = URL(string: "https://lyo.app/terms")!
-    static let supportURL = URL(string: "https://lyo.app/support")!
-    static let feedbackURL = URL(string: "https://lyo.app/feedback")!
+    static let websiteURL = URL(string: "https://lyoai.app")!
+    static let privacyPolicyURL = URL(string: "https://lyoai.app/privacy")!
+    static let termsOfServiceURL = URL(string: "https://lyoai.app/terms")!
+    static let supportURL = URL(string: "https://lyoai.app/support")!
+    // Feedback has no page of its own; the support page covers it.
+    static let feedbackURL = supportURL
 
     // MARK: - Contact
-    static let supportEmail = "support@lyo.app"
-    static let feedbackEmail = "feedback@lyo.app"
+    static let supportEmail = "support@lyoai.app"
+    static let feedbackEmail = "feedback@lyoai.app"
 
     // MARK: - Social
     static let twitterHandle = "@LyoApp"
@@ -299,7 +302,7 @@ struct AppConfig {
     // MARK: - Debug Helpers
     static func printConfiguration() {
         #if DEBUG
-            print(
+            Log.app.debugLine(
                 """
                 ================================
                 🔧 Lyo App Configuration

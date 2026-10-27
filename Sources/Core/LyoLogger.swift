@@ -70,3 +70,19 @@ enum Log {
     /// General / uncategorised (use sparingly)
     static let general = Logger(subsystem: subsystem, category: "general")
 }
+
+// MARK: - Developer Trace Lines
+
+extension Logger {
+    /// A developer trace line, kept out of Release builds entirely: the
+    /// message is not even built there. It takes an ordinary String, so any
+    /// former `print("…\(value)…")` works unchanged:
+    ///   Log.net.debugLine("Loaded \(items.count) items")
+    @inline(__always)
+    func debugLine(_ message: @autoclosure () -> String) {
+        #if DEBUG
+        let text = message()
+        debug("\(text, privacy: .public)")
+        #endif
+    }
+}

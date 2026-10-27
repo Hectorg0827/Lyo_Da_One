@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftUI
 import Combine
 
@@ -42,7 +43,7 @@ class RootViewModel: ObservableObject {
             Task {
                 try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
                 if isLoading {
-                    print("⚠️ Auth check timed out, forcing UI to load")
+                    Log.app.debugLine("⚠️ Auth check timed out, forcing UI to load")
                     isLoading = false
                 }
             }
@@ -86,33 +87,8 @@ class RootViewModel: ObservableObject {
             // ✅ Trigger post-login services
             await onUserAuthenticated()
         } catch {
-            // Check if it's a credential error that should be shown to user
-            if let lyoError = error as? LyoError {
-                switch lyoError {
-                case .network(.unauthorized):
-                    // Invalid credentials - throw to show error to user
-                    throw lyoError
-                case .rateLimitExceeded:
-                    // Rate limit - throw to show error to user
-                    throw lyoError
-                case .validation:
-                    // Validation error - throw to show error to user
-                    throw lyoError
-                default:
-                    break
-                }
-            }
-            
-            // Fallback: If backend is down/unreachable (network error, timeout, etc.)
-            // But NOT for credential/validation errors
-            print("⚠️ Backend login failed, using fallback mode: \(error.localizedDescription)")
-            currentUser = createFallbackUser(email: email)
-            isAuthenticated = true
-            self.error = nil  // Clear error so UI doesn't show backend messages
-            // Don't throw error - allow app to continue
-            
-            // ✅ Still trigger services for fallback mode
-            await onUserAuthenticated()
+            // No offline "fallback" account: without the API there is no session.
+            throw error
         }
     }
 
@@ -129,40 +105,29 @@ class RootViewModel: ObservableObject {
             // ✅ Trigger post-registration services, same as login
             await onUserAuthenticated()
         } catch {
-            // Check for specific backend errors that should be shown to the user
-            if let lyoError = error as? LyoError {
-                switch lyoError {
-                case .network(.unauthorized):
-                    // Invalid credentials - throw to show error to user
-                    throw lyoError
-                case .rateLimitExceeded:
-                    // Rate limit - throw to show error to user
-                    throw lyoError
-                case .validation:
-                    // Validation error - throw to show error to user
-                    throw lyoError
-                default:
-                    break
-                }
-            }
-            
-            // Fallback: If backend is down/unreachable, use local mock user
-            print("⚠️ Backend registration failed, using fallback mode: \(error.localizedDescription)")
-            currentUser = createFallbackUser(email: email, name: name)
-            isAuthenticated = true
-            self.error = nil  // Clear error so UI doesn't show backend messages
-            // Don't throw error - allow app to continue
-            
-            // ✅ Still trigger services for fallback mode
-            await onUserAuthenticated()
+            // No offline "fallback" account: without the API there is no session.
+            throw error
         }
     }
-    
+
+    // MARK: - Signed In
+
+    /// Called by the sign-in screens once AuthService holds a session the API
+    /// confirmed (its tokens are already in the keychain). Opens the app and
+    /// starts the same services a restored session starts, push included.
+    func didSignIn() async {
+        isAuthenticated = true
+        await onUserAuthenticated()
+        if let user = try? await authRepository.getCurrentUser() {
+            currentUser = user
+        }
+    }
+
     // MARK: - Post-Authentication Services
     
     /// Called after successful authentication to initialize services
     private func onUserAuthenticated() async {
-        print("🔐 User authenticated - initializing services...")
+        Log.app.debugLine("🔐 User authenticated - initializing services...")
         
         // 1. Register device for push notifications
         PushNotificationService.shared.onUserLogin()
@@ -181,29 +146,12 @@ class RootViewModel: ObservableObject {
         PushNotificationService.shared.checkPermissionStatus { status in
             if status == .notDetermined {
                 PushNotificationService.shared.requestPermission { granted, _ in
-                    print(granted ? "✅ Push notifications enabled" : "❌ Push notifications denied")
+                    Log.push.debugLine(granted ? "Push notifications enabled" : "Push notifications denied")
                 }
             }
         }
         
-        print("✅ Post-authentication services initialized")
-    }
-
-    // MARK: - Fallback Authentication
-    
-    private func createFallbackUser(email: String, name: String? = nil) -> User {
-        return User(
-            id: Int.random(in: 5000...9999),
-            email: email,
-            name: name ?? "User",
-            avatarURL: nil,
-            createdAt: Date(),
-            level: 1,
-            xp: 0,
-            streak: 0,
-            totalLessonsCompleted: 0,
-            achievements: []
-        )
+        Log.app.debugLine("✅ Post-authentication services initialized")
     }
 
     // MARK: - Logout
@@ -224,7 +172,17 @@ class RootViewModel: ObservableObject {
         isAuthenticated = false
         await tokenManager.clearTokens()
         
-        print("✅ User logged out - services cleaned up")
+        Log.app.debugLine("✅ User logged out - services cleaned up")
+    }
+
+    /// Called after AuthService.deleteAccount() succeeded. The account no
+    /// longer exists, so unlike logout() nothing is sent to /auth/logout.
+    func didDeleteAccount() async {
+        await PushNotificationService.shared.onUserLogout()
+        SyncService.shared.disconnect()
+        await tokenManager.clearTokens()
+        currentUser = nil
+        isAuthenticated = false
     }
 
     // MARK: - User Update

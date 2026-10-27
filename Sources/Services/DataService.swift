@@ -120,14 +120,12 @@ final class DataService: ObservableObject {
         }
         
         do {
-            let events = try await apiClient.fetchCommunityEvents()
-            if events.isEmpty {
-                return mockCommunityEvents()
-            }
-            return events
+            // No events is a real answer; it is never padded with invented ones.
+            return try await apiClient.fetchCommunityEvents()
         } catch {
             Log.data.error("Failed to fetch community events: \(error)")
-            return mockCommunityEvents()
+            lastError = error.localizedDescription
+            return []
         }
     }
     

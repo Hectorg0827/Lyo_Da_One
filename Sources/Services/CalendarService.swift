@@ -1,4 +1,5 @@
 import Foundation
+import os
 import EventKit
 import SwiftUI
 
@@ -107,7 +108,7 @@ class CalendarService: ObservableObject {
                 )
                 if success { addedCount += 1 }
             } catch {
-                print("Error adding session: \(error)")
+                Log.general.debugLine("Error adding session: \(error)")
             }
         }
 

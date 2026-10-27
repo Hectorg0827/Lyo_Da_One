@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import Combine
 
 // MARK: - Post Service
@@ -44,15 +45,11 @@ class PostService: ObservableObject {
             
             currentOffset += response.posts.count
             
-            print("✅ Loaded \(response.posts.count) posts from backend")
+            Log.social.debugLine("✅ Loaded \(response.posts.count) posts from backend")
         } catch {
-            print("❌ Failed to load posts: \(error.localizedDescription)")
+            Log.social.debugLine("❌ Failed to load posts: \(error.localizedDescription)")
+            // The error is shown; invented posts never stand in for the feed.
             self.error = error.localizedDescription
-            
-            // Fallback to mock data only on first load
-            if postsFeed.isEmpty {
-                loadMockPosts()
-            }
         }
         
         isLoading = false
@@ -76,9 +73,9 @@ class PostService: ObservableObject {
             // Insert at the beginning of the feed
             postsFeed.insert(newPost, at: 0)
             
-            print("✅ Post created successfully")
+            Log.social.debugLine("✅ Post created successfully")
         } catch {
-            print("❌ Failed to create post: \(error.localizedDescription)")
+            Log.social.debugLine("❌ Failed to create post: \(error.localizedDescription)")
             self.error = error.localizedDescription
             isLoading = false
             throw error
@@ -96,9 +93,9 @@ class PostService: ObservableObject {
             // Remove from local state
             postsFeed.removeAll { $0.id == postId }
             
-            print("✅ Post deleted successfully")
+            Log.social.debugLine("✅ Post deleted successfully")
         } catch {
-            print("❌ Failed to delete post: \(error.localizedDescription)")
+            Log.social.debugLine("❌ Failed to delete post: \(error.localizedDescription)")
             throw error
         }
     }
@@ -116,7 +113,7 @@ class PostService: ObservableObject {
         do {
             try await apiClient.likePost(postId: postId)
         } catch {
-            print("❌ Failed to like post: \(error.localizedDescription)")
+            Log.social.debugLine("❌ Failed to like post: \(error.localizedDescription)")
         }
     }
     
@@ -130,7 +127,7 @@ class PostService: ObservableObject {
         do {
             try await apiClient.unlikePost(postId: postId)
         } catch {
-            print("❌ Failed to unlike post: \(error.localizedDescription)")
+            Log.social.debugLine("❌ Failed to unlike post: \(error.localizedDescription)")
         }
     }
     

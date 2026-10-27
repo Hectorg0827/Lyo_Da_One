@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Combine
 
 // MARK: - Stack Store
@@ -291,7 +292,7 @@ final class UIStackStore: ObservableObject {
                 }
             } catch {
                 // Offline or unavailable progress must not erase the local state.
-                print("UIStackStore: Server progress unavailable for \(courseId): \(error.localizedDescription)")
+                Log.data.debugLine("UIStackStore: Server progress unavailable for \(courseId): \(error.localizedDescription)")
             }
         }
     }
@@ -423,7 +424,7 @@ final class UIStackStore: ObservableObject {
             let data = try JSONEncoder().encode(items)
             defaults.set(data, forKey: userDefaultsKey)
         } catch {
-            print("UIStackStore: Failed to save to disk: \(error)")
+            Log.data.debugLine("UIStackStore: Failed to save to disk: \(error)")
         }
     }
 
@@ -436,7 +437,7 @@ final class UIStackStore: ObservableObject {
             items = try JSONDecoder().decode([UIStackItem].self, from: data)
             sortByRecency()
         } catch {
-            print("UIStackStore: Failed to load from disk: \(error)")
+            Log.data.debugLine("UIStackStore: Failed to load from disk: \(error)")
         }
     }
 }

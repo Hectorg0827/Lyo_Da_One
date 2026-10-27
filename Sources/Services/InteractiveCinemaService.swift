@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - Interactive Cinema Service
 // This service interfaces with the backend's graph-based course system
@@ -21,7 +22,7 @@ public final class InteractiveCinemaService: ObservableObject {
     }
     
     public func generateGraphCourse(topic: String, level: String = "beginner") async throws -> GraphCourseItem {
-        print("📡 Generating graph course via chat: \(topic) at \(level) level")
+        Log.ai.debugLine("📡 Generating graph course via chat: \(topic) at \(level) level")
         
         let message = "Create a complete interactive course on '\(topic)' suitable for \(level) learners. Include multiple lessons with explanations, examples, and practice questions."
         
@@ -32,20 +33,20 @@ public final class InteractiveCinemaService: ObservableObject {
             
             let response: [String: AnyCodable] = try await NetworkClient.shared.request(Endpoints.Classroom.generateCourse(message: message))
             
-            print("✅ Chat response received")
+            Log.ai.debugLine("✅ Chat response received")
             
             if let courseId = extractCourseId(from: response) {
-                print("✅ Course generated with ID: \(courseId)")
+                Log.ai.debugLine("✅ Course generated with ID: \(courseId)")
                 return try await fetchCourseDetails(courseId: courseId)
             }
             
             throw CinemaError.decodingFailed("No course ID in response")
             
         } catch {
-            print("⚠️ Course generation failed: \(error.localizedDescription)")
+            Log.ai.debugLine("⚠️ Course generation failed: \(error.localizedDescription)")
             
             if AuthService.shared.isDemoMode {
-                print("🔄 Falling back to Mock Graph Course (demo mode)")
+                Log.ai.debugLine("🔄 Falling back to Mock Graph Course (demo mode)")
                 return generateMockGraphCourse(topic: topic, level: level)
             }
             throw error
@@ -73,7 +74,7 @@ public final class InteractiveCinemaService: ObservableObject {
     
     private func fetchCourseDetails(courseId: String) async throws -> GraphCourseItem {
         let course: GraphCourseItem = try await NetworkClient.shared.request(Endpoints.Classroom.getCourse(id: courseId))
-        print("✅ Successfully fetched course details: \(course.id)")
+        Log.ai.debugLine("✅ Successfully fetched course details: \(course.id)")
         return course
     }
     
@@ -94,7 +95,7 @@ public final class InteractiveCinemaService: ObservableObject {
                 currentPlaybackState = state
                 return state
             }
-            print("🎬 Starting Mock Course: \(courseId)")
+            Log.ai.debugLine("🎬 Starting Mock Course: \(courseId)")
             try await Task.sleep(nanoseconds: 500_000_000) // 0.5s delay
             return getMockPlaybackState(courseId: courseId)
         }
@@ -152,7 +153,7 @@ public final class InteractiveCinemaService: ObservableObject {
         
         // Check for mock course
         if courseId.starts(with: "mock_") {
-            print("⏩ Advancing Mock Course: \(courseId) -> Next Node")
+            Log.ai.debugLine("⏩ Advancing Mock Course: \(courseId) -> Next Node")
             try await Task.sleep(nanoseconds: 300_000_000) // 0.3s delay
             let currentNum = Int(String(currentNodeId.last ?? "1")) ?? 1
             let nextNodeId = "node_\(currentNum + 1)"
@@ -194,9 +195,9 @@ public final class InteractiveCinemaService: ObservableObject {
             Task {
                 do {
                     try await PersonalizationService.shared.traceKnowledge(trace: trace)
-                    print("✅ Knowledge traced for skill: \(skillId)")
+                    Log.ai.debugLine("✅ Knowledge traced for skill: \(skillId)")
                 } catch {
-                    print("⚠️ Failed to trace knowledge: \(error)")
+                    Log.ai.debugLine("⚠️ Failed to trace knowledge: \(error)")
                 }
             }
         }

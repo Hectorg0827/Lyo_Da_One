@@ -161,6 +161,8 @@ enum Endpoints {
         case user(id: String)
         case updateProfile(name: String?, avatar: String?)
         case firebase(idToken: String)
+        /// Permanently deletes the signed-in account (DELETE /auth/me, no body).
+        case deleteAccount
 
         var path: String {
             switch self {
@@ -172,6 +174,7 @@ enum Endpoints {
             case .user(let id): return "/auth/users/\(id)"
             case .updateProfile: return "/auth/profile"
             case .firebase: return "/auth/firebase"
+            case .deleteAccount: return "/auth/me"
             }
         }
 
@@ -180,6 +183,7 @@ enum Endpoints {
             case .login, .register, .refresh, .logout, .firebase: return .post
             case .profile, .user: return .get
             case .updateProfile: return .put
+            case .deleteAccount: return .delete
             }
         }
 
@@ -238,7 +242,7 @@ enum Endpoints {
             switch self {
             case .login, .register, .refresh, .firebase:
                 return false // These endpoints don't require auth token
-            case .logout, .profile, .user, .updateProfile:
+            case .logout, .profile, .user, .updateProfile, .deleteAccount:
                 return true // These require an existing session
             }
         }

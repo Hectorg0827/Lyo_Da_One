@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 import Combine
 
 // MARK: - Story Error
@@ -45,12 +46,11 @@ class StoryService: ObservableObject {
             let response = try await apiClient.fetchStories()
             stories = response.stories
             myStory = response.myStory
-            print("✅ Loaded \(stories.count) stories from backend")
+            Log.social.debugLine("✅ Loaded \(stories.count) stories from backend")
         } catch {
-            print("❌ Failed to load stories: \(error.localizedDescription)")
+            Log.social.debugLine("❌ Failed to load stories: \(error.localizedDescription)")
+            // The error is shown; invented stories never stand in for real ones.
             self.error = error.localizedDescription
-            // Fallback to mock data
-            loadMockStories()
         }
         
         isLoading = false
@@ -75,9 +75,9 @@ class StoryService: ObservableObject {
             myStory = newStory
             await loadStories() // Refresh all stories
             
-            print("✅ Story created successfully")
+            Log.social.debugLine("✅ Story created successfully")
         } catch {
-            print("❌ Failed to create story: \(error.localizedDescription)")
+            Log.social.debugLine("❌ Failed to create story: \(error.localizedDescription)")
             self.error = error.localizedDescription
             isLoading = false
             throw error
@@ -98,9 +98,9 @@ class StoryService: ObservableObject {
             }
             stories.removeAll { $0.id == storyId }
             
-            print("✅ Story deleted successfully")
+            Log.social.debugLine("✅ Story deleted successfully")
         } catch {
-            print("❌ Failed to delete story: \(error.localizedDescription)")
+            Log.social.debugLine("❌ Failed to delete story: \(error.localizedDescription)")
             throw error
         }
     }
@@ -117,7 +117,7 @@ class StoryService: ObservableObject {
         do {
             try await apiClient.markStorySeen(storyId: storyId)
         } catch {
-            print("❌ Failed to mark story as seen: \(error.localizedDescription)")
+            Log.social.debugLine("❌ Failed to mark story as seen: \(error.localizedDescription)")
         }
     }
     

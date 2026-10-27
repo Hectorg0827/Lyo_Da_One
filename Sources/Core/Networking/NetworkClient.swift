@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Type-erased Encodable wrapper so the cache can store a value whose
 /// concrete type is only known to be Encodable at runtime.
@@ -87,7 +88,7 @@ actor NetworkClient {
         // 6. Decode response
         #if DEBUG
         if let urlPath = request.url?.path, urlPath.contains("/course/") {
-            print("🌐 RAW RESPONSE [\\(urlPath)]: \\((String(data: processedResponse.data, encoding: .utf8) ?? \"<non-UTF8>\").prefix(2000))")
+            Log.net.debugLine("🌐 RAW RESPONSE [\(urlPath)]: \((String(data: processedResponse.data, encoding: .utf8) ?? "<non-UTF8>").prefix(2000))")
         }
         #endif
         
@@ -99,21 +100,21 @@ actor NetworkClient {
             let decoder = JSONDecoder.lyoDecoder
             decoded = try decoder.decode(T.self, from: responseData)
         } catch let DecodingError.keyNotFound(key, context) {
-            print("🚨 DECODE FAIL: Missing key '\\(key.stringValue)' — \\(context.debugDescription)")
-            print("🚨 codingPath: \\(context.codingPath.map(\\.stringValue))")
+            Log.net.debugLine("🚨 DECODE FAIL: Missing key '\(key.stringValue)' — \(context.debugDescription)")
+            Log.net.debugLine("🚨 codingPath: \(context.codingPath.map(\.stringValue))")
             throw DecodingError.keyNotFound(key, context)
         } catch let DecodingError.typeMismatch(type, context) {
-            print("🚨 DECODE FAIL: Type mismatch for \\(type) — \\(context.debugDescription)")
-            print("🚨 codingPath: \\(context.codingPath.map(\\.stringValue))")
+            Log.net.debugLine("🚨 DECODE FAIL: Type mismatch for \(type) — \(context.debugDescription)")
+            Log.net.debugLine("🚨 codingPath: \(context.codingPath.map(\.stringValue))")
             throw DecodingError.typeMismatch(type, context)
         } catch let DecodingError.valueNotFound(type, context) {
-            print("🚨 DECODE FAIL: Null value for \\(type) — \\(context.debugDescription)")
+            Log.net.debugLine("🚨 DECODE FAIL: Null value for \(type) — \(context.debugDescription)")
             throw DecodingError.valueNotFound(type, context)
         } catch let DecodingError.dataCorrupted(context) {
-            print("🚨 DECODE FAIL: Corrupted data — \\(context.debugDescription)")
+            Log.net.debugLine("🚨 DECODE FAIL: Corrupted data — \(context.debugDescription)")
             throw DecodingError.dataCorrupted(context)
         } catch {
-            print("🚨 NETWORK ERROR: \\(error.localizedDescription)")
+            Log.net.debugLine("🚨 NETWORK ERROR: \(error.localizedDescription)")
             throw error
         }
 

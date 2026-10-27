@@ -1,8 +1,8 @@
 // Continue with Google on every platform: Google confirms the account through
 // Firebase, and the API's POST /auth/firebase is the only way to a LYO session.
-// No platform may fake a sign-in (the iOS Apple button used to) or fall back
+// No platform may fake a sign-in (the iOS Apple button once did) or fall back
 // to a password anyone could work out (iOS used "Google_<firebase uid>_Auth").
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const failures = [];
@@ -22,8 +22,17 @@ for (const [source, label] of [[authService, 'AuthService'], [loginView, 'LoginV
   forbid(source, 'Google_\\(', `iOS ${label} must not derive a password from the Firebase uid`);
   forbid(source, 'performLocalAuth', `iOS ${label} must not sign in without the API`);
   forbid(source, 'handleAppleSignIn', `iOS ${label} must not fake Sign in with Apple`);
-  forbid(source, 'SignInWithAppleButton', `iOS ${label} has no Apple Developer account for Sign in with Apple yet`);
 }
+// Sign in with Apple (App Store guideline 4.8: required wherever Google is
+// offered) is real: Apple's token goes through Firebase with a hashed nonce,
+// and the API's POST /auth/firebase is still the only way to a LYO session.
+need(authService, 'request.nonce = Self.sha256(nonce)', 'iOS Apple request carries a hashed nonce');
+need(authService, 'OAuthProvider.appleCredential(withIDToken: appleIdToken', 'iOS Apple sign-in goes through Firebase');
+need(authService, 'repository.loginWithFirebase(idToken: firebaseIdToken)', 'iOS Apple sends Firebase\'s token to the API');
+need(repository, 'try await loginWithFirebase(idToken: idToken)', 'iOS Google and Apple share one POST /auth/firebase exchange');
+need(loginView, 'SignInWithAppleButton(', 'iOS login offers Sign in with Apple next to Google');
+need(loginView, 'await authService.finishAppleSignIn(result)', 'iOS login waits for Apple');
+need(read('Lyo.entitlements'), '<key>com.apple.developer.applesignin</key>', 'iOS entitlement for Sign in with Apple');
 // The Google client the app signs in with must belong to the Firebase project
 // (lyo-app) that issues its tokens; one from another project is refused.
 const plistValue = (source, key) => source.match(new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`))?.[1];
@@ -35,7 +44,8 @@ if (plistValue(firebasePlist, 'BUNDLE_ID') !== 'com.lyo.app') failures.push('iOS
 if (!clientId.startsWith(`${plistValue(firebasePlist, 'GCM_SENDER_ID')}-`)) failures.push(`iOS CLIENT_ID ${clientId} is from another Google project than lyo-app`);
 if (plistValue(infoPlist, 'GIDClientID') !== clientId) failures.push('iOS Info.plist GIDClientID differs from GoogleService-Info.plist CLIENT_ID');
 need(infoPlist, `<string>${plistValue(firebasePlist, 'REVERSED_CLIENT_ID')}</string>`, 'iOS Info.plist URL scheme for Google\'s sign-in redirect');
-if (read('Sources/Resources/GoogleService-Info (2).plist') !== firebasePlist) failures.push('iOS GoogleService-Info (2).plist differs from GoogleService-Info.plist');
+// One Firebase config only: the stray "GoogleService-Info (2).plist" copy was deleted.
+if (existsSync(new URL('../Sources/Resources/GoogleService-Info (2).plist', import.meta.url))) failures.push('iOS has a second GoogleService-Info plist; keep only GoogleService-Info.plist');
 need(loginView, 'await authService.signInWithGoogle()', 'iOS login waits for Google');
 need(onboarding, 'await authService.signInWithGoogle()', 'iOS onboarding waits for Google');
 forbid(onboarding, 'DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {\n                if authService.isAuthenticated', 'iOS onboarding must not guess when Google finished');
@@ -69,4 +79,4 @@ if (failures.length) {
   console.error(failures.join('\n'));
   process.exit(1);
 }
-console.log('Continue with Google reaches a LYO session only through POST /auth/firebase, on web, iOS and Android.');
+console.log('Continue with Google (web, iOS, Android) and Sign in with Apple (iOS) reach a LYO session only through POST /auth/firebase.');
