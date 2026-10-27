@@ -103,13 +103,10 @@ struct SettingsView: View {
 
                 // Privacy Section
                 Section("Privacy & Security") {
-                    NavigationLink("Privacy Policy") {
-                        PrivacyPolicyView()
-                    }
+                    // The published policy and terms on lyoai.app are the only versions.
+                    Link("Privacy Policy", destination: AppConfig.privacyPolicyURL)
 
-                    NavigationLink("Terms of Service") {
-                        TermsOfServiceView()
-                    }
+                    Link("Terms of Service", destination: AppConfig.termsOfServiceURL)
 
                     NavigationLink("Blocked accounts") {
                         BlockedAccountsView()
@@ -125,7 +122,7 @@ struct SettingsView: View {
                     HStack {
                         Text("Version")
                         Spacer()
-                        Text("1.0.0")
+                        Text(AppConfig.version)
                             .foregroundColor(.secondary)
                     }
 
@@ -355,105 +352,6 @@ struct TopicsPreferencesView: View {
     }
 }
 
-// MARK: - Privacy Policy View
-struct PrivacyPolicyView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Privacy Policy")
-                    .font(.title)
-                    .fontWeight(.bold)
-
-                Text("Last updated: January 2025")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Text("""
-                At LYO, we take your privacy seriously. This policy describes how we collect, use, and protect your personal information.
-
-                **Information We Collect**
-                - Account information (name, email)
-                - Learning progress and activity
-                - Device information
-                - Usage analytics
-
-                **How We Use Your Information**
-                - Personalize your learning experience
-                - Improve our services
-                - Send important updates
-                - Provide customer support
-
-                **Data Security**
-                We use industry-standard encryption to protect your data.
-
-                **Your Rights**
-                - Access your data
-                - Request deletion
-                - Export your information
-                - Opt-out of communications
-
-                For more information, contact us at privacy@lyo.app
-                """)
-                .font(.body)
-            }
-            .padding()
-        }
-        .navigationTitle("Privacy Policy")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
-// MARK: - Terms of Service View
-struct TermsOfServiceView: View {
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Terms of Service")
-                    .font(.title)
-                    .fontWeight(.bold)
-
-                Text("Last updated: January 2025")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-
-                Text("""
-                **1. Acceptance of Terms**
-                By using LYO, you agree to these terms and conditions.
-
-                **2. User Accounts**
-                - You must be 13 years or older
-                - Provide accurate information
-                - Keep your password secure
-                - One account per person
-
-                **3. Content**
-                - You retain rights to your content
-                - We may use your content to improve services
-                - No offensive or inappropriate content
-
-                **4. Prohibited Activities**
-                - Cheating or gaming the system
-                - Sharing accounts
-                - Automated access
-                - Harassment of other users
-
-                **5. Termination**
-                We may terminate accounts for violations.
-
-                **6. Disclaimer**
-                Services provided "as is" without warranties.
-
-                For questions, contact support@lyo.app
-                """)
-                .font(.body)
-            }
-            .padding()
-        }
-        .navigationTitle("Terms of Service")
-        .navigationBarTitleDisplayMode(.inline)
-    }
-}
-
 // MARK: - What's New View
 struct WhatsNewView: View {
     var body: some View {
@@ -519,60 +417,44 @@ struct HelpSupportView: View {
     var body: some View {
         List {
             Section("Get Help") {
-                Link(destination: URL(string: "https://lyo.app/faq")!) {
-                    HStack {
-                        Image(systemName: "questionmark.circle")
-                        Text("FAQ")
-                        Spacer()
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption)
+                Link(destination: AppConfig.supportURL) {
+                    row(icon: "questionmark.circle", title: "Help Center")
+                }
+
+                if let email = URL(string: "mailto:\(AppConfig.supportEmail)") {
+                    Link(destination: email) {
+                        row(icon: "envelope", title: "Email Support")
                     }
                 }
 
-                Link(destination: URL(string: "https://lyo.app/contact")!) {
-                    HStack {
-                        Image(systemName: "envelope")
-                        Text("Contact Support")
-                        Spacer()
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption)
-                    }
-                }
-
-                Link(destination: URL(string: "https://lyo.app/community")!) {
-                    HStack {
-                        Image(systemName: "person.3")
-                        Text("Community Forum")
-                        Spacer()
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption)
+                if let email = URL(string: "mailto:\(AppConfig.feedbackEmail)") {
+                    Link(destination: email) {
+                        row(icon: "bubble.left", title: "Send Feedback")
                     }
                 }
             }
 
-            Section("Resources") {
-                Link(destination: URL(string: "https://lyo.app/tutorials")!) {
-                    HStack {
-                        Image(systemName: "play.rectangle")
-                        Text("Video Tutorials")
-                        Spacer()
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption)
-                    }
+            Section("Legal") {
+                Link(destination: AppConfig.privacyPolicyURL) {
+                    row(icon: "hand.raised", title: "Privacy Policy")
                 }
 
-                Link(destination: URL(string: "https://lyo.app/docs")!) {
-                    HStack {
-                        Image(systemName: "book")
-                        Text("Documentation")
-                        Spacer()
-                        Image(systemName: "arrow.up.right")
-                            .font(.caption)
-                    }
+                Link(destination: AppConfig.termsOfServiceURL) {
+                    row(icon: "doc.text", title: "Terms of Service")
                 }
             }
         }
         .navigationTitle("Help & Support")
+    }
+
+    private func row(icon: String, title: String) -> some View {
+        HStack {
+            Image(systemName: icon)
+            Text(title)
+            Spacer()
+            Image(systemName: "arrow.up.right")
+                .font(.caption)
+        }
     }
 }
 

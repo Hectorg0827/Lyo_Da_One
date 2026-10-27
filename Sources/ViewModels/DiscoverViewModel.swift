@@ -107,7 +107,7 @@ final class DiscoverViewModel: ObservableObject {
             
             \(item.subtitle ?? "")
             
-            Download Lyo to watch: https://lyo.app
+            Download Lyo to watch: https://lyoai.app
             """
             
             if let url = item.videoURL ?? item.thumbnailURL {

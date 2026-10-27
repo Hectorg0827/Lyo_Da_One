@@ -487,7 +487,7 @@ struct LyoMessageBubbleView: View {
 
     @ViewBuilder
     private func videoContentBubble(url: String, thumbnail: String?, duration: TimeInterval) -> some View {
-        Link(destination: URL(string: url) ?? URL(string: "https://lyo.app")!) {
+        Link(destination: URL(string: url) ?? AppConfig.websiteURL) {
             ZStack {
                 if let thumbnail, let thumbURL = URL(string: thumbnail) {
                     AsyncImage(url: thumbURL) { image in
@@ -527,7 +527,7 @@ struct LyoMessageBubbleView: View {
 
     @ViewBuilder
     private func audioContentBubble(url: String, duration: TimeInterval) -> some View {
-        Link(destination: URL(string: url) ?? URL(string: "https://lyo.app")!) {
+        Link(destination: URL(string: url) ?? AppConfig.websiteURL) {
             HStack(spacing: DesignTokens.Spacing.sm) {
                 Image(systemName: "waveform.circle.fill")
                     .font(.title2)
@@ -554,7 +554,7 @@ struct LyoMessageBubbleView: View {
 
     @ViewBuilder
     private func fileContentBubble(url: String, name: String, mimeType: String, size: Int64) -> some View {
-        Link(destination: URL(string: url) ?? URL(string: "https://lyo.app")!) {
+        Link(destination: URL(string: url) ?? AppConfig.websiteURL) {
             HStack(spacing: DesignTokens.Spacing.sm) {
                 Image(systemName: "doc.fill")
                     .font(.title2)
