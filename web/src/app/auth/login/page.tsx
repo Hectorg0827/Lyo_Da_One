@@ -226,6 +226,14 @@ export default function LoginPage() {
               Sign up
             </Link>
           </p>
+
+          <p className="text-center text-xs text-secondary">
+            <Link href="/privacy" className="hover:text-primary">Privacy Policy</Link>
+            {' · '}
+            <Link href="/terms" className="hover:text-primary">Terms of Service</Link>
+            {' · '}
+            <Link href="/support" className="hover:text-primary">Help</Link>
+          </p>
         </div>
       </motion.div>
     </div>

@@ -4,6 +4,7 @@ import {
   REQUEST_FAILED,
   RETURN_RETRY,
 } from '@/lib/auth-failure.mjs';
+import { requestAccountDeletion } from '@/lib/account-deletion.mjs';
 import type {
   User,
   ChatBlock,
@@ -352,6 +353,20 @@ export const api = {
       } finally {
         clearTokens();
       }
+    },
+
+    /**
+     * Permanently delete the signed-in account (DELETE /auth/me). Resolves
+     * with whether it worked; never clears tokens itself — the caller does
+     * that only after success (see account-deletion.mjs).
+     */
+    deleteAccount() {
+      return requestAccountDeletion({
+        apiUrl: API_URL,
+        getToken: getAccessToken,
+        refresh: tryRefreshToken,
+        fetchImpl: (url, init) => fetch(url, init),
+      });
     },
   },
 

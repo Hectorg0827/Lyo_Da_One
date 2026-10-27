@@ -1,12 +1,14 @@
 import { create } from 'zustand';
 import type { User, AuthState } from '@/types';
 import { api, getAccessToken, clearTokens, adaptUser } from '@/lib/api';
+import { clearLocalAccountData, type AccountDeletionResult } from '@/lib/account-deletion.mjs';
 
 interface AuthStore extends AuthState {
   login: (email: string, password: string) => Promise<void>;
   loginWithFirebase: (idToken: string) => Promise<void>;
   signup: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => void;
+  deleteAccount: () => Promise<AccountDeletionResult>;
   setUser: (user: User) => void;
   updateUser: (updates: Partial<User>) => void;
   hydrate: () => Promise<void>;
@@ -70,6 +72,18 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     api.auth.logout().catch(() => {});
     clearTokens();
     set({ user: null, token: null, isAuthenticated: false });
+  },
+
+  // Local data is cleared only once the server confirms the account is gone;
+  // on failure the learner stays signed in and sees why.
+  deleteAccount: async () => {
+    const result = await api.auth.deleteAccount();
+    if (result.ok) {
+      clearTokens();
+      if (typeof window !== 'undefined') clearLocalAccountData(window.localStorage);
+      set({ user: null, token: null, isAuthenticated: false });
+    }
+    return result;
   },
 
   setUser: (user) => set({ user }),

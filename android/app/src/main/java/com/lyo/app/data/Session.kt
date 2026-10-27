@@ -1,5 +1,6 @@
 package com.lyo.app.data
 
+import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -156,6 +157,27 @@ object Session {
         } finally {
             clearLocalSession()
         }
+    }
+
+    /**
+     * Permanently deletes the account (DELETE /auth/me). Local data is cleared
+     * only after the server confirms with 200 or 204. Returns null on success,
+     * or the message to show; on failure the learner stays signed in.
+     */
+    suspend fun deleteAccount(context: Context): String? {
+        val code = try {
+            ApiClient.api.deleteAccount().code()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            return accountDeletionFailureMessage(error)
+        }
+        if (!accountDeletionSucceeded(code)) return accountDeletionFailureMessage(code)
+
+        RecentCourseStore.clear(context)
+        com.lyo.app.data.classroom.ClassroomSessionStore.clearAll()
+        clearLocalSession()
+        return null
     }
 
     private fun clearLocalSession() {

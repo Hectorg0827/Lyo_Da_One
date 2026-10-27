@@ -11,3 +11,8 @@ captures/
 
 # Firebase app configuration is supplied by the release environment.
 app/google-services.json
+
+# Release signing: the upload keystore and its passwords never go in git.
+keystore.properties
+*.jks
+*.keystore

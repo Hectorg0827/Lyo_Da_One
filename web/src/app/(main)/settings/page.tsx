@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AtSign, ChevronRight, ExternalLink, Info, Mail, Save, ShieldCheck, User } from 'lucide-react';
+import { AlertTriangle, AtSign, ChevronRight, ExternalLink, Mail, Save, ShieldCheck, Trash2, User } from 'lucide-react';
 import BlockedAccounts from '@/components/settings/BlockedAccounts';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
@@ -67,7 +68,11 @@ function ExternalRow({
 }
 
 export default function SettingsPage() {
-  const { user, updateUser } = useAuthStore();
+  const router = useRouter();
+  const { user, updateUser, deleteAccount } = useAuthStore();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState(user?.displayName ?? '');
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<'idle' | 'saved' | 'error'>('idle');
@@ -96,6 +101,20 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function confirmDeleteAccount() {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const result = await deleteAccount();
+    if (result.ok) {
+      router.replace('/auth/login');
+      return;
+    }
+    // Still signed in: the account was not deleted.
+    setDeleteError(result.message);
+    setDeleting(false);
   }
 
   return (
@@ -166,22 +185,61 @@ export default function SettingsPage() {
       )}
 
       <Section title="About & support">
-        <ExternalRow label="Terms of Service" href="https://lyo.app/terms" />
-        <ExternalRow label="Privacy Policy" href="https://lyo.app/privacy" />
-        <ExternalRow label="Contact Support" href="mailto:support@lyo.app" />
+        <ExternalRow label="Terms of Service" href="/terms" />
+        <ExternalRow label="Privacy Policy" href="/privacy" />
+        <ExternalRow label="Help & support" href="/support" />
+        <ExternalRow label="Contact Support" href="mailto:support@lyoai.app" />
       </Section>
 
-      <section className="rounded-2xl border border-amber-400/20 bg-amber-400/[0.05] px-5 py-4">
+      <section className="rounded-2xl border border-red-400/25 bg-red-500/[0.05] px-5 py-4">
         <div className="flex items-start gap-3">
-          <Info size={17} className="mt-0.5 shrink-0 text-amber-300" />
-          <div>
-            <h2 className="text-sm font-semibold text-amber-100">Account deletion</h2>
+          <Trash2 size={17} className="mt-0.5 shrink-0 text-red-300" />
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold text-red-100">Delete account</h2>
             <p className="mt-1 text-sm leading-relaxed text-white/55">
-              Lyo does not currently expose a verified account-deletion endpoint on the web. The old button only signed users out, so it has been removed.
+              Permanently delete your LYO account and everything in it: your profile, posts, videos, messages, AI chats and learning progress.
             </p>
-            <a href="mailto:support@lyo.app?subject=Account%20deletion%20request" className="mt-2 inline-flex text-sm font-semibold text-amber-200 hover:text-amber-100">
-              Request account deletion
-            </a>
+            {!confirmingDelete ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteError(null);
+                  setConfirmingDelete(true);
+                }}
+                className="mt-3 rounded-xl border border-red-400/40 px-4 py-2 text-sm font-semibold text-red-200 transition hover:bg-red-500/10"
+              >
+                Delete account
+              </button>
+            ) : (
+              <div role="alertdialog" aria-labelledby="delete-account-title" className="mt-3 rounded-xl border border-red-400/30 bg-black/30 p-4">
+                <p id="delete-account-title" className="flex items-center gap-2 text-sm font-bold text-red-100">
+                  <AlertTriangle size={15} className="shrink-0" />
+                  This is permanent and cannot be undone.
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-white/60">
+                  Your account and all of its data will be deleted for good, on every device. You will be signed out.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void confirmDeleteAccount()}
+                    disabled={deleting}
+                    className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {deleting ? 'Deleting…' : 'Delete my account permanently'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDelete(false)}
+                    disabled={deleting}
+                    className="rounded-xl px-4 py-2 text-sm font-semibold text-white/70 transition hover:bg-white/5 disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {deleteError && <p role="alert" className="mt-3 text-sm text-red-300">{deleteError}</p>}
           </div>
         </div>
       </section>

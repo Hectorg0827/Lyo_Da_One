@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -7,6 +9,48 @@ plugins {
 // Keep development builds usable until this app has a Firebase configuration.
 if (file("google-services.json").exists()) { apply(plugin = "com.google.gms.google-services") }
 
+// ── Build settings from outside the code ────────────────────────────────────
+// Each setting below is read from a Gradle property (-PNAME=value, or
+// ~/.gradle/gradle.properties) or, failing that, an environment variable of
+// the same name. Nothing secret lives in this file. See android/RELEASE.md
+// and docs/STAGING.md.
+fun setting(name: String): String? =
+    (providers.gradleProperty(name).orNull ?: providers.environmentVariable(name).orNull)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+
+// Retrofit needs a base URL ending in "/", and the code appends paths like
+// "auth/refresh" to it directly.
+fun apiBaseUrl(name: String, value: String): String {
+    require(value.startsWith("https://") || value.startsWith("http://")) {
+        "$name must start with https:// (got \"$value\")"
+    }
+    return value.trimEnd('/') + "/"
+}
+
+val productionApiUrl = "https://api.lyoai.app/"
+// Release builds talk to production unless told otherwise.
+val releaseApiUrl = apiBaseUrl("LYO_API_BASE_URL", setting("LYO_API_BASE_URL") ?: productionApiUrl)
+// Debug and staging builds talk to staging once a staging URL is configured,
+// and fall back to production (as before) until then.
+val stagingApiUrl = setting("LYO_STAGING_API_BASE_URL")?.let { apiBaseUrl("LYO_STAGING_API_BASE_URL", it) }
+
+// Release signing (Play Store upload key). Read from android/keystore.properties
+// (gitignored) or environment variables; never committed. When absent, debug
+// builds work as always and release builds stop with an explanation.
+val keystoreProperties = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
+fun signingSetting(propertyKey: String, envName: String): String? =
+    (keystoreProperties.getProperty(propertyKey) ?: setting(envName))?.trim()?.takeIf { it.isNotEmpty() }
+
+val uploadStoreFile = signingSetting("storeFile", "LYO_UPLOAD_STORE_FILE")
+val uploadStorePassword = signingSetting("storePassword", "LYO_UPLOAD_STORE_PASSWORD")
+val uploadKeyAlias = signingSetting("keyAlias", "LYO_UPLOAD_KEY_ALIAS")
+val uploadKeyPassword = signingSetting("keyPassword", "LYO_UPLOAD_KEY_PASSWORD")
+val hasReleaseSigning = listOf(uploadStoreFile, uploadStorePassword, uploadKeyAlias, uploadKeyPassword).all { it != null }
+
 android {
     namespace = "com.lyo.app"
     compileSdk = 35
@@ -15,19 +59,55 @@ android {
         applicationId = "com.lyo.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
-
-        buildConfigField("String", "API_BASE_URL", "\"https://api.lyoai.app/\"")
+        // Every Play upload needs a higher versionCode than the last one.
+        // Override per build with LYO_VERSION_CODE / LYO_VERSION_NAME.
+        versionCode = setting("LYO_VERSION_CODE")?.let {
+            it.toIntOrNull() ?: throw GradleException("LYO_VERSION_CODE must be a whole number (got \"$it\")")
+        } ?: 1
+        versionName = setting("LYO_VERSION_NAME") ?: "1.0.0"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(uploadStoreFile!!)
+                storePassword = uploadStorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+            }
+        }
+    }
+
+    // debug   — developer builds; staging server when configured.
+    // staging — a release-like build (minified) for testers, on the staging
+    //           server; signed with the debug key so anyone can install it.
+    // release — the Play Store build; production server; upload key.
     buildTypes {
+        debug {
+            buildConfigField("String", "API_BASE_URL", "\"${stagingApiUrl ?: productionApiUrl}\"")
+            buildConfigField("String", "API_ENVIRONMENT", "\"${if (stagingApiUrl != null) "staging" else "production"}\"")
+        }
+        create("staging") {
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            signingConfig = signingConfigs.getByName("debug")
+            versionNameSuffix = "-staging"
+            matchingFallbacks += listOf("release")
+            buildConfigField("String", "API_BASE_URL", "\"${stagingApiUrl ?: productionApiUrl}\"")
+            buildConfigField("String", "API_ENVIRONMENT", "\"${if (stagingApiUrl != null) "staging" else "production"}\"")
+        }
         release {
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
+            buildConfigField("String", "API_BASE_URL", "\"$releaseApiUrl\"")
+            buildConfigField("String", "API_ENVIRONMENT", "\"${if (releaseApiUrl == productionApiUrl) "production" else "custom"}\"")
         }
     }
     compileOptions {
@@ -46,6 +126,20 @@ android {
         buildConfig = true
     }
     sourceSets.getByName("test").resources.srcDir("../../Sources/Tests/Fixtures")
+}
+
+// A Play Store build without the upload key would be rejected; stop early
+// and say what is missing instead of producing an unsigned bundle.
+tasks.matching { it.name == "bundleRelease" || it.name == "assembleRelease" }.configureEach {
+    doFirst {
+        if (!hasReleaseSigning) {
+            throw GradleException(
+                "Release signing is not set up. Create android/keystore.properties or set " +
+                    "LYO_UPLOAD_STORE_FILE, LYO_UPLOAD_STORE_PASSWORD, LYO_UPLOAD_KEY_ALIAS and " +
+                    "LYO_UPLOAD_KEY_PASSWORD. Step-by-step: android/RELEASE.md"
+            )
+        }
+    }
 }
 
 dependencies {

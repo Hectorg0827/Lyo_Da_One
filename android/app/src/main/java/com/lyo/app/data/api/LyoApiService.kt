@@ -42,6 +42,13 @@ interface LyoApiService {
     @POST("auth/logout")
     suspend fun logout(): JsonObject
 
+    /**
+     * Permanently deletes the signed-in account. Contract shared with web and
+     * iOS: bearer token, no body; 200 or 204 means deleted (AccountDeletion.kt).
+     */
+    @DELETE("auth/me")
+    suspend fun deleteAccount(): Response<Unit>
+
     @GET("auth/users/{userId}")
     suspend fun getUser(@Path("userId") userId: String): UserDto
 
