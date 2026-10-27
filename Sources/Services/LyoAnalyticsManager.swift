@@ -1,4 +1,5 @@
 import Foundation
+import os
 import FirebaseAnalytics
 
 /// A singleton tracker that captures interaction telemetry and reports it back to the backend.
@@ -120,18 +121,18 @@ public class LyoAnalyticsManager: ObservableObject {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload, options: [])
         } catch {
-            print("❌ Analytics Error: Failed to serialize payload. \(error)")
+            Log.general.debugLine("❌ Analytics Error: Failed to serialize payload. \(error)")
             return
         }
         
         // Fire and forget
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
             if let error = error {
-                print("❌ Analytics Error: Failed to send event. \(error.localizedDescription)")
+                Log.general.debugLine("❌ Analytics Error: Failed to send event. \(error.localizedDescription)")
                 return
             }
             if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
-                print("⚠️ Analytics Warning: Server rejected event with status \(httpResponse.statusCode)")
+                Log.general.debugLine("⚠️ Analytics Warning: Server rejected event with status \(httpResponse.statusCode)")
             } else {
                 // Success! (Silence is golden for analytics, uncomment for local debugging)
                 // print("✅ Analytics: Event successfully dispatched.")

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import os
 import UIKit
 import SwiftUI
 
@@ -69,7 +70,7 @@ final class CourseShareService {
             }
             
             vc.present(activityVC, animated: true)
-            print("📤 CourseShareService: Presented share sheet for course: \(title)")
+            Log.course.debugLine("📤 CourseShareService: Presented share sheet for course: \(title)")
         }
     }
     

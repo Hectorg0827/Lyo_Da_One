@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftUI
 
 struct NotebookEntry: Identifiable, Codable, Equatable {
@@ -165,7 +166,7 @@ class NotebookStore: ObservableObject {
             highlightsByConversation = snapshot.highlightsByConversation
         } catch {
             errorMessage = "Unable to restore chat notes."
-            print("❌ Failed to restore chat annotations: \(error)")
+            Log.data.debugLine("❌ Failed to restore chat annotations: \(error)")
         }
     }
 
@@ -181,7 +182,7 @@ class NotebookStore: ObservableObject {
             UserDefaults.standard.set(data, forKey: persistenceKey)
         } catch {
             errorMessage = "Unable to save chat notes."
-            print("❌ Failed to persist chat annotations: \(error)")
+            Log.data.debugLine("❌ Failed to persist chat annotations: \(error)")
         }
     }
 }

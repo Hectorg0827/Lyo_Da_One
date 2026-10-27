@@ -8,6 +8,7 @@
 //
 
 import SwiftUI
+import os
 
 #if false  // Disabled until API compatibility is fixed
 
@@ -68,11 +69,11 @@ final class CourseLibraryService: ObservableObject {
             // Categorize courses
             categorizeCourses()
             
-            print("✅ Fetched \(allCourses.count) courses")
+            Log.course.debugLine("✅ Fetched \(allCourses.count) courses")
             
         } catch {
             self.error = error.localizedDescription
-            print("❌ Failed to fetch courses: \(error)")
+            Log.course.debugLine("❌ Failed to fetch courses: \(error)")
         }
         
         isLoading = false
@@ -100,7 +101,7 @@ final class CourseLibraryService: ObservableObject {
             trendingCourses = Array(cards.prefix(10))
             
         } catch {
-            print("❌ Failed to fetch trending: \(error)")
+            Log.course.debugLine("❌ Failed to fetch trending: \(error)")
         }
     }
     
@@ -129,7 +130,7 @@ final class CourseLibraryService: ObservableObject {
             allCourses = results.map { convertToCard($0) }
             categorizeCourses()
         } catch {
-            print("❌ Search failed: \(error)")
+            Log.course.debugLine("❌ Search failed: \(error)")
         }
     }
     

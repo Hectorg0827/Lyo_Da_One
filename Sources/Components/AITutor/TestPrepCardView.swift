@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct TestPrepCardView: View {
     let data: TestPrepBlockData
@@ -168,7 +169,7 @@ struct TestPrepCardView: View {
                         onSchedule(selectedDate, selectedCourse, testDescription, ids)
                     } catch {
                         // Handle error (maybe show alert)
-                        print("Failed to upload attachments: \(error)")
+                        Log.ai.debugLine("Failed to upload attachments: \(error)")
                         onSchedule(selectedDate, selectedCourse, testDescription, [])
                     }
                     isUploading = false

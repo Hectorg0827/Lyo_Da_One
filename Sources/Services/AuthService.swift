@@ -93,7 +93,7 @@ class AuthService: NSObject, ObservableObject {
             }
         } catch {
             // Backend failed - Show error instead of falling back to mock
-            print("❌ Backend login failed: \(error.localizedDescription)")
+            Log.auth.debugLine("❌ Backend login failed: \(error.localizedDescription)")
             await MainActor.run {
                 self.error = error.localizedDescription
                 self.isLoading = false
@@ -115,7 +115,7 @@ class AuthService: NSObject, ObservableObject {
             }
         } catch {
             // Backend failed - Show error instead of falling back to mock
-            print("❌ Backend registration failed: \(error.localizedDescription)")
+            Log.auth.debugLine("❌ Backend registration failed: \(error.localizedDescription)")
             await MainActor.run {
                 self.error = error.localizedDescription
                 self.isLoading = false
@@ -183,7 +183,7 @@ class AuthService: NSObject, ObservableObject {
             // The learner closed Google's sheet; nothing went wrong.
         } catch {
             // No fallback: without the API's confirmation there is no LYO session.
-            print("❌ Google sign-in failed: \(error.localizedDescription)")
+            Log.auth.debugLine("❌ Google sign-in failed: \(error.localizedDescription)")
             self.error = "Couldn't sign you in with Google. Please try again."
         }
         #else

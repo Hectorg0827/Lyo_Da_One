@@ -1,4 +1,5 @@
 import Foundation
+import os
 import CoreLocation
 
 class LyoRepository: ObservableObject {
@@ -34,9 +35,9 @@ class LyoRepository: ObservableObject {
         } catch {
             // Surface the precise error so we can diagnose why a 200 OK from
             // the backend can still cause iOS to throw here.
-            print("❌ LyoRepository.login threw: \(type(of: error)): \(error)")
+            Log.net.debugLine("❌ LyoRepository.login threw: \(type(of: error)): \(error)")
             if let decodingError = error as? DecodingError {
-                print("   decoding detail: \(decodingError)")
+                Log.net.debugLine("   decoding detail: \(decodingError)")
             }
             throw error
         }
@@ -374,7 +375,7 @@ class LyoRepository: ObservableObject {
     func saveCourse(title: String, description: String, modules: [String]) async throws {
         // Mock implementation until backend endpoint is ready
         // In a real app, this would POST to /learning/courses
-        print("💾 Saving course to repository: \(title)")
+        Log.net.debugLine("💾 Saving course to repository: \(title)")
         try await Task.sleep(nanoseconds: 500_000_000) // Simulate network delay
     }
 

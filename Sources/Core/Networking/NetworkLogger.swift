@@ -69,7 +69,7 @@ struct NetworkLogger {
         }
 
         message += "\n================================\n"
-        print(message)
+        Log.net.debugLine(message)
     }
 
     func logResponse(_ response: NetworkResponse, for request: URLRequest) {
@@ -115,7 +115,7 @@ struct NetworkLogger {
         }
 
         message += "\n================================\n"
-        print(message)
+        Log.net.debugLine(message)
     }
 
     func logError(_ error: Error, for request: URLRequest) {
@@ -136,7 +136,7 @@ struct NetworkLogger {
         }
 
         message += "================================\n"
-        print(message)
+        Log.net.debugLine(message)
     }
 
     // MARK: - Helper Methods

@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - App Configuration
 /// Centralized configuration for the Lyo app
@@ -87,7 +88,7 @@ struct AppConfig {
         }
 
         #if DEBUG
-        print("⚠️ AppConfig.apiKey is empty — set LYO_API_KEY via the Xcode scheme or an xcconfig/CI secret")
+        Log.app.debugLine("⚠️ AppConfig.apiKey is empty — set LYO_API_KEY via the Xcode scheme or an xcconfig/CI secret")
         #endif
         return ""
     }
@@ -301,7 +302,7 @@ struct AppConfig {
     // MARK: - Debug Helpers
     static func printConfiguration() {
         #if DEBUG
-            print(
+            Log.app.debugLine(
                 """
                 ================================
                 🔧 Lyo App Configuration

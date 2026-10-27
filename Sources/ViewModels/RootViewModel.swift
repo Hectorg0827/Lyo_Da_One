@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftUI
 import Combine
 
@@ -42,7 +43,7 @@ class RootViewModel: ObservableObject {
             Task {
                 try? await Task.sleep(nanoseconds: 5 * 1_000_000_000)
                 if isLoading {
-                    print("⚠️ Auth check timed out, forcing UI to load")
+                    Log.app.debugLine("⚠️ Auth check timed out, forcing UI to load")
                     isLoading = false
                 }
             }
@@ -126,7 +127,7 @@ class RootViewModel: ObservableObject {
     
     /// Called after successful authentication to initialize services
     private func onUserAuthenticated() async {
-        print("🔐 User authenticated - initializing services...")
+        Log.app.debugLine("🔐 User authenticated - initializing services...")
         
         // 1. Register device for push notifications
         PushNotificationService.shared.onUserLogin()
@@ -145,12 +146,12 @@ class RootViewModel: ObservableObject {
         PushNotificationService.shared.checkPermissionStatus { status in
             if status == .notDetermined {
                 PushNotificationService.shared.requestPermission { granted, _ in
-                    print(granted ? "✅ Push notifications enabled" : "❌ Push notifications denied")
+                    Log.push.debugLine(granted ? "Push notifications enabled" : "Push notifications denied")
                 }
             }
         }
         
-        print("✅ Post-authentication services initialized")
+        Log.app.debugLine("✅ Post-authentication services initialized")
     }
 
     // MARK: - Logout
@@ -171,7 +172,7 @@ class RootViewModel: ObservableObject {
         isAuthenticated = false
         await tokenManager.clearTokens()
         
-        print("✅ User logged out - services cleaned up")
+        Log.app.debugLine("✅ User logged out - services cleaned up")
     }
 
     /// Called after AuthService.deleteAccount() succeeded. The account no

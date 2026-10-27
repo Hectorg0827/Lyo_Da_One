@@ -235,7 +235,7 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
 
             device.unlockForConfiguration()
         } catch {
-            print("Failed to configure camera settings: \(error)")
+            Log.media.debugLine("Failed to configure camera settings: \(error)")
         }
     }
 
@@ -284,7 +284,7 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
 
                 device.unlockForConfiguration()
             } catch {
-                print("Flash toggle failed: \(error)")
+                Log.media.debugLine("Flash toggle failed: \(error)")
             }
         }
     }
@@ -303,7 +303,7 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
                     self.zoomFactor = clampedFactor
                 }
             } catch {
-                print("Zoom failed: \(error)")
+                Log.media.debugLine("Zoom failed: \(error)")
             }
         }
     }
@@ -327,7 +327,7 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
 
                 device.unlockForConfiguration()
             } catch {
-                print("Exposure adjustment failed: \(error)")
+                Log.media.debugLine("Exposure adjustment failed: \(error)")
             }
         }
     }
@@ -359,7 +359,7 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
                     }
                 }
             } catch {
-                print("Focus adjustment failed: \(error)")
+                Log.media.debugLine("Focus adjustment failed: \(error)")
             }
         }
     }
@@ -420,7 +420,7 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
 
         // Guard: ensure the session is running and movieOutput is connected
         guard session.isRunning else {
-            print("⚠️ Cannot start recording — session is not running. Restarting...")
+            Log.media.debugLine("⚠️ Cannot start recording — session is not running. Restarting...")
             ensureSessionRunning()
             // Retry after a short delay to let the session spin up
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -430,7 +430,7 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
         }
 
         guard !movieOutput.connections.isEmpty else {
-            print("⚠️ Cannot start recording — movieOutput has no connections")
+            Log.media.debugLine("⚠️ Cannot start recording — movieOutput has no connections")
             DispatchQueue.main.async {
                 self.errorMessage = "Camera not ready. Please try again."
             }
@@ -566,20 +566,20 @@ class EnhancedCameraManager: NSObject, ObservableObject, AVCaptureFileOutputReco
 
 extension EnhancedCameraManager {
     func fileOutput(_ output: AVCaptureFileOutput, didStartRecordingTo fileURL: URL, from connections: [AVCaptureConnection]) {
-        print("📹 Enhanced recording started: \(fileURL)")
+        Log.media.debugLine("📹 Enhanced recording started: \(fileURL)")
         analyzeScene()
     }
 
     func fileOutput(_ output: AVCaptureFileOutput, didFinishRecordingTo outputFileURL: URL, from connections: [AVCaptureConnection], error: Error?) {
         if let error = error {
-            print("Recording error: \(error.localizedDescription)")
+            Log.media.debugLine("Recording error: \(error.localizedDescription)")
             DispatchQueue.main.async {
                 self.errorMessage = error.localizedDescription
             }
             return
         }
 
-        print("Enhanced recording finished: \(outputFileURL)")
+        Log.media.debugLine("Enhanced recording finished: \(outputFileURL)")
 
         // Generate thumbnail
         Task {
@@ -604,7 +604,7 @@ extension EnhancedCameraManager {
             let cgImage = try await imageGenerator.image(at: time).image
             return UIImage(cgImage: cgImage)
         } catch {
-            print("Failed to generate thumbnail: \(error)")
+            Log.media.debugLine("Failed to generate thumbnail: \(error)")
             return nil
         }
     }
@@ -615,13 +615,13 @@ extension EnhancedCameraManager {
 extension EnhancedCameraManager: AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         if let error = error {
-            print("Photo capture error: \(error.localizedDescription)")
+            Log.media.debugLine("Photo capture error: \(error.localizedDescription)")
             return
         }
 
         guard let imageData = photo.fileDataRepresentation(),
               let image = UIImage(data: imageData) else {
-            print("Failed to process photo data")
+            Log.media.debugLine("Failed to process photo data")
             return
         }
 

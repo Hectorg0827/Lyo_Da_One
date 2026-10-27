@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 struct CommentsSheet: View {
     let item: DiscoverItem
@@ -105,7 +106,7 @@ struct CommentsSheet: View {
         do {
             comments = try await discoveryService.fetchComments(discoveryId: item.id)
         } catch {
-            print("Failed to load comments: \(error)")
+            Log.ui.debugLine("Failed to load comments: \(error)")
             self.error = error.localizedDescription
         }
         isLoading = false
@@ -124,7 +125,7 @@ struct CommentsSheet: View {
                 comments.append(newComment)
             }
         } catch {
-            print("Failed to post comment: \(error)")
+            Log.ui.debugLine("Failed to post comment: \(error)")
             self.error = error.localizedDescription
             newCommentText = pendingComment // Restore text on failure
         }

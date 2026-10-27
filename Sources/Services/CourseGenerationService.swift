@@ -113,12 +113,12 @@ final class CourseGenerationService: ObservableObject {
         progress = 0.3
         
         do {
-            print("🎯 Attempting Backend course generation for topic: \(topic)")
+            Log.course.debugLine("🎯 Attempting Backend course generation for topic: \(topic)")
             
             // Enable streaming for better UX - shows content as it arrives
             let course = try await generateFromBackendStreaming(request: request)
             
-            print("✅ SUCCESS: Backend generated course: \(course.title)")
+            Log.course.debugLine("✅ SUCCESS: Backend generated course: \(course.title)")
             
             currentStep = "Course ready!"
             progress = 1.0
@@ -127,13 +127,13 @@ final class CourseGenerationService: ObservableObject {
             return course
             
         } catch let apiError {
-            print("⚠️ Backend generation error: \(apiError)")
+            Log.course.debugLine("⚠️ Backend generation error: \(apiError)")
             
             // Fallback to OpenAI (Direct) if backend fails
-            print("🔄 Falling back to OpenAI (Direct)")
+            Log.course.debugLine("🔄 Falling back to OpenAI (Direct)")
             do {
                 let course = try await generateFromOpenAI(topic: topic, level: level, outcomes: learningOutcomes)
-                print("✅ SUCCESS: OpenAI generated course: \(course.title)")
+                Log.course.debugLine("✅ SUCCESS: OpenAI generated course: \(course.title)")
                 
                 currentStep = "Course ready!"
                 progress = 1.0
@@ -152,7 +152,7 @@ final class CourseGenerationService: ObservableObject {
     // MARK: - Backend Generation (Primary - Uses Gemini AI with Streaming)
     
     private func generateFromBackendStreaming(request: ServiceCourseGenerationRequest) async throws -> GeneratedCourseResponse {
-        print("🎓 Starting STREAMING course generation for: \(request.topic)")
+        Log.course.debugLine("🎓 Starting STREAMING course generation for: \(request.topic)")
         
         let endpoint = Endpoints.AI.generateCourseStream(
             topic: request.topic,
@@ -161,7 +161,7 @@ final class CourseGenerationService: ObservableObject {
             teachingStyle: request.teachingStyle
         )
         
-        print("📤 Calling streaming backend: \(endpoint.path)")
+        Log.course.debugLine("📤 Calling streaming backend: \(endpoint.path)")
         
         // Accumulate streamed chunks
         var accumulatedData = Data()
@@ -172,14 +172,14 @@ final class CourseGenerationService: ObservableObject {
             let (asyncBytes, response) = try await NetworkClient.shared.stream(endpoint)
             
             guard let httpResponse = response as? HTTPURLResponse else {
-                print("❌ Invalid response type")
+                Log.course.debugLine("❌ Invalid response type")
                 throw ServiceCourseGenerationError.serverError
             }
             
-            print("📥 Streaming started - status: \(httpResponse.statusCode)")
+            Log.course.debugLine("📥 Streaming started - status: \(httpResponse.statusCode)")
             
             guard (200...299).contains(httpResponse.statusCode) else {
-                print("❌ Backend error status: \(httpResponse.statusCode)")
+                Log.course.debugLine("❌ Backend error status: \(httpResponse.statusCode)")
                 throw ServiceCourseGenerationError.serverError
             }
             
@@ -199,21 +199,21 @@ final class CourseGenerationService: ObservableObject {
                 }
             }
             
-            print("✅ Streaming completed - received \(accumulatedData.count) bytes")
+            Log.course.debugLine("✅ Streaming completed - received \(accumulatedData.count) bytes")
             
             // Log response preview
             if let jsonStr = String(data: accumulatedData, encoding: .utf8) {
-                print("📥 Streamed response preview: \(String(jsonStr.prefix(300)))...")
+                Log.course.debugLine("📥 Streamed response preview: \(String(jsonStr.prefix(300)))...")
             }
             
             // Parse the accumulated response
             return try parseBackendResponse(data: accumulatedData, topic: request.topic)
             
         } catch let streamError as URLError {
-            print("❌ Streaming error: \(streamError.localizedDescription)")
+            Log.course.debugLine("❌ Streaming error: \(streamError.localizedDescription)")
             throw ServiceCourseGenerationError.serverError
         } catch {
-            print("❌ Unexpected streaming error: \(error)")
+            Log.course.debugLine("❌ Unexpected streaming error: \(error)")
             throw error
         }
     }
@@ -236,8 +236,8 @@ final class CourseGenerationService: ObservableObject {
         // Use the backend's Dual AI Orchestrator endpoint (Gemini + OpenAI Hybrid)
         // This endpoint routes to Gemini for educational content generation
         
-        print("🎓 Starting course generation for: \(request.topic)")
-        print("📤 Calling Dual AI Orchestrator: /api/v1/ai/generate")
+        Log.course.debugLine("🎓 Starting course generation for: \(request.topic)")
+        Log.course.debugLine("📤 Calling Dual AI Orchestrator: /api/v1/ai/generate")
         
         // Build course generation prompt for the AI
         let outcomesText = request.outcomes.joined(separator: "\n- ")
@@ -292,17 +292,17 @@ final class CourseGenerationService: ObservableObject {
             
             let content = aiResponse.content ?? aiResponse.response
             guard let validContent = content else {
-                print("❌ Failed to extract content/response from AI JSON")
+                Log.course.debugLine("❌ Failed to extract content/response from AI JSON")
                 throw ServiceCourseGenerationError.invalidResponse
             }
             
-            print("🤖 AI used: \(aiResponse.primaryAi ?? "unknown")")
-            print("📄 Content length: \(validContent.count) characters")
+            Log.course.debugLine("🤖 AI used: \(aiResponse.primaryAi ?? "unknown")")
+            Log.course.debugLine("📄 Content length: \(validContent.count) characters")
             
             return try parseAIContent(validContent, topic: request.topic)
             
         } catch {
-            print("❌ Backend generation failed: \(error)")
+            Log.course.debugLine("❌ Backend generation failed: \(error)")
             throw error
         }
     }
@@ -323,27 +323,27 @@ final class CourseGenerationService: ObservableObject {
         }
         
         guard let courseData = cleanJson.data(using: .utf8) else {
-            print("❌ Failed to convert cleaned JSON to data")
+            Log.course.debugLine("❌ Failed to convert cleaned JSON to data")
             throw ServiceCourseGenerationError.invalidResponse
         }
         
         // Try to decode as GeneratedCourseResponse
         do {
             let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: courseData)
-            print("✅ Backend (Gemini) generated course: \(course.title)")
+            Log.course.debugLine("✅ Backend (Gemini) generated course: \(course.title)")
             return course
         } catch {
-            print("⚠️ Direct decode failed, trying to map response...")
+            Log.course.debugLine("⚠️ Direct decode failed, trying to map response...")
             
             // Try to parse as generic JSON and map
             if let courseJson = try? JSONSerialization.jsonObject(with: courseData) as? [String: Any] {
                 let course = try mapBackendResponse(courseJson, topic: topic)
-                print("✅ Mapped backend course: \(course.title)")
+                Log.course.debugLine("✅ Mapped backend course: \(course.title)")
                 return course
             }
             
-            print("❌ Failed to parse course JSON: \(error)")
-            print("❌ Cleaned JSON was: \(cleanJson.prefix(500))...")
+            Log.course.debugLine("❌ Failed to parse course JSON: \(error)")
+            Log.course.debugLine("❌ Cleaned JSON was: \(cleanJson.prefix(500))...")
             throw ServiceCourseGenerationError.invalidResponse
         }
     }
@@ -356,19 +356,19 @@ final class CourseGenerationService: ObservableObject {
         do {
             // First try direct decode
             let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: data)
-            print("✅ Backend generated course: \(course.title)")
+            Log.course.debugLine("✅ Backend generated course: \(course.title)")
             return course
         } catch {
-            print("⚠️ Direct decode failed, trying to map backend response...")
+            Log.course.debugLine("⚠️ Direct decode failed, trying to map backend response...")
             
             // Try to parse as generic JSON and map to our structure
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let course = try mapBackendResponse(json, topic: topic)
-                print("✅ Mapped backend course: \(course.title)")
+                Log.course.debugLine("✅ Mapped backend course: \(course.title)")
                 return course
             }
             
-            print("❌ Failed to decode backend response: \(error)")
+            Log.course.debugLine("❌ Failed to decode backend response: \(error)")
             throw ServiceCourseGenerationError.invalidResponse
         }
     }
@@ -500,7 +500,7 @@ final class CourseGenerationService: ObservableObject {
         IMPORTANT: Return ONLY the JSON object, no markdown code blocks, no extra text.
         """
         
-        print("📤 Sending course generation request to OpenAI...")
+        Log.course.debugLine("📤 Sending course generation request to OpenAI...")
         
         let response = try await OpenAIService.shared.sendMessage(
             message: prompt,
@@ -508,8 +508,8 @@ final class CourseGenerationService: ObservableObject {
             systemPrompt: "You are a curriculum designer. You must return only valid JSON with no markdown formatting."
         )
         
-        print("📥 OpenAI raw response length: \(response.count) characters")
-        print("📥 OpenAI response preview: \(String(response.prefix(200)))...")
+        Log.course.debugLine("📥 OpenAI raw response length: \(response.count) characters")
+        Log.course.debugLine("📥 OpenAI response preview: \(String(response.prefix(200)))...")
         
         // Clean and parse JSON
         var cleanJson = response
@@ -523,20 +523,20 @@ final class CourseGenerationService: ObservableObject {
             cleanJson = String(cleanJson[jsonStart...jsonEnd])
         }
         
-        print("🧹 Cleaned JSON length: \(cleanJson.count) characters")
+        Log.course.debugLine("🧹 Cleaned JSON length: \(cleanJson.count) characters")
         
         guard let data = cleanJson.data(using: .utf8) else {
-            print("❌ Failed to convert cleaned JSON to data")
+            Log.course.debugLine("❌ Failed to convert cleaned JSON to data")
             throw ServiceCourseGenerationError.invalidResponse
         }
         
         do {
             let course = try JSONDecoder().decode(GeneratedCourseResponse.self, from: data)
-            print("✅ Successfully decoded course: \(course.title)")
+            Log.course.debugLine("✅ Successfully decoded course: \(course.title)")
             return course
         } catch let decodingError {
-            print("❌ JSON decoding error: \(decodingError)")
-            print("❌ Cleaned JSON was: \(cleanJson)")
+            Log.course.debugLine("❌ JSON decoding error: \(decodingError)")
+            Log.course.debugLine("❌ Cleaned JSON was: \(cleanJson)")
             throw decodingError
         }
     }

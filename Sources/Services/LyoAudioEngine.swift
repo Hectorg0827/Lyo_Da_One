@@ -1,4 +1,5 @@
 import Foundation
+import os
 import AVFoundation
 import Combine
 
@@ -29,7 +30,7 @@ public class LyoAudioEngine: NSObject, ObservableObject, AVAudioPlayerDelegate {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
-            print("Failed to setup audio session: \(error)")
+            Log.audio.debugLine("Failed to setup audio session: \(error)")
         }
     }
     
@@ -117,7 +118,7 @@ public class LyoAudioEngine: NSObject, ObservableObject, AVAudioPlayerDelegate {
                 }
             }
         } catch {
-            print("Failed to play audio: \(error)")
+            Log.audio.debugLine("Failed to play audio: \(error)")
             playbackCompletion?()
             playbackCompletion = nil
         }
