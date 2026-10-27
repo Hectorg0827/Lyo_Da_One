@@ -69,6 +69,11 @@ deploy look current. If it reports `null` on a current deploy, add a service
 variable `LYO_GIT_COMMIT` set to the **reference** `${{RAILWAY_GIT_COMMIT_SHA}}`
 so it changes per deploy; a literal commit pasted there would freeze the field.
 
+## Staging
+
+A staging copy of this service sets `NEXT_PUBLIC_API_URL` to the staging
+backend instead. See `docs/STAGING.md`.
+
 ## Release gate
 
 - `https://lyoai.app/api/health` returns HTTP 200 from `lyo-web`.
