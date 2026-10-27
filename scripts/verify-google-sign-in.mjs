@@ -2,7 +2,7 @@
 // Firebase, and the API's POST /auth/firebase is the only way to a LYO session.
 // No platform may fake a sign-in (the iOS Apple button once did) or fall back
 // to a password anyone could work out (iOS used "Google_<firebase uid>_Auth").
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const failures = [];
@@ -44,7 +44,8 @@ if (plistValue(firebasePlist, 'BUNDLE_ID') !== 'com.lyo.app') failures.push('iOS
 if (!clientId.startsWith(`${plistValue(firebasePlist, 'GCM_SENDER_ID')}-`)) failures.push(`iOS CLIENT_ID ${clientId} is from another Google project than lyo-app`);
 if (plistValue(infoPlist, 'GIDClientID') !== clientId) failures.push('iOS Info.plist GIDClientID differs from GoogleService-Info.plist CLIENT_ID');
 need(infoPlist, `<string>${plistValue(firebasePlist, 'REVERSED_CLIENT_ID')}</string>`, 'iOS Info.plist URL scheme for Google\'s sign-in redirect');
-if (read('Sources/Resources/GoogleService-Info (2).plist') !== firebasePlist) failures.push('iOS GoogleService-Info (2).plist differs from GoogleService-Info.plist');
+// One Firebase config only: the stray "GoogleService-Info (2).plist" copy was deleted.
+if (existsSync(new URL('../Sources/Resources/GoogleService-Info (2).plist', import.meta.url))) failures.push('iOS has a second GoogleService-Info plist; keep only GoogleService-Info.plist');
 need(loginView, 'await authService.signInWithGoogle()', 'iOS login waits for Google');
 need(onboarding, 'await authService.signInWithGoogle()', 'iOS onboarding waits for Google');
 forbid(onboarding, 'DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {\n                if authService.isAuthenticated', 'iOS onboarding must not guess when Google finished');
