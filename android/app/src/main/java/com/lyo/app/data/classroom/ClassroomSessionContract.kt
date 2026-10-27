@@ -196,6 +196,12 @@ object ClassroomSessionStore {
         save(seat.copy(finished = true), courseKey)
     }
 
+    /** Forget every remembered class on this device (account deletion). */
+    fun clearAll() {
+        prefs?.edit()?.clear()?.apply()
+        fallback.clear()
+    }
+
     /** Test seam: forget everything this process remembers. */
     fun clearForTests() {
         fallback.clear()

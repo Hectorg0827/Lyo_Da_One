@@ -73,6 +73,28 @@ fun SettingsScreen(nav: NavHostController) {
     var savingName by remember { mutableStateOf(false) }
     var accountError by remember { mutableStateOf<String?>(null) }
     var showLogoutConfirmation by remember { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var deletingAccount by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
+
+    // Tokens and local data are cleared inside Session.deleteAccount only after
+    // the server confirms; on failure the learner stays here, signed in.
+    fun deleteAccount() {
+        if (deletingAccount) return
+        deletingAccount = true
+        deleteError = null
+        scope.launch {
+            val failure = Session.deleteAccount(context)
+            deletingAccount = false
+            if (failure == null) {
+                showDeleteConfirmation = false
+                nav.navigate(Routes.LOGIN) { popUpTo(0) }
+            } else {
+                showDeleteConfirmation = false
+                deleteError = failure
+            }
+        }
+    }
 
     fun saveDisplayName() {
         if (savingName) return
@@ -275,7 +297,76 @@ fun SettingsScreen(nav: NavHostController) {
             )
         }
 
+        SectionHeader("Legal & support")
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column {
+                LinkRow("Privacy Policy") { openLink(context, "https://lyoai.app/privacy") }
+                LinkRow("Terms of Service") { openLink(context, "https://lyoai.app/terms") }
+                LinkRow("Help & support") { openLink(context, "https://lyoai.app/support") }
+            }
+        }
+
+        SectionHeader("Delete account")
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Permanently delete your LYO account and everything in it: your profile, posts, videos, messages, AI chats and learning progress.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .padding(top = 12.dp)
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(LyoRed.copy(alpha = 0.15f))
+                        .clickable(enabled = !deletingAccount) {
+                            deleteError = null
+                            showDeleteConfirmation = true
+                        },
+                ) {
+                    if (deletingAccount) {
+                        CircularProgressIndicator(color = LyoRed, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    } else {
+                        Text(text = "Delete account", color = LyoRed, style = MaterialTheme.typography.titleSmall)
+                    }
+                }
+                deleteError?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
+            }
+        }
+
         Spacer(Modifier.height(16.dp))
+    }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { if (!deletingAccount) showDeleteConfirmation = false },
+            title = { Text("Delete your account?") },
+            text = {
+                Text(
+                    "This is permanent and cannot be undone. Your account and all of its data will be deleted for good, on every device, and you will be signed out.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = ::deleteAccount, enabled = !deletingAccount) {
+                    Text(if (deletingAccount) "Deleting…" else "Delete permanently", color = LyoRed)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }, enabled = !deletingAccount) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     if (showLogoutConfirmation) {
@@ -302,6 +393,29 @@ fun SettingsScreen(nav: NavHostController) {
                 }
             },
         )
+    }
+}
+
+private fun openLink(context: android.content.Context, url: String) {
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+}
+
+@Composable
+private fun LinkRow(title: String, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(16.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = TextPrimary,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextSecondary)
     }
 }
 
