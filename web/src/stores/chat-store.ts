@@ -185,7 +185,7 @@ interface ChatStore {
   createConversation: () => string;
   setActiveConversation: (id: string | null) => void;
   hydrate: () => Promise<void>;
-  loadConversation: (id: string) => Promise<void>;
+  loadConversation: (id: string, isCurrent?: () => boolean) => Promise<void>;
   sendMessage: (
     content: string,
     attachments?: ChatAttachment[],
@@ -252,6 +252,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   createConversation: () => {
     const state = get();
     const previous = state.conversations.find((c) => c.id === state.activeConversationId);
+    if (previous && state.voiceSessionActive) {
+      get().interruptGeneration();
+      get().setVoiceSessionActive(false);
+    }
     // "Session close" = leaving a synced conversation that had at least one
     // graded check to start a new one — the same trigger that already
     // decides when a fresh chat opens (see hydrate()'s ChatGPT/Claude-style
@@ -289,6 +293,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   setActiveConversation: (id) => {
+    if (id !== get().activeConversationId && get().voiceSessionActive) {
+      get().interruptGeneration();
+      get().setVoiceSessionActive(false);
+    }
     newChatScreenGeneration++;
     set({ activeConversationId: id });
   },
@@ -349,7 +357,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  loadConversation: async (id) => {
+  loadConversation: async (id, isCurrent) => {
+    if (isCurrent && !isCurrent()) return;
     // Switching conversations — a real navigation away from whatever
     // new-chat screen was previously active. See newChatScreenGeneration.
     // Re-selecting the conversation that's already active (the sidebar
@@ -357,12 +366,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // reloading the same id after a stream error) is not a navigation —
     // bumping here would fail an in-flight fetchSessionSummary for this
     // very screen and the recap would never show.
-    if (get().activeConversationId !== id) newChatScreenGeneration++;
+    if (get().activeConversationId !== id) get().setActiveConversation(id);
+    const screenGeneration = newChatScreenGeneration;
     if (id.startsWith('local-')) {
       set({ activeConversationId: id });
       return;
     }
     const detail = await api.chat.conversation(id);
+    if ((isCurrent && !isCurrent()) || screenGeneration !== newChatScreenGeneration
+      || get().activeConversationId !== id) return;
     const messages: ChatMessage[] = detail.messages.map((message) => {
       const parsed = message.role === 'user'
         ? parseCanonicalChatContent(message.content)
@@ -415,10 +427,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       convoId = get().createConversation();
     }
 
+    // Ownership starts before any asynchronous setup, so Interrupt also cancels
+    // a request waiting for its first remote conversation to be created.
+    const streamToken = ++activeStreamToken;
+    const screenGeneration = newChatScreenGeneration;
+    const isCurrentRequest = () => streamToken === activeStreamToken
+      && screenGeneration === newChatScreenGeneration;
+    activeStreamController?.abort();
+    activeStreamController = null;
+    set({ isGenerating: true });
+
     if (convoId.startsWith('local-')) {
       const localId = convoId;
       try {
         const remote = await api.chat.createConversation(titleSeed.slice(0, 80));
+        if (!isCurrentRequest()) return;
         convoId = remote.id;
         set((current) => ({
           activeConversationId: remote.id,
@@ -435,6 +458,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           ),
         }));
       } catch {
+        if (!isCurrentRequest()) return;
         // Never fail the send silently: keep the device-local thread so the
         // user's message renders, and let the stream (or its error toast)
         // take it from here.
@@ -482,6 +506,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const history = undefined;
 
     const aiMessageId = generateId();
+    if (options.voiceSession && options.voiceTurnId) {
+      publishVoiceStreamEvent({
+        type: 'voice_response_started', turnId: options.voiceTurnId, messageId: aiMessageId,
+      });
+    }
     let accumulated = '';
 
     // True once anything renderable has arrived — prose OR structured blocks.
@@ -749,7 +778,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }));
     };
 
-    const streamToken = ++activeStreamToken;
     const streamStartedAt =
       typeof performance !== 'undefined' ? performance.now() : Date.now();
     let firstVisibleChunkRecorded = false;
@@ -777,6 +805,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             ) {
               publishVoiceStreamEvent({
                 type: 'voice_text_segment',
+                turnId: options.voiceTurnId,
                 text: chunk.text,
                 sequence: chunk.sequence,
                 messageId: aiMessageId,
@@ -786,6 +815,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             if (typeof chunk.text === 'string') {
               publishVoiceStreamEvent({
                 type: 'voice_ready',
+                turnId: options.voiceTurnId,
                 text: chunk.text,
                 messageId: aiMessageId,
                 speak: chunk.speak !== false,
@@ -808,6 +838,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           } else if (chunk.type === 'voice_incomplete') {
             publishVoiceStreamEvent({
               type: 'voice_incomplete',
+              turnId: options.voiceTurnId,
               text: typeof chunk.text === 'string' ? chunk.text : '',
               messageId: aiMessageId,
             });
@@ -1141,19 +1172,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     async function recoverCanonicalConversation(cId: string) {
+      if (!isCurrentRequest()) return;
       activeStreamController = null;
-      set({
-        isGenerating: false,
-        generationProgress: 0,
-        generationActivity: 'thinking',
-        courseGenerationState: null,
-      });
       const recoveryStartedAt = voiceQualityNow();
       try {
         // A broken SSE connection does not imply the server failed. Reload the
         // canonical thread so a completed answer is recovered without creating
         // a second, device-only response.
-        await get().loadConversation(cId);
+        await get().loadConversation(cId, isCurrentRequest);
+        if (!isCurrentRequest()) return;
         if (options.voiceSession || get().voiceSessionActive) {
           reportActiveVoiceQuality('stream_recovered', {
             recovery_ms: Math.max(
@@ -1164,6 +1191,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }, { conversationId: cId });
         }
       } catch {
+        if (!isCurrentRequest()) return;
         if (options.voiceSession || get().voiceSessionActive) {
           reportActiveVoiceQuality('stream_recovery_failed', {
             recovery_ms: Math.max(
@@ -1174,6 +1202,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }
         // Preserve the optimistic user turn until the next successful hydrate.
       }
+      if (!isCurrentRequest()) return;
+      set({
+        isGenerating: false, generationProgress: 0,
+        generationActivity: 'thinking', courseGenerationState: null,
+      });
       toast.error('The response was interrupted. Your conversation is saved—please retry.');
     }
   },

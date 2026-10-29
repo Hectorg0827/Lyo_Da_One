@@ -23,11 +23,15 @@
  * - `pending`: still being granted the microphone. Playback has only just
  *   begun — the moment self-interruption is most likely — so the turn is
  *   held rather than ended on words that cannot yet be corroborated.
- * - `unavailable`: refused or unsupported. Words are the only evidence there
- *   will be, and barge-in has to keep working without it.
+ * - `unavailable`: refused or unsupported. Use the explicit Interrupt control;
+ *   distorted speaker echo cannot safely be distinguished by words alone.
  */
 export function shouldEndTurnOnSpeech({ isEcho, loudEnough, monitorState } = {}) {
   if (isEcho) return false;
-  if (monitorState === 'unavailable') return true;
-  return Boolean(loudEnough);
+  return monitorState === 'ready' && Boolean(loudEnough);
+}
+
+/** Android's platform recognizer competes with getUserMedia for the mic. */
+export function prefersTapInterruption(userAgent = '') {
+  return /Android/i.test(userAgent);
 }

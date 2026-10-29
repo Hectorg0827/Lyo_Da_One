@@ -26,6 +26,13 @@ from one good demo.
 
 ## Eight-scenario live run
 
+Chrome on Android uses **Tap Interrupt** during assistant playback. It releases
+speech recognition while Lyo speaks, avoiding competition between Android's
+platform recognizer and browser microphone capture. Listening resumes after the
+answer, or immediately after tapping Interrupt. On other browsers, spoken
+interruption is offered only after the microphone monitor is running; pending,
+refused, suspended, or failed monitoring uses the same tap control.
+
 Run these in one Live Conversation session on a real device, in this order, so
 the backend VOICE_QUALITY event sequence can be read as one trace.
 
@@ -33,7 +40,8 @@ the backend VOICE_QUALITY event sequence can be read as one trace.
    three times. We care about actual audio playback, not when text first appears.
 2. **Barge-in.** Ask for a longer explanation. Once Lyo has spoken for roughly
    1-2 seconds, interrupt with a clearly different question. Lyo should stop
-   immediately and the new turn should remain on the same Chat thread.
+   immediately and the new turn should remain on the same Chat thread. On Android
+   or whenever the label says "tap Interrupt", tap the button before speaking.
 3. **Rapid exchange.** Do five short turns such as "yes", "why?", "example?",
    "okay", and a short follow-up. There should be no forced pause or lost turn.
 4. **Language switch.** Speak English, then Spanish, then English again. Do not
@@ -44,7 +52,9 @@ the backend VOICE_QUALITY event sequence can be read as one trace.
    whether endpointing cuts off reflective speech.
 6. **Echo/false barge.** Let Lyo speak through the device speaker at normal and
    then fairly loud volume. Stay silent. Lyo must not interrupt itself or create
-   a phantom learner turn.
+   a phantom learner turn. For release acceptance, require **zero** self-cutoffs
+   and phantom turns in a ten-minute Android Chrome run, then repeat a short
+   exchange with headphones.
 7. **Learning-surface handoffs.** In voice, request "Teach this in Classroom",
    then separately "Use this for Test Prep". Voice should remain the same
    canonical learner/session context through the handoff.
@@ -68,6 +78,9 @@ Key events:
 - `false_barge_in`: RMS interrupted playback but no non-echo learner speech
   appeared inside the confirmation window.
 - `echo_rejected`: playback bleed was recognized and suppressed.
+- `interruption_mode`: `tap` or `speech`, reflecting actual microphone readiness.
+- `assistant_turn_interrupted`: includes `cancellation_reason` for explicit taps
+  and confirmed spoken interruptions.
 - `recognizer_restarted`: browser speech recognition recycled itself.
 - `voice_handoff_requested` / `voice_handoff_ready`: canonical Chat selected
   and reached a learning workflow.
@@ -77,3 +90,20 @@ Key events:
 A run is not considered good because every feature emitted an event. It is good
 only when the measured timings and the observed conversational behavior both
 meet the targets above.
+
+## Additional regression checks
+
+- Interrupt while synthesis is loading, then ask a new question. Neither late
+  audio nor late stream events from the old answer may play or close the new turn.
+- End and restart Live Conversation during playback. Check that the old answer
+  stays stopped and only one recognizer owns the microphone.
+- Trigger a TTS failure after a completed segment. Completed segments must not
+  repeat; a failure partway through a segment resumes from estimated playback
+  progress (word timing is not available from this TTS transport).
+- Check brief acknowledgments, casual questions, a request for a detailed
+  explanation, and an interruption that changes topic. Delivery should be warm
+  and naturally expressive, with occasional relevant humor and at most one
+  useful follow-up question, without forced fillers or a question after every turn.
+- Automated tests simulate browser events. Real speaker echo, Bluetooth routing,
+  browser permission behavior, latency and perceived voice quality still require
+  the device run above; do not mark the release gate passed from unit tests alone.
