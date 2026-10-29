@@ -984,6 +984,27 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     const et = (msg.event_type as string) || (msg.type as string) || '';
 
     switch (et) {
+      case 'answer_feedback': {
+        if (msg.session_id !== get().sessionId) break;
+        const data = msg.data as Record<string, unknown> | undefined;
+        const feedback = typeof data?.feedback === 'string' ? data.feedback.trim() : '';
+        const answered = get().board.find((item) => item.kind === 'quiz'
+          && item.quiz.component_id === data?.component_id && item.answered);
+        // Late/replayed results must never colour a different question.
+        if (!feedback || !answered || answered.kind !== 'quiz' || answered.feedback === feedback) break;
+        const wasCorrect = data?.verdict === 'correct' ? true
+          : data?.verdict === 'incorrect' ? false : undefined;
+        set((state) => ({
+          board: state.board.map((item) => item.id === answered.id
+            ? { ...item, feedback, wasCorrect } : item),
+          languageCode: typeof data?.language_code === 'string' ? data.language_code : state.languageCode,
+        }));
+        enqueueTurns([{ type: 'speech', speaker: 'Teacher', text: feedback }]);
+        // The result has arrived, but the next scene is still being prepared.
+        // Keep the wait watchdog alive and never offer a second submission.
+        set({ waitingForScene: true, canContinue: false, lyoState: 'explaining' });
+        break;
+      }
       case 'component_render': {
         const comp = (msg.component ?? (msg.data as Record<string, unknown>)?.component ?? msg.data) as ClassroomComponent | undefined;
         if (comp?.type) handleComponent(comp);
