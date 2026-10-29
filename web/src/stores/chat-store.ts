@@ -252,6 +252,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   createConversation: () => {
     const state = get();
     const previous = state.conversations.find((c) => c.id === state.activeConversationId);
+    if (previous && state.voiceSessionActive) {
+      get().interruptGeneration();
+      get().setVoiceSessionActive(false);
+    }
     // "Session close" = leaving a synced conversation that had at least one
     // graded check to start a new one — the same trigger that already
     // decides when a fresh chat opens (see hydrate()'s ChatGPT/Claude-style
@@ -289,6 +293,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   setActiveConversation: (id) => {
+    if (id !== get().activeConversationId && get().voiceSessionActive) {
+      get().interruptGeneration();
+      get().setVoiceSessionActive(false);
+    }
     newChatScreenGeneration++;
     set({ activeConversationId: id });
   },
@@ -777,6 +785,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             ) {
               publishVoiceStreamEvent({
                 type: 'voice_text_segment',
+                turnId: options.voiceTurnId,
                 text: chunk.text,
                 sequence: chunk.sequence,
                 messageId: aiMessageId,
@@ -786,6 +795,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             if (typeof chunk.text === 'string') {
               publishVoiceStreamEvent({
                 type: 'voice_ready',
+                turnId: options.voiceTurnId,
                 text: chunk.text,
                 messageId: aiMessageId,
                 speak: chunk.speak !== false,
@@ -808,6 +818,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           } else if (chunk.type === 'voice_incomplete') {
             publishVoiceStreamEvent({
               type: 'voice_incomplete',
+              turnId: options.voiceTurnId,
               text: typeof chunk.text === 'string' ? chunk.text : '',
               messageId: aiMessageId,
             });

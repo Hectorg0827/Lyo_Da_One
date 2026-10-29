@@ -75,7 +75,7 @@ export function stripForSpeech(text: string): string {
 }
 
 const SHORT_COMPLETE_UTTERANCE_RE = /^(?:yes|yeah|yep|no|nope|okay|ok|sure|right|thanks|thank you|got it|exactly|correct|sí|si|no|vale|gracias)$/i;
-const INCOMPLETE_ENDING_RE = /(?:[,;:]|\.\.\.)\s*$/;
+const INCOMPLETE_ENDING_RE = /(?:[,;:]|\.\.\.|…)\s*$/;
 const OPEN_ENDED_LAST_WORD_RE = /\b(?:and|but|or|because|so|if|when|while|that|to|with|for|from|about|y|pero|porque|si|cuando|con|para|de)\s*$/i;
 
 /**
@@ -89,10 +89,10 @@ export function voiceEndOfTurnDelayMs(text: string): number {
   const normalized = text.trim();
   if (!normalized) return 900;
   if (SHORT_COMPLETE_UTTERANCE_RE.test(normalized)) return 420;
-  if (/[.!?]\s*$/.test(normalized)) return 430;
   if (INCOMPLETE_ENDING_RE.test(normalized) || OPEN_ENDED_LAST_WORD_RE.test(normalized)) {
-    return 1100;
+    return 2200;
   }
+  if (/[.!?]\s*$/.test(normalized)) return 430;
   const words = normalized.split(/\s+/).filter(Boolean).length;
   if (words <= 2) return 900;
   if (words <= 5) return 700;
@@ -124,7 +124,7 @@ export function splitSpeechChunks(text: string, maxChars = 260): string[] {
 }
 
 
-export type VoiceStreamEvent =
+export type VoiceStreamEvent = { turnId?: string } & (
   | {
       type: 'voice_text_segment';
       text: string;
@@ -141,7 +141,7 @@ export type VoiceStreamEvent =
       type: 'voice_incomplete';
       text: string;
       messageId: string;
-    };
+    });
 
 const voiceStreamTarget =
   typeof EventTarget !== 'undefined' ? new EventTarget() : null;

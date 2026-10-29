@@ -11,7 +11,8 @@ import {
   tidyTranscript,
 } from '@/lib/speech-transcript.mjs';
 import { joinSpoken, spokenPrefix } from '@/lib/voice-reveal.mjs';
-import { shouldEndTurnOnSpeech } from '@/lib/voice-barge-in.mjs';
+import { playVoiceBlob, speakVoiceFallback, unspokenRemainder } from '@/lib/voice-playback.mjs';
+import { prefersTapInterruption, shouldEndTurnOnSpeech } from '@/lib/voice-barge-in.mjs';
 import type { MicMonitorState } from '@/lib/voice-barge-in.mjs';
 import {
   createVoiceQualitySessionId,
@@ -81,6 +82,14 @@ export default function ConversationalVoiceLayer() {
   const interruptGeneration = useChatStore((state) => state.interruptGeneration);
   const activeConversationId = useChatStore((state) => state.activeConversationId);
 
+  const [interruptionMode, setInterruptionMode] = useState<'tap' | 'speech'>('tap');
+  const tapOnlyRef = useRef(typeof navigator !== 'undefined' && prefersTapInterruption(navigator.userAgent));
+  const responseAbortRef = useRef(new AbortController());
+  const acceptedTurnIdRef = useRef<string | null>(null);
+  const responseMessageIdRef = useRef<string | null>(null);
+  const monitorGenerationRef = useRef(0);
+  const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recognitionRestartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [errorDetail, setErrorDetail] = useState('');
@@ -106,7 +115,6 @@ export default function ConversationalVoiceLayer() {
   const lastSpokenMessageIdRef = useRef<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ttsAbortRef = useRef<AbortController | null>(null);
-  const ttsPrefetchAbortRef = useRef<AbortController | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -145,7 +153,11 @@ export default function ConversationalVoiceLayer() {
    * held only while Lyo is speaking, and handed straight back afterwards.
    */
   const releaseMicMonitor = useCallback(() => {
+    monitorGenerationRef.current += 1;
+    if (monitorTimeoutRef.current) clearTimeout(monitorTimeoutRef.current);
+    monitorTimeoutRef.current = null;
     micMonitorStateRef.current = 'pending';
+    setInterruptionMode('tap');
     loudFramesRef.current = 0;
     analyserRef.current = null;
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -155,69 +167,69 @@ export default function ConversationalVoiceLayer() {
     void context?.close().catch(() => undefined);
   }, []);
 
-  /**
-   * Listen to the microphone's volume for the duration of playback, so a
-   * learner talking over Lyo is noticed even before their words resolve.
-   *
-   * Entirely optional: when the capture is refused, barge-in still happens on
-   * the words the recognizer returns.
-   */
+  // Android uses one microphone owner at a time. Other browsers may use
+  // monitored spoken interruption, but pending/failed capture is always tap-only.
   const acquireMicMonitor = useCallback(async () => {
-    if (mediaStreamRef.current) return;
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-      micMonitorStateRef.current = 'unavailable';
-      return;
-    }
+    if (tapOnlyRef.current || mediaStreamRef.current) return;
+    const generation = ++monitorGenerationRef.current;
+    const current = () => generation === monitorGenerationRef.current
+      && activeRef.current && phaseRef.current === 'speaking';
     micMonitorStateRef.current = 'pending';
-    let stream: MediaStream;
+    setInterruptionMode('tap');
+    let stream: MediaStream | null = null;
+    let context: AudioContext | null = null;
+    // A permission prompt or suspended context must not hold the mic forever.
+    const timeout = setTimeout(() => {
+      if (!current()) return;
+      releaseMicMonitor();
+      micMonitorStateRef.current = 'unavailable';
+      stream?.getTracks().forEach((track) => track.stop());
+      void context?.close().catch(() => undefined);
+    }, 2500);
+    monitorTimeoutRef.current = timeout;
     try {
+      if (!navigator.mediaDevices?.getUserMedia) throw new Error('No capture');
       stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
-    } catch {
-      micMonitorStateRef.current = 'unavailable';
-      return;
-    }
-    // Playback may have finished while permission was being granted.
-    if (!activeRef.current || phaseRef.current !== 'speaking') {
-      stream.getTracks().forEach((track) => track.stop());
-      return;
-    }
-    mediaStreamRef.current = stream;
-    const Context = window.AudioContext
-      || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Context) {
-      micMonitorStateRef.current = 'unavailable';
-      return;
-    }
-    try {
-      const context = new Context();
-      // Mobile browsers hand back a suspended context outside a tap, and this
-      // runs when playback starts rather than when one happened. Waiting for
-      // the resume matters: a suspended context still yields an analyser, but
-      // it reads silence forever — and silence is indistinguishable from a
-      // learner who never spoke, so every interruption would be held.
-      if (context.state === 'suspended') {
-        try { await context.resume(); } catch { /* settled by the check below */ }
-      }
-      if (context.state !== 'running') {
-        micMonitorStateRef.current = 'unavailable';
-        void context.close().catch(() => undefined);
-        return;
-      }
+      if (!current()) return;
+      mediaStreamRef.current = stream;
+      const Context = window.AudioContext
+        || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Context) throw new Error('No audio context');
+      context = new Context();
+      audioContextRef.current = context;
+      if (context.state === 'suspended') await context.resume();
+      if (!current()) return;
+      if (context.state !== 'running') throw new Error('Suspended audio context');
       const source = context.createMediaStreamSource(stream);
       const analyser = context.createAnalyser();
       analyser.fftSize = 512;
       analyser.smoothingTimeConstant = 0.2;
       source.connect(analyser);
+      mediaStreamRef.current = stream;
       audioContextRef.current = context;
       analyserRef.current = analyser;
       micMonitorStateRef.current = 'ready';
+      setInterruptionMode('speech');
+      context.onstatechange = () => {
+        if (current() && context?.state !== 'running') {
+          releaseMicMonitor();
+          micMonitorStateRef.current = 'unavailable';
+        }
+      };
     } catch {
-      // Without a level to compare against, words are the only evidence left.
-      micMonitorStateRef.current = 'unavailable';
+      if (current()) {
+        releaseMicMonitor();
+        micMonitorStateRef.current = 'unavailable';
+      }
+    } finally {
+      clearTimeout(timeout);
+      if (monitorTimeoutRef.current === timeout) monitorTimeoutRef.current = null;
+      if (mediaStreamRef.current !== stream) stream?.getTracks().forEach((track) => track.stop());
+      if (audioContextRef.current !== context) void context?.close().catch(() => undefined);
     }
-  }, []);
+  }, [releaseMicMonitor]);
 
   // Live quality instrumentation. These refs never hold transcript/audio in
   // telemetry; only local timestamps and coarse labels leave the device.
@@ -278,8 +290,11 @@ export default function ConversationalVoiceLayer() {
   }, []);
 
   const stopRecognition = useCallback(() => {
-    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
+    if (recognitionRestartRef.current) clearTimeout(recognitionRestartRef.current);
+    recognitionRestartRef.current = null;
+    const recognition = recognitionRef.current;
     recognitionRef.current = null;
+    try { (recognition?.abort ?? recognition?.stop)?.call(recognition); } catch { /* already stopped */ }
   }, []);
 
   /**
@@ -298,10 +313,15 @@ export default function ConversationalVoiceLayer() {
   }, []);
 
   const stopSpeech = useCallback(() => {
+    responseAbortRef.current.abort();
+    acceptedTurnIdRef.current = null;
+    responseMessageIdRef.current = null;
+    awaitingAssistantRef.current = false;
+    if (pendingRmsBargeTimerRef.current) clearTimeout(pendingRmsBargeTimerRef.current);
+    pendingRmsBargeTimerRef.current = null;
+    pendingRmsBargeAtRef.current = 0;
     ttsAbortRef.current?.abort();
-    ttsPrefetchAbortRef.current?.abort();
     ttsAbortRef.current = null;
-    ttsPrefetchAbortRef.current = null;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.src = '';
@@ -318,43 +338,17 @@ export default function ConversationalVoiceLayer() {
     const transcript = raw.trim();
     transcriptRef.current.reset();
     setLiveTranscript('');
-    if (!transcript || !activeRef.current) return;
+    if (!transcript || !activeRef.current || phaseRef.current !== 'listening') return;
 
     const now = voiceQualityNow();
     const turnId = currentTurnIdRef.current || crypto.randomUUID();
     currentTurnIdRef.current = turnId;
     setActiveVoiceQualityContext(qualityContext(turnId));
 
-    if (isLikelyPlaybackEcho(transcript, lastSpokenTextRef.current)) {
-      if (!echoReportedForPlaybackRef.current) {
-        echoReportedForPlaybackRef.current = true;
-        reportVoiceQuality(qualityContext(turnId), 'echo_rejected', {
-          phase: phaseRef.current,
-          heard_chars: Math.min(500, transcript.length),
-          method: 'semantic_final',
-        });
-      }
-      changePhase('listening');
-      return;
-    }
-
-    if (pendingRmsBargeTimerRef.current) {
-      clearTimeout(pendingRmsBargeTimerRef.current);
-      pendingRmsBargeTimerRef.current = null;
-    }
-    if (pendingRmsBargeAtRef.current > 0) {
-      reportVoiceQuality(qualityContext(turnId), 'barge_in_confirmed', {
-        confirm_ms: Math.max(0, Math.round(now - pendingRmsBargeAtRef.current)),
-        method: 'rms_then_speech',
-      });
-      pendingRmsBargeAtRef.current = 0;
-    }
-
     stopSpeech();
     cancelPendingTurn();
     stopRecognition();
     const interruptedPreviousTurn = interruptedPreviousTurnRef.current
-      || phaseRef.current === 'speaking'
       || useChatStore.getState().isGenerating;
     if (useChatStore.getState().isGenerating) interruptGeneration();
 
@@ -392,6 +386,9 @@ export default function ConversationalVoiceLayer() {
     // accepted, forget prior assistant speech before collecting the next reply.
     lastSpokenTextRef.current = '';
     lastSpokenMessageIdRef.current = null;
+    responseAbortRef.current = new AbortController();
+    acceptedTurnIdRef.current = turnId;
+    responseMessageIdRef.current = null;
     awaitingAssistantRef.current = true;
     voiceSegmentQueueRef.current = [];
     voiceSegmentDrainActiveRef.current = false;
@@ -434,7 +431,9 @@ export default function ConversationalVoiceLayer() {
   }, [sendVoiceTurn]);
 
   const startRecognition = useCallback((allowWhileSpeaking = false) => {
-    if (!activeRef.current || (phaseRef.current === 'speaking' && !allowWhileSpeaking)) return;
+    if (!activeRef.current) return;
+    if (phaseRef.current === 'speaking' && (!allowWhileSpeaking || tapOnlyRef.current
+      || micMonitorStateRef.current !== 'ready')) return;
     stopRecognition();
     const recognition = createSpeechRecognition();
     if (!recognition) {
@@ -496,7 +495,7 @@ export default function ConversationalVoiceLayer() {
       // A stopped recognizer may still dispatch queued callbacks after a new
       // shadow recognizer has already taken ownership. Ignore those stale
       // callbacks so two recognition sessions can never contribute to one turn.
-      if (recognitionRef.current !== recognition) return;
+      if (recognitionRef.current !== recognition || !activeRef.current) return;
       const state = transcriptRef.current.push(event);
       const combined = tidyTranscript(state.combined);
       note(`result n=${event.results?.length ?? 0} "${combined.slice(0, 40)}"`);
@@ -506,42 +505,7 @@ export default function ConversationalVoiceLayer() {
       lastRecognitionActivityAtRef.current = voiceQualityNow();
       if (!currentTurnIdRef.current) currentTurnIdRef.current = crypto.randomUUID();
 
-      // Read whether the microphone had risen above Lyo before anything below
-      // can clear it. The confirmation block immediately following consumes
-      // that flag, so reading it at the decision point instead would find it
-      // already spent by the very speech that confirmed it — and the turn
-      // would be held exactly when the learner did interrupt.
       const roseAboveLyo = pendingRmsBargeAtRef.current > 0;
-
-      // An RMS-triggered interruption is only considered real once speech
-      // recognition produces a non-echo utterance. This separates genuine
-      // barge-in from speaker bleed/noise in live-device telemetry.
-      if (
-        pendingRmsBargeAtRef.current > 0
-        && !isLikelyPlaybackEcho(combined, lastSpokenTextRef.current)
-      ) {
-        if (pendingRmsBargeTimerRef.current) {
-          clearTimeout(pendingRmsBargeTimerRef.current);
-          pendingRmsBargeTimerRef.current = null;
-        }
-        restorePlayback();
-        reportVoiceQuality(qualityContext(), 'barge_in_confirmed', {
-          confirm_ms: Math.max(
-            0,
-            Math.round(voiceQualityNow() - pendingRmsBargeAtRef.current),
-          ),
-          method: 'rms_then_recognition',
-        });
-        pendingRmsBargeAtRef.current = 0;
-
-        // RMS interruption was attributed to the assistant turn. Now that
-        // non-echo speech is confirmed, start a fresh canonical learner turn.
-        currentTurnIdRef.current = crypto.randomUUID();
-        turnSubmittedAtRef.current = 0;
-        firstVoiceSegmentAtRef.current = 0;
-        firstAudioReportedRef.current = false;
-        setActiveVoiceQualityContext(qualityContext());
-      }
 
       // During playback, keep a shadow recognizer armed. Acoustic echo
       // cancellation handles most speaker bleed; semantic echo rejection is
@@ -570,7 +534,7 @@ export default function ConversationalVoiceLayer() {
         // part of the answer. Ending the turn on those is Lyo interrupting
         // itself. A real interruption is also louder than Lyo currently is,
         // which is what the volume monitor arms — so both are required,
-        // unless there is no monitor to ask.
+        // with a ready monitor corroborating the speech.
         if (!shouldEndTurnOnSpeech({
           isEcho: false,
           loudEnough: roseAboveLyo,
@@ -582,6 +546,10 @@ export default function ConversationalVoiceLayer() {
         }
 
         const detectedAt = voiceQualityNow();
+        reportVoiceQuality(qualityContext(), 'barge_in_confirmed', {
+          method: 'rms_then_recognition',
+          confirm_ms: Math.round(detectedAt - pendingRmsBargeAtRef.current),
+        });
         if (pendingRmsBargeTimerRef.current) {
           clearTimeout(pendingRmsBargeTimerRef.current);
           pendingRmsBargeTimerRef.current = null;
@@ -596,6 +564,7 @@ export default function ConversationalVoiceLayer() {
         });
         reportVoiceQuality(qualityContext(), 'assistant_turn_interrupted', {
           method: 'semantic',
+          cancellation_reason: 'spoken_interruption',
         });
         lastAssistantAudioEndedAtRef.current = detectedAt;
 
@@ -608,6 +577,7 @@ export default function ConversationalVoiceLayer() {
         setActiveVoiceQualityContext(qualityContext());
         interruptedPreviousTurnRef.current = true;
         stopSpeech();
+        useChatStore.getState().setVoiceSpokenText(null);
         if (useChatStore.getState().isGenerating) interruptGeneration();
         changePhase('listening');
       }
@@ -622,6 +592,12 @@ export default function ConversationalVoiceLayer() {
       note(`error ${event?.error ?? 'unknown'}`);
       // A pause with no words in it is not a failure; onend starts us again.
       if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      if (phaseRef.current === 'speaking') {
+        stopRecognition();
+        releaseMicMonitor();
+        micMonitorStateRef.current = 'unavailable';
+        return;
+      }
       setErrorDetail(
         event?.error === 'not-allowed' || event?.error === 'service-not-allowed'
           ? 'Microphone access is blocked for this site. Allow it in your browser settings.'
@@ -650,30 +626,48 @@ export default function ConversationalVoiceLayer() {
         phase: phaseRef.current,
       });
       if (phaseRef.current === 'speaking') {
-        window.setTimeout(() => startRecognition(true), 80);
+        recognitionRestartRef.current = setTimeout(() => {
+          recognitionRestartRef.current = null;
+          if (phaseRef.current === 'speaking') startRecognition(true);
+        }, 80);
       } else if (phaseRef.current === 'listening') {
-        window.setTimeout(() => startRecognition(false), 120);
+        recognitionRestartRef.current = setTimeout(() => {
+          recognitionRestartRef.current = null;
+          if (phaseRef.current === 'listening') startRecognition(false);
+        }, 120);
       }
     };
     try {
       recognition.start();
       if (!allowWhileSpeaking) changePhase('listening');
     } catch {
-      changePhase('error');
+      if (allowWhileSpeaking) {
+        stopRecognition();
+        releaseMicMonitor();
+        micMonitorStateRef.current = 'unavailable';
+      } else changePhase('error');
     }
   }, [
     armTurnTimer,
+    releaseMicMonitor,
     changePhase,
     interruptGeneration,
     note,
     qualityContext,
-    restorePlayback,
     sendVoiceTurn,
     stopRecognition,
     stopSpeech,
   ]);
 
+  useEffect(() => {
+    if (!active || phase !== 'speaking') return;
+    if (interruptionMode === 'speech') startRecognition(true);
+    else stopRecognition();
+    reportVoiceQuality(qualityContext(), 'interruption_mode', { mode: interruptionMode });
+  }, [active, phase, interruptionMode, startRecognition, stopRecognition, qualityContext]);
+
   const markFirstAudio = useCallback((transport: 'server_tts' | 'device_tts') => {
+    if (!speakingStartedAtRef.current) speakingStartedAtRef.current = performance.now();
     if (firstAudioReportedRef.current || !currentTurnIdRef.current) return;
     firstAudioReportedRef.current = true;
     const now = voiceQualityNow();
@@ -691,61 +685,23 @@ export default function ConversationalVoiceLayer() {
     });
   }, [qualityContext]);
 
-  const playBlob = useCallback((
-    blob: Blob,
-    onProgress?: (fraction: number) => void,
-  ) => new Promise<void>((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    let settled = false;
-    const cleanup = () => {
-      URL.revokeObjectURL(url);
-      if (audioRef.current === audio) audioRef.current = null;
-    };
-    audioRef.current = audio;
-    // A segment carries on at whatever volume the previous one was ducked to,
-    // so an unconfirmed interruption is not undone by the next segment.
-    audio.volume = duckedRef.current ? DUCKED_VOLUME : 1;
-    audio.onplaying = () => markFirstAudio('server_tts');
-    if (onProgress) {
-      audio.ontimeupdate = () => {
-        const total = audio.duration;
-        if (!Number.isFinite(total) || total <= 0) return;
-        onProgress(Math.min(1, Math.max(0, audio.currentTime / total)));
-      };
-    }
-    audio.onended = () => {
-      if (settled) return;
-      settled = true;
-      onProgress?.(1);
-      cleanup();
-      resolve();
-    };
-    audio.onerror = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(new Error('Audio playback failed'));
-    };
-    void audio.play().catch((error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(error);
-    });
-  }), [markFirstAudio]);
+  const playBlob = useCallback((blob: Blob, signal: AbortSignal, onProgress?: (fraction: number) => void) =>
+    playVoiceBlob(blob, {
+      signal,
+      volume: duckedRef.current ? DUCKED_VOLUME : 1,
+      onAudio: (audio, owner) => {
+        if (audio || audioRef.current === owner) audioRef.current = audio;
+      },
+      onStart: () => markFirstAudio('server_tts'),
+      onProgress,
+    }), [markFirstAudio]);
 
-  const browserSpeechFallback = useCallback((text: string) => new Promise<void>((resolve) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) { resolve(); return; }
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = navigator.language || 'en-US';
-    utterance.rate = 1.02;
-    utterance.onstart = () => markFirstAudio('device_tts');
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-  }), [markFirstAudio]);
+  const browserSpeechFallback = useCallback((text: string, signal: AbortSignal) =>
+    speakVoiceFallback(text, {
+      signal,
+      language: navigator.language || 'en-US',
+      onStart: () => markFirstAudio('device_tts'),
+    }), [markFirstAudio]);
 
   /**
    * Show an answer only as far as Lyo has read it.
@@ -801,70 +757,88 @@ export default function ConversationalVoiceLayer() {
   const finishSegmentTurnIfReady = useCallback(() => {
     if (
       !activeRef.current
+      || !awaitingAssistantRef.current
+      || responseAbortRef.current.signal.aborted
       || !voiceTurnClosedRef.current
       || voiceSegmentDrainActiveRef.current
       || voiceSegmentQueueRef.current.length > 0
     ) return;
     awaitingAssistantRef.current = false;
+    acceptedTurnIdRef.current = null;
+    lastSpokenTextRef.current = '';
+    transcriptRef.current.reset();
+    if (pendingRmsBargeTimerRef.current) clearTimeout(pendingRmsBargeTimerRef.current);
+    pendingRmsBargeTimerRef.current = null;
+    pendingRmsBargeAtRef.current = 0;
+    restorePlayback();
     closeVoiceTurn(voiceSegmentsReceivedRef.current ? 'completed' : 'incomplete');
     releaseSpoken();
     changePhase('listening');
     startRecognition();
-  }, [changePhase, closeVoiceTurn, releaseSpoken, startRecognition]);
+  }, [changePhase, closeVoiceTurn, releaseSpoken, restorePlayback, startRecognition]);
 
   const drainVoiceSegments = useCallback(async () => {
-    if (voiceSegmentDrainActiveRef.current || !activeRef.current) return;
+    if (voiceSegmentDrainActiveRef.current || !activeRef.current || responseAbortRef.current.signal.aborted) return;
+    const owner = responseAbortRef.current;
+    const current = () => activeRef.current && !owner.signal.aborted && responseAbortRef.current === owner;
     voiceSegmentDrainActiveRef.current = true;
-    echoReportedForPlaybackRef.current = false;
-    echoReportedForPlaybackRef.current = false;
-    cancelPendingTurn();
-    stopRecognition();
-    changePhase('speaking');
-    speakingStartedAtRef.current = performance.now();
-    startRecognition(true);
-
+    if (phaseRef.current !== 'speaking') {
+      echoReportedForPlaybackRef.current = false;
+      cancelPendingTurn();
+      stopRecognition();
+      transcriptRef.current.reset();
+      speakingStartedAtRef.current = 0;
+      changePhase('speaking');
+    }
     try {
-      while (activeRef.current && voiceSegmentQueueRef.current.length > 0) {
-        const segment = voiceSegmentQueueRef.current.shift();
-        if (!segment) break;
+      while (current() && voiceSegmentQueueRef.current.length > 0) {
+        const segment = voiceSegmentQueueRef.current.shift()!;
         const spoken = segment.text.trim();
         if (!spoken) continue;
-
         lastSpokenTextRef.current = (lastSpokenTextRef.current + ' ' + spoken).trim();
         lastSpokenMessageIdRef.current = segment.messageId;
-
+        let progress = 0;
         try {
           ttsAbortRef.current = segment.controller;
           const blob = await segment.audio;
+          if (!current()) return;
           if (!blob) throw new Error('Segment synthesis failed');
-          await playBlob(blob, (fraction) => revealSpoken(segment.messageId, spoken, fraction));
+          await playBlob(blob, owner.signal, (fraction) => {
+            progress = fraction;
+            revealSpoken(segment.messageId, spoken, fraction);
+          });
         } catch {
-          if (!activeRef.current || phaseRef.current !== 'speaking') break;
-          // The device voice reports no progress, so the segment appears whole.
-          revealSpoken(segment.messageId, spoken, 1);
-          await browserSpeechFallback(spoken);
-        } finally {
-          commitSpoken(segment.messageId, spoken);
-          ttsAbortRef.current = null;
+          if (!current()) return;
+          const remainder = unspokenRemainder(spoken, progress);
+          if (remainder) await browserSpeechFallback(remainder, owner.signal);
         }
+        if (!current()) return;
+        commitSpoken(segment.messageId, spoken);
+        ttsAbortRef.current = null;
+      }
+    } catch {
+      if (current()) {
+        stopSpeech();
+        interruptGeneration();
+        releaseSpoken();
+        changePhase('error');
+        setErrorDetail('Audio playback failed. End and restart live conversation to try again.');
       }
     } finally {
-      voiceSegmentDrainActiveRef.current = false;
-      finishSegmentTurnIfReady();
+      if (current()) {
+        voiceSegmentDrainActiveRef.current = false;
+        finishSegmentTurnIfReady();
+      }
     }
-  }, [
-    browserSpeechFallback,
-    cancelPendingTurn,
-    changePhase,
-    commitSpoken,
-    finishSegmentTurnIfReady,
-    playBlob,
-    revealSpoken,
-    stopRecognition,
-  ]);
+  }, [browserSpeechFallback, cancelPendingTurn, changePhase, commitSpoken,
+    finishSegmentTurnIfReady, interruptGeneration, playBlob, releaseSpoken, revealSpoken,
+    stopRecognition, stopSpeech]);
 
   const handleVoiceStreamEvent = useCallback((event: VoiceStreamEvent) => {
-    if (!activeRef.current) return;
+    if (!activeRef.current || !awaitingAssistantRef.current || responseAbortRef.current.signal.aborted
+      || !acceptedTurnIdRef.current || event.turnId !== acceptedTurnIdRef.current) return;
+    if (responseMessageIdRef.current && responseMessageIdRef.current !== event.messageId) return;
+    responseMessageIdRef.current = event.messageId;
 
     if (event.type === 'voice_text_segment') {
       voiceSegmentsReceivedRef.current = true;
@@ -947,81 +921,41 @@ export default function ConversationalVoiceLayer() {
   }, [drainVoiceSegments, finishSegmentTurnIfReady, qualityContext]);
 
   useEffect(() => subscribeVoiceStreamEvents(handleVoiceStreamEvent), [handleVoiceStreamEvent]);
-  const speakAssistant = useCallback(async (messageId: string, text: string) => {
-    const chunks = splitSpeechChunks(text);
-    if (!chunks.length || !activeRef.current) return;
+  const speakAssistant = useCallback((messageId: string, text: string) => {
+    if (!activeRef.current || responseAbortRef.current.signal.aborted) return;
+    voiceTurnClosedRef.current = true;
+    responseMessageIdRef.current = messageId;
+    splitSpeechChunks(text).forEach((spoken, sequence) => {
+      const controller = new AbortController();
+      voiceSegmentQueueRef.current.push({
+        text: spoken, sequence, messageId, controller,
+        audio: api.tts.synthesizeStream(spoken, {
+          language: navigator.language || 'auto', speed: 1.02, signal: controller.signal,
+        }).catch(() => null),
+      });
+    });
+    void drainVoiceSegments();
+  }, [drainVoiceSegments]);
+
+  const interruptPlayback = useCallback(() => {
+    if (!activeRef.current || (phaseRef.current !== 'speaking' && phaseRef.current !== 'thinking')) return;
+    reportVoiceQuality(qualityContext(), 'assistant_turn_interrupted', {
+      method: 'tap', cancellation_reason: 'user_interrupt',
+    });
+    stopSpeech();
     cancelPendingTurn();
     stopRecognition();
-    changePhase('speaking');
-    speakingStartedAtRef.current = performance.now();
-    startRecognition(true);
-    lastSpokenTextRef.current = text;
-    lastSpokenMessageIdRef.current = messageId;
-
-    try {
-      let next: { promise: Promise<Blob>; controller: AbortController } | null = null;
-      for (let index = 0; index < chunks.length && activeRef.current; index++) {
-        const current = next ?? (() => {
-          const controller = new AbortController();
-          return {
-            controller,
-            promise: api.tts.synthesizeStream(chunks[index], {
-              language: navigator.language || 'auto',
-              speed: 1.02,
-              signal: controller.signal,
-            }),
-          };
-        })();
-        ttsAbortRef.current = current.controller;
-        ttsPrefetchAbortRef.current = null;
-
-        if (index + 1 < chunks.length) {
-          const controller = new AbortController();
-          next = {
-            controller,
-            promise: api.tts.synthesizeStream(chunks[index + 1], {
-              language: navigator.language || 'auto',
-              speed: 1.02,
-              signal: controller.signal,
-            }),
-          };
-          ttsPrefetchAbortRef.current = controller;
-        } else {
-          next = null;
-        }
-
-        await playBlob(
-          await current.promise,
-          (fraction) => revealSpoken(messageId, chunks[index], fraction),
-        );
-        commitSpoken(messageId, chunks[index]);
-      }
-    } catch {
-      if (activeRef.current && phaseRef.current === 'speaking') {
-        await browserSpeechFallback(splitSpeechChunks(text, 800).join(' '));
-      }
-    } finally {
-      ttsAbortRef.current = null;
-      ttsPrefetchAbortRef.current = null;
-      releaseSpoken();
-      if (activeRef.current && phaseRef.current === 'speaking') {
-        closeVoiceTurn('fallback');
-        changePhase('listening');
-        startRecognition();
-      }
-    }
-  }, [
-    browserSpeechFallback,
-    cancelPendingTurn,
-    changePhase,
-    closeVoiceTurn,
-    commitSpoken,
-    playBlob,
-    releaseSpoken,
-    revealSpoken,
-    startRecognition,
-    stopRecognition,
-  ]);
+    interruptGeneration();
+    releaseSpoken();
+    transcriptRef.current.reset();
+    lastSpokenTextRef.current = '';
+    currentTurnIdRef.current = null;
+    interruptedPreviousTurnRef.current = true;
+    setLiveTranscript('');
+    changePhase('listening');
+    startRecognition();
+  }, [cancelPendingTurn, changePhase, interruptGeneration, qualityContext,
+    releaseSpoken, startRecognition, stopRecognition, stopSpeech]);
 
   /**
    * The microphone is louder than Lyo currently is, so someone may be talking
@@ -1102,6 +1036,10 @@ export default function ConversationalVoiceLayer() {
     heardAnythingRef.current = false;
     setMicSilent(false);
     setErrorDetail('');
+    currentTurnIdRef.current = null;
+    interruptedPreviousTurnRef.current = false;
+    lastSpokenTextRef.current = '';
+    transcriptRef.current.reset();
     if (!createSpeechRecognition()) {
       setErrorDetail('This browser cannot listen. Try Chrome, Edge or Safari.');
       changePhase('error');
@@ -1110,7 +1048,17 @@ export default function ConversationalVoiceLayer() {
     // Start listening straight away. The recognizer asks for the microphone
     // itself, so nothing else may hold it open first.
     startRecognition();
-  }, [active, changePhase, startRecognition]);
+    return () => {
+      activeRef.current = false;
+      cancelPendingTurn();
+      stopRecognition();
+      stopSpeech();
+      releaseMicMonitor();
+      releaseSpoken();
+      transcriptRef.current.reset();
+      currentTurnIdRef.current = null;
+    };
+  }, [active, cancelPendingTurn, changePhase, releaseMicMonitor, releaseSpoken, startRecognition, stopRecognition, stopSpeech]);
 
   useEffect(() => {
     activeRef.current = active;
@@ -1146,7 +1094,7 @@ export default function ConversationalVoiceLayer() {
     if (!active) return;
     const tick = () => {
       const analyser = analyserRef.current;
-      if (analyser && phaseRef.current === 'speaking' && performance.now() - speakingStartedAtRef.current > BARGE_IN_GRACE_MS) {
+      if (analyser && speakingStartedAtRef.current > 0 && phaseRef.current === 'speaking' && performance.now() - speakingStartedAtRef.current > BARGE_IN_GRACE_MS) {
         const samples = new Uint8Array(analyser.fftSize);
         analyser.getByteTimeDomainData(samples);
         let sum = 0;
@@ -1218,7 +1166,9 @@ export default function ConversationalVoiceLayer() {
     : phase === 'thinking'
       ? 'Lyo is thinking…'
       : phase === 'speaking'
-        ? 'Lyo is speaking — start talking to interrupt'
+        ? (interruptionMode === 'speech'
+          ? 'Lyo is speaking — start talking to interrupt'
+          : 'Lyo is speaking — tap Interrupt to speak')
         : phase === 'error'
           ? (errorDetail || 'Voice unavailable')
           : 'Voice ready';
@@ -1236,6 +1186,16 @@ export default function ConversationalVoiceLayer() {
           <div className="text-xs font-semibold text-white/85">Live conversation</div>
           <div className={cn('text-xs text-white/55', !debugEnabled && 'truncate')}>{label}</div>
         </div>
+        {(phase === 'speaking' || phase === 'thinking') && (
+          <button
+            type="button"
+            onClick={interruptPlayback}
+            aria-label="Interrupt Lyo and start speaking"
+            className="px-3 py-2 rounded-full bg-lyo-500/25 hover:bg-lyo-500/40 text-xs text-white shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+          >
+            Interrupt
+          </button>
+        )}
         <button
           type="button"
           onClick={endSession}

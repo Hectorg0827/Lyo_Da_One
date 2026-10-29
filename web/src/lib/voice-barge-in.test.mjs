@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { shouldEndTurnOnSpeech } from './voice-barge-in.mjs';
+import { prefersTapInterruption, shouldEndTurnOnSpeech } from './voice-barge-in.mjs';
 
 test('an echo of Lyo never ends its turn', () => {
   for (const monitorState of ['ready', 'pending', 'unavailable']) {
@@ -35,19 +35,24 @@ test('the turn is held while the monitor is still being granted the mic', () => 
   );
   assert.equal(
     shouldEndTurnOnSpeech({ isEcho: false, loudEnough: true, monitorState: 'pending' }),
-    true,
+    false,
   );
 });
 
-test('without a monitor at all, words are enough', () => {
-  // Refused or unsupported: barge-in must keep working on what is left.
+test('without a monitor, distorted speaker words never interrupt', () => {
+  // Refused or unsupported: the explicit Interrupt button takes the floor.
   assert.equal(
     shouldEndTurnOnSpeech({ isEcho: false, loudEnough: false, monitorState: 'unavailable' }),
-    true,
+    false,
   );
 });
 
 test('a missing decision is not an interruption', () => {
   assert.equal(shouldEndTurnOnSpeech(), false);
   assert.equal(shouldEndTurnOnSpeech({}), false);
+});
+
+ test('Android avoids concurrent microphone captures', () => {
+  assert.equal(prefersTapInterruption('Mozilla/5.0 (Linux; Android 15) Chrome/140 Mobile'), true);
+  assert.equal(prefersTapInterruption('Mozilla/5.0 (Macintosh) Chrome/140'), false);
 });
