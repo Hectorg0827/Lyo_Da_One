@@ -91,6 +91,14 @@ fun SettingsScreen(nav: NavHostController) {
             if (failure == null) {
                 showDeleteConfirmation = false
                 nav.navigate(Routes.LOGIN) { popUpTo(0) }
+            } else if (!Session.isAuthenticated) {
+                // The login is no longer usable; login shows the message
+                // (Session.takeLoginMessage), whether or not the nav graph
+                // already switched to it.
+                showDeleteConfirmation = false
+                if (nav.currentDestination?.route != Routes.LOGIN) {
+                    nav.navigate(Routes.LOGIN) { popUpTo(0) }
+                }
             } else {
                 showDeleteConfirmation = false
                 deleteError = failure

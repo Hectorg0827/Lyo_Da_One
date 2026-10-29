@@ -145,7 +145,8 @@ class AuthService: NSObject, ObservableObject {
         KeychainHelper.shared.delete(forKey: tokenKey)
         
         Task {
-            await NetworkCache.shared.clearAll()
+            // Sign-out and state first, with no suspension in between, so a
+            // sign-in that completes meanwhile is never undone; then the cache.
             await MainActor.run {
                 Self.signOutOfIdentityProviders()
                 self.currentUserName = ""
@@ -154,6 +155,7 @@ class AuthService: NSObject, ObservableObject {
                 self.isDemoMode = false
                 self.isAuthenticated = false
             }
+            await NetworkCache.shared.clearAll()
         }
     }
     

@@ -173,7 +173,9 @@ object Session {
     /**
      * Permanently deletes the account (DELETE /auth/me). Local data is cleared
      * only after the server confirms with 200 or 204. Returns null on success,
-     * or the message to show; on failure the learner stays signed in.
+     * or the message to show. On failure the learner stays signed in, unless
+     * the server no longer accepts their login (see deletionFailed): then the
+     * session ends here and the login screen shows the message.
      */
     suspend fun deleteAccount(context: Context): String? {
         val code = try {
@@ -183,7 +185,7 @@ object Session {
         } catch (error: Exception) {
             return deletionFailed(accountDeletionFailureMessage(error))
         }
-        if (!accountDeletionSucceeded(code)) return deletionFailed(accountDeletionFailureMessage(code))
+        if (!accountDeletionSucceeded(code)) return deletionFailed(accountDeletionFailureMessage(code), code == 401)
 
         RecentCourseStore.clear(context)
         com.lyo.app.data.classroom.ClassroomSessionStore.clearAll()
@@ -192,14 +194,15 @@ object Session {
     }
 
     /**
-     * The account was not deleted. If renewing an expired login failed along
-     * the way, ApiClient's authenticator has already cleared the saved tokens;
-     * the learner then has no session left, so the app shows login, carrying
-     * the message (account not deleted, log in again) instead of a signed-in
-     * screen that can no longer reach the server.
+     * The account was not deleted. A 401 here means the login could not be
+     * renewed (no refresh token, a refused refresh, or a refused retry), and
+     * when a renewal failed ApiClient's authenticator has already cleared the
+     * saved tokens. Either way the learner has no usable session left, so it
+     * ends here and the app shows login, carrying the message (log in again)
+     * instead of a signed-in screen that can no longer reach the server.
      */
-    private fun deletionFailed(message: String): String {
-        if (TokenManager.accessToken == null) {
+    private fun deletionFailed(message: String, unauthorized: Boolean = false): String {
+        if (unauthorized || TokenManager.accessToken == null) {
             pendingLoginMessage = message
             clearLocalSession()
         }
