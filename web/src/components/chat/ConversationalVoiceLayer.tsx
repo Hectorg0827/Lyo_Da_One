@@ -66,14 +66,6 @@ const DUCKED_VOLUME = 0.22;
  */
 const RESUMED_SPEECH_GRACE_MS = 1500;
 
-function latestAssistantMessage() {
-  const state = useChatStore.getState();
-  const conversation = state.getActiveConversation();
-  return [...(conversation?.messages ?? [])].reverse().find((message) =>
-    message.role === 'assistant' && Boolean(message.content?.trim())
-  );
-}
-
 export default function ConversationalVoiceLayer() {
   const active = useChatStore((state) => state.voiceSessionActive);
   const isGenerating = useChatStore((state) => state.isGenerating);
@@ -131,6 +123,7 @@ export default function ConversationalVoiceLayer() {
   const voiceSegmentQueueRef = useRef<QueuedVoiceSegment[]>([]);
   const voiceSegmentDrainActiveRef = useRef(false);
   const voiceTurnClosedRef = useRef(false);
+  const voiceTurnOutcomeRef = useRef<'completed' | 'incomplete' | 'fallback'>('completed');
   const voiceSegmentsReceivedRef = useRef(false);
   const spokenVoiceSegmentKeysRef = useRef<Set<string>>(new Set());
   const interruptedPreviousTurnRef = useRef(false);
@@ -393,6 +386,7 @@ export default function ConversationalVoiceLayer() {
     voiceSegmentQueueRef.current = [];
     voiceSegmentDrainActiveRef.current = false;
     voiceTurnClosedRef.current = false;
+    voiceTurnOutcomeRef.current = 'completed';
     voiceSegmentsReceivedRef.current = false;
     spokenVoiceSegmentKeysRef.current.clear();
     releaseSpoken();
@@ -771,7 +765,7 @@ export default function ConversationalVoiceLayer() {
     pendingRmsBargeTimerRef.current = null;
     pendingRmsBargeAtRef.current = 0;
     restorePlayback();
-    closeVoiceTurn(voiceSegmentsReceivedRef.current ? 'completed' : 'incomplete');
+    closeVoiceTurn(voiceTurnOutcomeRef.current);
     releaseSpoken();
     changePhase('listening');
     startRecognition();
@@ -810,7 +804,10 @@ export default function ConversationalVoiceLayer() {
         } catch {
           if (!current()) return;
           const remainder = unspokenRemainder(spoken, progress);
-          if (remainder) await browserSpeechFallback(remainder, owner.signal);
+          if (remainder) {
+            if (voiceTurnOutcomeRef.current !== 'incomplete') voiceTurnOutcomeRef.current = 'fallback';
+            await browserSpeechFallback(remainder, owner.signal);
+          }
         }
         if (!current()) return;
         commitSpoken(segment.messageId, spoken);
@@ -916,6 +913,7 @@ export default function ConversationalVoiceLayer() {
 
     if (event.type === 'voice_incomplete') {
       voiceTurnClosedRef.current = true;
+      voiceTurnOutcomeRef.current = 'incomplete';
       finishSegmentTurnIfReady();
     }
   }, [drainVoiceSegments, finishSegmentTurnIfReady, qualityContext]);
@@ -925,6 +923,7 @@ export default function ConversationalVoiceLayer() {
     if (!activeRef.current || responseAbortRef.current.signal.aborted) return;
     voiceTurnClosedRef.current = true;
     responseMessageIdRef.current = messageId;
+    voiceTurnOutcomeRef.current = 'fallback';
     splitSpeechChunks(text).forEach((spoken, sequence) => {
       const controller = new AbortController();
       voiceSegmentQueueRef.current.push({
@@ -1131,16 +1130,24 @@ export default function ConversationalVoiceLayer() {
   }, [active, bargeIn]);
 
   useEffect(() => {
-    if (!active || isGenerating || !awaitingAssistantRef.current) return;
-    const latest = latestAssistantMessage();
-    if (!latest || !latest.content.trim()) return;
+    if (!active || isGenerating || !awaitingAssistantRef.current || voiceTurnClosedRef.current
+      || !responseMessageIdRef.current) return;
+    // Only this request's rendered message may supply a whole-answer fallback.
+    // A failed request or canonical reload must never replay an older answer.
+    const latest = useChatStore.getState().getActiveConversation()?.messages.find(
+      (message) => message.id === responseMessageIdRef.current && message.role === 'assistant',
+    );
+    voiceTurnClosedRef.current = true;
     if (voiceSegmentsReceivedRef.current) {
       voiceTurnClosedRef.current = true;
       finishSegmentTurnIfReady();
       return;
     }
-    if (latest.id === lastSpokenMessageIdRef.current) return;
-    awaitingAssistantRef.current = false;
+    if (!latest?.content.trim()) {
+      voiceTurnOutcomeRef.current = 'incomplete';
+      finishSegmentTurnIfReady();
+      return;
+    }
     void speakAssistant(latest.id, latest.content);
   }, [active, activeConversationId, finishSegmentTurnIfReady, isGenerating, speakAssistant]);
 

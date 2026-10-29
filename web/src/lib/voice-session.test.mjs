@@ -81,13 +81,18 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
   let listener;
   const subscriptions = new Set();
   const update = (patch) => { state = { ...state, ...patch }; subscriptions.forEach((fn) => fn()); };
+  let messages = [];
   let state = {
     voiceSessionActive: true, isGenerating: false, activeConversationId: 'conversation-1',
     setVoiceSessionActive: (value) => update({ voiceSessionActive: value }),
     setVoiceSpokenText: () => {},
-    getActiveConversation: () => ({ messages: [] }),
+    getActiveConversation: () => ({ messages }),
     interruptGeneration: () => update({ isGenerating: false }),
-    sendMessage: async (text, attachments, options) => { submissions.push({ text, options }); update({ isGenerating: true }); },
+    sendMessage: async (text, attachments, options) => {
+      submissions.push({ text, options });
+      update({ isGenerating: true });
+      listener?.({ type: 'voice_response_started', turnId: options.voiceTurnId, messageId: `assistant-${submissions.length - 1}` });
+    },
   };
   const store = (select) => select(React.useSyncExternalStore((fn) => { subscriptions.add(fn); return () => subscriptions.delete(fn); }, () => state));
   store.getState = () => state;
@@ -125,6 +130,12 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
   }));
   return {
     recognizers, audios, requests, submissions, utterances, telemetry, tracks,
+    async finishWithoutSegments(content = 'A complete fallback answer.') {
+      await flush(() => {
+        if (content) messages.push({ id: `assistant-${submissions.length - 1}`, role: 'assistant', content });
+        update({ isGenerating: false });
+      });
+    },
     async grantMonitor() { await flush(() => grantMonitor()); },
     async frames(sample, count = 6) {
       await flush(() => { level = sample; for (let i = 0; i < count; i++) { now += 50; frame(); } });
@@ -266,4 +277,40 @@ test('late microphone permission after interruption releases the capture', async
   assert.equal(h.tracks[0].stopped, true);
   assert.match(h.text(), /Listening/);
   assert.equal(h.recognizers.filter((r) => r.running).length, 1);
+});
+
+
+test('a whole-answer fallback finishes and re-arms listening', async (t) => {
+  const h = await harness(t);
+  await h.say('Explain gravity.');
+  await h.finishWithoutSegments();
+  assert.equal(h.audios.length, 1);
+  await flush(() => h.audios[0].onended());
+  assert.match(h.text(), /Listening/);
+  assert.equal(h.recognizers.at(-1).running, true);
+  assert.equal(h.telemetry.find((e) => e.event === 'assistant_turn_complete').metrics.outcome, 'fallback');
+});
+
+test('a later empty response cannot replay a previous assistant answer', async (t) => {
+  const h = await harness(t);
+  await h.say('Explain gravity.');
+  await h.finishWithoutSegments();
+  await flush(() => h.audios[0].onended());
+  await h.click('End');
+  await h.restart();
+  await h.say('Explain plants.');
+  await h.finishWithoutSegments('');
+  assert.equal(h.audios.length, 1, 'no replay of the earlier answer');
+  assert.match(h.text(), /Listening/);
+});
+
+
+test('a closed incomplete stream drains queued audio and resumes listening', async (t) => {
+  const h = await harness(t);
+  await h.say('Explain gravity.');
+  await h.emit({ type: 'voice_text_segment', text: 'The part received.', sequence: 0 });
+  await h.emit({ type: 'voice_incomplete', text: '' });
+  await flush(() => h.audios[0].onended());
+  assert.match(h.text(), /Listening/);
+  assert.equal(h.telemetry.find((e) => e.event === 'assistant_turn_complete').metrics.outcome, 'incomplete');
 });

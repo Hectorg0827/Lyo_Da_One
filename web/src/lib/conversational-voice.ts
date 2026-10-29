@@ -126,6 +126,10 @@ export function splitSpeechChunks(text: string, maxChars = 260): string[] {
 
 export type VoiceStreamEvent = { turnId?: string } & (
   | {
+      type: 'voice_response_started';
+      messageId: string;
+    }
+  | {
       type: 'voice_text_segment';
       text: string;
       sequence: number;
