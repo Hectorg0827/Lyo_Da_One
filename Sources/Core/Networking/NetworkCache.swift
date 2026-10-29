@@ -12,6 +12,10 @@ actor NetworkCache {
     private let cacheDirectory: URL
     private let maxMemoryCacheSize = 50 // Maximum items in memory
     private let maxDiskCacheSize: Int64 = 100 * 1024 * 1024 // 100 MB
+    /// Goes up on every clearAll(). A request records it before going out and
+    /// passes it to set(), so a reply that started before an account change
+    /// (logout, another learner's login) is never cached for the next account.
+    private(set) var generation = 0
 
     // MARK: - Cache Entry
     private struct CacheEntry: Codable {
@@ -90,7 +94,8 @@ actor NetworkCache {
     }
 
     /// Set cache value with TTL
-    func set<T: Encodable>(key: String, value: T, ttl: TimeInterval) async {
+    func set<T: Encodable>(key: String, value: T, ttl: TimeInterval, generation: Int? = nil) async {
+        if let generation, generation != self.generation { return }
         do {
             // Encode value
             let data = try JSONEncoder.lyoEncoder.encode(value)
@@ -124,6 +129,7 @@ actor NetworkCache {
 
     /// Clear all cache
     func clearAll() async {
+        generation += 1
         memoryCache.removeAll()
 
         do {

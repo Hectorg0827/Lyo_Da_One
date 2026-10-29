@@ -81,6 +81,10 @@ class AuthService: NSObject, ObservableObject {
     
     func login(email: String, password: String) async {
         await MainActor.run { isLoading = true; error = nil }
+        // A Google/Firebase session or cached replies from a previous learner
+        // must not carry over to this account.
+        await Self.signOutOfIdentityProviders()
+        await NetworkCache.shared.clearAll()
         do {
             let user = try await repository.login(email: email, password: password)
             await MainActor.run {
@@ -103,6 +107,10 @@ class AuthService: NSObject, ObservableObject {
     
     func register(name: String, email: String, password: String) async {
         await MainActor.run { isLoading = true; error = nil }
+        // A Google/Firebase session or cached replies from a previous learner
+        // must not carry over to this account.
+        await Self.signOutOfIdentityProviders()
+        await NetworkCache.shared.clearAll()
         do {
             let user = try await repository.register(email: email, password: password, name: name)
             await MainActor.run {
@@ -137,13 +145,17 @@ class AuthService: NSObject, ObservableObject {
         KeychainHelper.shared.delete(forKey: tokenKey)
         
         Task {
+            // Sign-out and state first, with no suspension in between, so a
+            // sign-in that completes meanwhile is never undone; then the cache.
             await MainActor.run {
+                Self.signOutOfIdentityProviders()
                 self.currentUserName = ""
                 self.currentUserEmail = ""
                 self.authToken = nil
                 self.isDemoMode = false
                 self.isAuthenticated = false
             }
+            await NetworkCache.shared.clearAll()
         }
     }
     
@@ -379,15 +391,26 @@ extension AuthService {
                 Log.auth.error("Apple token revocation failed: \(error.localizedDescription)")
             }
         }
-        try? await Auth.auth().currentUser?.delete()
+        #endif
+        // The API has already deleted the Firebase account linked to this LYO
+        // account. Deleting Auth.auth().currentUser here could remove someone
+        // else's, if an earlier sign-in on this device was never signed out.
+        Self.signOutOfIdentityProviders()
+
+        await Self.eraseLocalAccountData()
+        logout()
+    }
+
+    /// Ends any Google or Firebase session left on this device, so a later
+    /// sign-in or account deletion never acts on another person's identity.
+    @MainActor
+    static func signOutOfIdentityProviders() {
+        #if canImport(FirebaseAuth)
         try? Auth.auth().signOut()
         #endif
         #if canImport(GoogleSignIn)
         GIDSignIn.sharedInstance.signOut()
         #endif
-
-        await Self.eraseLocalAccountData()
-        logout()
     }
 
     /// Erases everything this device kept about the deleted account.

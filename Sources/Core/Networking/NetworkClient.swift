@@ -60,6 +60,10 @@ actor NetworkClient {
             return cached
         }
         
+        // A reply to a request that began before the cache was cleared (an
+        // account change) must not be cached for the next account.
+        let cacheGeneration = await cache.generation
+
         // 2. Check network connectivity
         let isConnected = await MainActor.run { NetworkMonitor.shared.isConnected }
         if !isConnected {
@@ -125,7 +129,8 @@ actor NetworkClient {
             await cache.set(
                 key: endpoint.cacheKey,
                 value: AnyEncodableBox(encodable),
-                ttl: endpoint.cacheTTL
+                ttl: endpoint.cacheTTL,
+                generation: cacheGeneration
             )
             logger.log("💾 Cached: \(endpoint.path)")
         }
