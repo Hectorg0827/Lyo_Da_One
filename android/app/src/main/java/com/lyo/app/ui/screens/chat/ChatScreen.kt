@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -209,6 +210,8 @@ fun ChatScreen(nav: NavHostController) {
     var voiceConversation by remember { mutableStateOf(false) }
     var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
     var liveVoiceTranscript by remember { mutableStateOf("") }
+    var voiceLanguageTag by remember { mutableStateOf(Locale.getDefault().toLanguageTag()) }
+    var enableAutomaticLanguageSwitch by remember { mutableStateOf(Build.VERSION.SDK_INT >= 34) }
     var spokenVoiceCaption by remember { mutableStateOf("") }
     var voiceThinkingNudge by remember { mutableStateOf("") }
     val spokenRanges = remember { mutableMapOf<String, Pair<String, String>>() }
@@ -381,6 +384,15 @@ fun ChatScreen(nav: NavHostController) {
         if ((trimmed.isEmpty() && attachments.isEmpty()) || isStreaming || uploadingAttachment) return
 
         val content = buildChatContent(trimmed, attachments)
+        if (voiceConversation && textToSpeechReady) {
+            val requestedLocale = Locale.forLanguageTag(voiceLanguageTag)
+            val availability = textToSpeech?.isLanguageAvailable(requestedLocale)
+            if (availability != TextToSpeech.LANG_MISSING_DATA &&
+                availability != TextToSpeech.LANG_NOT_SUPPORTED
+            ) {
+                textToSpeech?.language = requestedLocale
+            }
+        }
         val clientMessageId = UUID.randomUUID().toString()
         val interruptedPreviousTurn = voiceInterruptedPreviousTurn
         voiceInterruptedPreviousTurn = false
@@ -435,7 +447,7 @@ fun ChatScreen(nav: NavHostController) {
                     voiceSession = voiceConversation,
                     voiceInterruptedPreviousTurn = interruptedPreviousTurn,
                     voiceTurnId = clientMessageId,
-                    voiceLocale = Locale.getDefault().toLanguageTag(),
+                    voiceLocale = voiceLanguageTag,
                 ).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
@@ -587,23 +599,6 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
-    fun isLikelyVoiceEcho(heard: String): Boolean {
-        val normalize: (String) -> String = { value ->
-            value.lowercase()
-                .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-        }
-        val a = normalize(heard)
-        val b = normalize(lastSpokenVoiceText)
-        if (a.isBlank() || b.isBlank()) return false
-        if (a.length >= 12 && b.contains(a)) return true
-        if (b.length >= 12 && a.contains(b)) return true
-        val aw = a.split(" ").filter { it.isNotBlank() }.toSet()
-        val bw = b.split(" ").filter { it.isNotBlank() }.toSet()
-        val overlap = aw.intersect(bw).size
-        return overlap.toFloat() / maxOf(1, minOf(aw.size, bw.size)).toFloat() >= 0.82f
-    }
 
     fun stopVoiceConversation() {
         voiceConversation = false
@@ -633,7 +628,16 @@ fun ChatScreen(nav: NavHostController) {
         val recognizer = continuousRecognizer ?: return
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, voiceLanguageTag)
+            // Android 14+ can detect and switch between English and Spanish.
+            // Some recognition services ignore this optional hint.
+            if (Build.VERSION.SDK_INT >= 34 && enableAutomaticLanguageSwitch) {
+                putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH, RecognizerIntent.LANGUAGE_SWITCH_BALANCED)
+                putStringArrayListExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES,
+                    arrayListOf("en-US", "es-ES", "es-US"),
+                )
+            }
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             // Favor natural conversational turn-taking: complete phrases end
@@ -656,6 +660,7 @@ fun ChatScreen(nav: NavHostController) {
 
     DisposableEffect(context) {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            inputError = "Live speech recognition is not available on this device."
             onDispose { }
         } else {
             val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
@@ -679,6 +684,14 @@ fun ChatScreen(nav: NavHostController) {
                 override fun onError(error: Int) {
                     recognizerInFlight = false
                     dictating = false
+                    if (Build.VERSION.SDK_INT >= 34 && (
+                        error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
+                            error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE
+                    )) {
+                        // Model pack missing: recover in the selected device
+                        // locale without looping through an unsupported mode.
+                        enableAutomaticLanguageSwitch = false
+                    }
                     if (voiceConversation) {
                         mainHandler.postDelayed({ voiceListenNonce += 1 }, 250)
                     }
@@ -692,11 +705,18 @@ fun ChatScreen(nav: NavHostController) {
                         ?.firstOrNull()
                         ?.trim()
                         .orEmpty()
-                    liveVoiceTranscript = transcript
+                    val wasSpeaking = speakingMessageId != null || pendingVoiceUtterances > 0
+                    val accepted = voiceConversation && VoiceTurnSafety.shouldSubmitFinal(
+                        heard = transcript,
+                        assistantText = lastSpokenVoiceText,
+                        assistantAudible = wasSpeaking,
+                        confirmedDuringPlayback = bargeInConfirmations >= 2,
+                    )
+                    liveVoiceTranscript = if (accepted) transcript else ""
                     bargeInCandidate = ""
                     bargeInConfirmations = 0
 
-                    if (transcript.isNotBlank() && voiceConversation && !isLikelyVoiceEcho(transcript)) {
+                    if (accepted) {
                         if (speakingMessageId != null || isStreaming) {
                             voiceInterruptedPreviousTurn = true
                         }
@@ -718,20 +738,15 @@ fun ChatScreen(nav: NavHostController) {
                         ?.firstOrNull()
                         ?.trim()
                         .orEmpty()
-                    if (!voiceConversation || partial.isBlank() || isLikelyVoiceEcho(partial)) {
+                    if (!voiceConversation || partial.isBlank() || VoiceTurnSafety.isLikelyEcho(partial, lastSpokenVoiceText)) {
                         return
                     }
                     liveVoiceTranscript = partial
-                    val recognizedWords = partial.split(Regex("\\s+")).filter { it.isNotBlank() }
                     val speaking = speakingMessageId != null || pendingVoiceUtterances > 0
                     if (speaking) {
-                        // Two stable hypotheses reduce false interruptions from
-                        // Lyo's speaker audio being heard by the recognizer.
-                        if (partial.length < 9 || recognizedWords.size < 2) return
-                        bargeInConfirmations = if (
-                            partial.startsWith(bargeInCandidate, ignoreCase = true) ||
-                            bargeInCandidate.startsWith(partial, ignoreCase = true)
-                        ) bargeInConfirmations + 1 else 1
+                        bargeInConfirmations = VoiceTurnSafety.confirmationCount(
+                            bargeInCandidate, bargeInConfirmations, partial
+                        )
                         bargeInCandidate = partial
                         if (bargeInConfirmations < 2) return
                     }
@@ -746,6 +761,17 @@ fun ChatScreen(nav: NavHostController) {
                             streamJob?.cancel()
                             streamJob = null
                             isStreaming = false
+                        }
+                    }
+                }
+
+                override fun onLanguageDetection(results: Bundle) {
+                    if (Build.VERSION.SDK_INT >= 34) {
+                        val detected = results.getString(SpeechRecognizer.DETECTED_LANGUAGE)
+                        if (detected?.startsWith("en", ignoreCase = true) == true ||
+                            detected?.startsWith("es", ignoreCase = true) == true
+                        ) {
+                            voiceLanguageTag = detected
                         }
                     }
                 }
