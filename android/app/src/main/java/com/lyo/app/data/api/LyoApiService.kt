@@ -129,7 +129,12 @@ interface LyoApiService {
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
         @Query("subject") subject: String? = null,
+        @Query("sort") sort: String? = null,
+        @Query("q") query: String? = null,
     ): ClipsResponse
+
+    @GET("api/v1/clips/discover/filters")
+    suspend fun discoverClipFilters(): DiscoverClipFiltersResponse
 
     @POST("api/v1/clips/{clipId}/like")
     suspend fun likeClip(@Path("clipId") clipId: String): JsonObject
@@ -164,6 +169,8 @@ interface LyoApiService {
     suspend fun savedClips(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
+        @Query("subject") subject: String? = null,
+        @Query("q") query: String? = null,
     ): ClipsResponse
 
     @POST("api/v1/clips")

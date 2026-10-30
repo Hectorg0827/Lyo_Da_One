@@ -123,10 +123,10 @@ export function TopBar() {
     router.push(`/discover${suffix ? `?${suffix}` : ''}`);
   }
 
-  // Focused classroom layout: no global search/notifications/messages
-  // competing with an active lesson. All hooks above still run every
-  // render — this only skips the header markup.
-  if (pathname.startsWith('/classroom')) {
+  // Classroom and Discover own immersive top chrome. Discover supplies its
+  // own fixed LYO logo, filter tabs and search, avoiding a duplicate header.
+  // Hooks above still run unconditionally before this layout choice.
+  if (pathname.startsWith('/classroom') || pathname.startsWith('/discover')) {
     return null;
   }
 
