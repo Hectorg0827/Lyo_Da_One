@@ -1297,7 +1297,7 @@ export default function ConversationalVoiceLayer() {
             aria-label="Live transcript" id="lyo-voice-transcript">
             <h3 className="font-semibold text-sm text-white/75 mb-3">Conversation transcript</h3>
             <div className="flex flex-col gap-3">
-              {transcriptMessages.length === 0 && <p className="text-sm text-white/50">Your conversation will appear here as you speak.</p>}
+              {transcriptMessages.length === 0 && !liveAssistantCaption && !liveTranscript && <p className="text-sm text-white/50">Your conversation will appear here as you speak.</p>}
               {transcriptMessages.map((message) => {
                 const assistantCurrentlySpeaking = phase === 'speaking'
                   && message.role === 'assistant' && message.id === spokenText?.messageId;
