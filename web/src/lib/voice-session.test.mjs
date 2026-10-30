@@ -106,7 +106,7 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
       return promise;
     } } } },
     '@/lib/utils': { cn: (...classes) => classes.filter(Boolean).join(' ') },
-    './MascotAvatar': { default: () => React.createElement('div', { 'data-testid': 'mascot' }) },
+    './MascotAvatar': { __esModule: true, default: () => React.createElement('div', { 'data-testid': 'mascot' }) },
     '@/stores/chat-store': { useChatStore: store },
     '@/lib/speech-transcript.mjs': transcripts,
     '@/lib/voice-reveal.mjs': reveal,
