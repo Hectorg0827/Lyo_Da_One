@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SmartToy
@@ -82,6 +83,7 @@ import com.lyo.app.data.api.StackItemDto
 import com.lyo.app.ui.components.CardGradients
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
+import com.lyo.app.ui.components.LyoAvatar
 import com.lyo.app.ui.components.SectionHeader
 import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.LyoAmber
@@ -159,54 +161,76 @@ fun HomeScreen(nav: NavHostController) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        if (!hasLearningActivity) {
-            item {
-                FocusFrontDoor(
-                    knownLearner = false,
-                    onEnterClassroom = { nav.navigate(Routes.topicClassroom(it)) },
-                    onStartTestPrep = { nav.navigate(Routes.TEST_PREP) },
-                    onOpenChat = { nav.navigate(Routes.CHAT) },
-                )
-            }
-        }
-        if (hasLearningActivity) {
+        // Match the Web mobile order: discovery header, the live learning
+        // front door, then the returning learner's progress and review cards.
         item {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    text = "Hi, ${Session.user?.displayName ?: "Learner"}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = { nav.navigate(Routes.NOTIFICATIONS) }) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF2B2F3E))
+                        .clickable { nav.navigate(Routes.COURSES) }
+                        .padding(horizontal = 12.dp),
+                ) {
                     Icon(
-                        Icons.Filled.Notifications,
-                        contentDescription = "Notifications",
+                        Icons.Filled.Search,
+                        contentDescription = null,
                         tint = TextSecondary,
+                        modifier = Modifier.size(21.dp),
+                    )
+                    Spacer(Modifier.width(9.dp))
+                    Text(
+                        "Search discoveries…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = { nav.navigate(Routes.MESSAGES) }) {
-                    Icon(
-                        Icons.Filled.Email,
-                        contentDescription = "Messages",
-                        tint = TextSecondary,
-                    )
+                IconButton(
+                    onClick = { nav.navigate(Routes.NOTIFICATIONS) },
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = TextSecondary)
                 }
-                IconButton(onClick = { nav.navigate(Routes.PROFILE) }) {
-                    Icon(
-                        Icons.Filled.Person,
-                        contentDescription = "Profile and settings",
-                        tint = TextSecondary,
+                IconButton(
+                    onClick = { nav.navigate(Routes.MESSAGES) },
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(Icons.Filled.Email, contentDescription = "Messages", tint = TextSecondary)
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.size(38.dp).clickable { nav.navigate(Routes.PROFILE) },
+                ) {
+                    LyoAvatar(
+                        name = Session.user?.displayName ?: "Learner",
+                        avatarUrl = null,
+                        size = 36,
                     )
                 }
             }
         }
 
+        // Returning learners also get the full live teacher experience
+        // before stats; this matches the current mobile Web Home screen.
+        item {
+            FocusFrontDoor(
+                knownLearner = false,
+                onEnterClassroom = { nav.navigate(Routes.topicClassroom(it)) },
+                onStartTestPrep = { nav.navigate(Routes.TEST_PREP) },
+                onOpenChat = { nav.navigate(Routes.CHAT) },
+            )
+        }
+
+        if (hasLearningActivity) {
         item {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -506,14 +530,6 @@ fun HomeScreen(nav: NavHostController) {
                     onClick = { nav.navigate(Routes.COURSES) },
                 )
             }
-        }
-        item {
-            FocusFrontDoor(
-                knownLearner = true,
-                onEnterClassroom = { nav.navigate(Routes.topicClassroom(it)) },
-                onStartTestPrep = { nav.navigate(Routes.TEST_PREP) },
-                onOpenChat = { nav.navigate(Routes.CHAT) },
-            )
         }
         }
 
