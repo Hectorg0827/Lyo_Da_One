@@ -11,6 +11,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -163,13 +168,18 @@ fun LearnerStatsGrid(stats: List<LearnerStat>) {
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
-                            Text(
-                                "●",
-                                color = stat.tint,
-                                fontSize = 24.sp,
+                            Icon(
+                                imageVector = when (stat.label) {
+                                    "Learned", "Courses Done" -> Icons.Filled.MenuBook
+                                    "Retained", "Hours Learned" -> Icons.Filled.Refresh
+                                    else -> Icons.Filled.Star
+                                },
+                                contentDescription = null,
+                                tint = stat.tint,
                                 modifier = Modifier
+                                    .size(33.dp)
                                     .background(stat.tint.copy(alpha = 0.14f), RoundedCornerShape(9.dp))
-                                    .padding(horizontal = 8.dp, vertical = 1.dp),
+                                    .padding(8.dp),
                             )
                             Text(
                                 stat.value,
