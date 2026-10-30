@@ -160,6 +160,15 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
       });
     },
     async restart() { await flush(() => update({ voiceSessionActive: true })); },
+    async setLanguage(language) {
+      await flush(() => {
+        const picker = document.querySelector('select[aria-label="Voice language"]');
+        assert.ok(picker, 'voice language picker must be visible');
+        picker.value = language;
+        picker.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      });
+      await flush(() => t.mock.timers.tick(100));
+    },
   };
 }
 
@@ -359,4 +368,14 @@ test('live transcript follows words actually spoken before the saved message arr
   assert.match(h.text(), /Lyo · live/);
   assert.match(h.text(), /The moon reflects/);
   assert.doesNotMatch(h.text(), /Your conversation will appear here as you speak/);
+});
+
+test('web voice can explicitly switch English and Spanish recognition and spoken response', async (t) => {
+  const h = await harness(t);
+  await h.setLanguage('es-ES');
+  assert.equal(h.recognizers.at(-1).lang, 'es-ES');
+  await h.say('¿Puedes explicar la gravedad?');
+  assert.equal(h.submissions[0].options.voiceLocale, 'es-ES');
+  await h.emit({ type: 'voice_text_segment', text: 'La gravedad atrae la materia.', sequence: 0 });
+  assert.equal(h.requests[0].options.language, 'es-ES');
 });
