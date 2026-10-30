@@ -15,7 +15,6 @@ struct LyoOverlayView: View {
     
     @State private var animationState: AnimationState = .initial
     @State private var isThinking = false
-    @State private var showVoiceSheet = false
     @State private var showGreeting = false
     @State private var showHistory = false
     @State private var selectedMode: ChatMode = .chat
@@ -108,11 +107,13 @@ struct LyoOverlayView: View {
                 onNewChat: { createNewChat() }
             )
         }
-        .sheet(isPresented: $showVoiceSheet) {
+        .fullScreenCover(isPresented: Binding(
+            get: { viewModel.isLiveMode },
+            set: { presenting in
+                if !presenting && viewModel.isLiveMode { viewModel.stopLiveMode() }
+            }
+        )) {
             VoiceSessionBottomSheet(viewModel: viewModel)
-        }
-        .onChange(of: viewModel.isVoiceActive) { _, newValue in
-            if newValue { showVoiceSheet = true }
         }
         .sheet(isPresented: $showNotesSheet) {
             ChatNotesSheetView(
