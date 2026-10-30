@@ -84,6 +84,7 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
   let messages = [];
   let state = {
     voiceSessionActive: true, isGenerating: false, activeConversationId: 'conversation-1',
+    conversations: [], voiceSpokenText: null,
     setVoiceSessionActive: (value) => update({ voiceSessionActive: value }),
     setVoiceSpokenText: () => {},
     getActiveConversation: () => ({ messages }),
@@ -105,6 +106,7 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
       return promise;
     } } } },
     '@/lib/utils': { cn: (...classes) => classes.filter(Boolean).join(' ') },
+    './MascotAvatar': { __esModule: true, default: () => React.createElement('div', { 'data-testid': 'mascot' }) },
     '@/stores/chat-store': { useChatStore: store },
     '@/lib/speech-transcript.mjs': transcripts,
     '@/lib/voice-reveal.mjs': reveal,
@@ -149,11 +151,24 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
     emit,
     async ready() { await emit({ type: 'voice_ready', text: 'Done.', speak: true }); await flush(() => update({ isGenerating: false })); },
     async click(label) {
-      await flush(() => [...document.querySelectorAll('button')].find((b) => b.textContent === label).click());
+      await flush(() => {
+        const target = label === 'Interrupt'
+          ? document.querySelector('[aria-label="Tap the mascot to speak"]')
+          : [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === label);
+        assert.ok(target, `Missing action: ${label}`);
+        target.click();
+      });
     },
     async restart() { await flush(() => update({ voiceSessionActive: true })); },
   };
 }
+
+test('end-of-turn timing is fast for complete questions but gives unfinished speech room', () => {
+  assert.equal(conversational.voiceEndOfTurnDelayMs('What is gravity?'), 430);
+  assert.equal(conversational.voiceEndOfTurnDelayMs('Yes'), 420);
+  assert.equal(conversational.voiceEndOfTurnDelayMs('Let me explain because'), 1500);
+  assert.equal(conversational.voiceEndOfTurnDelayMs('I think, '), 1500);
+});
 
 test('Android plays its answer without another mic capture or phantom echo turn', async (t) => {
   const h = await harness(t);
@@ -164,7 +179,7 @@ test('Android plays its answer without another mic capture or phantom echo turn'
   assert.equal(h.captures, 0);
   assert.equal(h.recognizers.filter((r) => r.running).length, 0);
   assert.equal(h.audios.length, 1);
-  assert.match(h.text(), /tap Interrupt/);
+  assert.match(h.text(), /Tap Lyo to speak/);
   await h.ready();
   await flush(() => h.audios[0].onended());
   assert.match(h.text(), /Listening/);
@@ -243,7 +258,7 @@ test('desktop monitor failure keeps playback intact and offers tap interruption'
   await h.say('Explain gravity.');
   await h.emit({ type: 'voice_text_segment', text: 'An answer.', sequence: 0 });
   assert.equal(h.captures, 1);
-  assert.match(h.text(), /tap Interrupt/);
+  assert.match(h.text(), /Tap Lyo to speak/);
   assert.equal(h.audios.length, 1);
   assert.equal(h.recognizers.filter((r) => r.running).length, 0);
   await h.click('Interrupt');
