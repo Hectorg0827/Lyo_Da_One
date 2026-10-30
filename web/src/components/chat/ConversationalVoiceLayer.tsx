@@ -1269,8 +1269,8 @@ export default function ConversationalVoiceLayer() {
               phase === 'speaking' ? 'border-orange-400/45 animate-ping'
                 : phase === 'listening' ? 'border-emerald-400/40 animate-pulse' : 'border-violet-400/25')} />
             <div className="relative w-48 h-48 sm:w-60 sm:h-60 flex items-center justify-center">
-              <MascotAvatar thinking={phase === 'thinking'} idle={phase !== 'thinking'} size={240}
-                alt={status} />
+              <MascotAvatar thinking={phase === 'thinking'} speaking={phase === 'speaking'}
+                idle={phase === 'listening' || phase === 'idle'} size={240} alt={status} />
             </div>
           </div>
           <div className="flex flex-col items-center max-w-xl w-full gap-3 text-center">
