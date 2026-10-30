@@ -86,7 +86,7 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
     voiceSessionActive: true, isGenerating: false, activeConversationId: 'conversation-1',
     conversations: [], voiceSpokenText: null,
     setVoiceSessionActive: (value) => update({ voiceSessionActive: value }),
-    setVoiceSpokenText: () => {},
+    setVoiceSpokenText: (value) => update({ voiceSpokenText: value }),
     getActiveConversation: () => ({ messages }),
     interruptGeneration: () => update({ isGenerating: false }),
     sendMessage: async (text, attachments, options) => {
@@ -328,4 +328,35 @@ test('a closed incomplete stream drains queued audio and resumes listening', asy
   await flush(() => h.audios[0].onended());
   assert.match(h.text(), /Listening/);
   assert.equal(h.telemetry.find((e) => e.event === 'assistant_turn_complete').metrics.outcome, 'incomplete');
+});
+
+test('live voice is a separate full-screen stage and its transcript can be reopened', async (t) => {
+  const h = await harness(t);
+  const stage = document.querySelector('[role="dialog"][aria-modal="true"]');
+  assert.ok(stage, 'voice must open a distinct modal stage');
+  assert.match(stage.getAttribute('aria-label'), /live voice/i);
+  assert.match(h.text(), /Live with Lyo/);
+  await h.click('Transcript');
+  assert.match(h.text(), /Conversation transcript/);
+  await h.click('Hide transcript');
+  assert.doesNotMatch(h.text(), /Conversation transcript/);
+  await h.click('End');
+  assert.equal(document.querySelector('[aria-label="LYO live voice conversation"]'), null);
+});
+
+test('live transcript follows words actually spoken before the saved message arrives', async (t) => {
+  const h = await harness(t);
+  await h.click('Transcript');
+  await flush(() => h.recognizers.at(-1).result('Can you explain why the moon shines?'));
+  assert.match(h.text(), /You · live/);
+  assert.match(h.text(), /Can you explain why the moon shines/);
+  await flush(() => t.mock.timers.tick(conversational.voiceEndOfTurnDelayMs('Can you explain why the moon shines?')));
+  await h.emit({ type: 'voice_text_segment', text: 'The moon reflects sunlight.', sequence: 0 });
+  await flush(() => {
+    h.audios[0].currentTime = 6;
+    h.audios[0].ontimeupdate();
+  });
+  assert.match(h.text(), /Lyo · live/);
+  assert.match(h.text(), /The moon reflects/);
+  assert.doesNotMatch(h.text(), /Your conversation will appear here as you speak/);
 });
