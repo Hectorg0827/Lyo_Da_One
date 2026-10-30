@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -108,7 +109,7 @@ internal fun ProfileHero(
                 Box(
                     modifier = Modifier
                         .offset(y = (-43).dp)
-                        .size(100.dp)
+                        .requiredSize(100.dp)
                         .clip(RoundedCornerShape(21.dp))
                         .background(Brush.linearGradient(listOf(Color(0xFF6366F1), Color(0xFFEC4899))))
                         .padding(3.dp),
