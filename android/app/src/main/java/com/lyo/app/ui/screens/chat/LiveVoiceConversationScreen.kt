@@ -87,7 +87,9 @@ internal fun LiveVoiceConversationScreen(
     val scale by pulse.animateFloat(
         initialValue = 0.96f,
         targetValue = 1.045f,
-        animationSpec = infiniteRepeatable(tween(950), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(
+            tween(if (speaking) 470 else 950), RepeatMode.Reverse,
+        ),
         label = "mascotBreathing",
     )
     val image = if (thinking) when (readingFrame) {
