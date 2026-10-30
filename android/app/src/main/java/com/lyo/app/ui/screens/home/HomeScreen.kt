@@ -41,7 +41,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -68,7 +67,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -78,10 +76,8 @@ import com.google.gson.JsonObject
 import com.lyo.app.data.Session
 import com.lyo.app.data.StackRepository
 import com.lyo.app.data.api.ApiClient
-import com.lyo.app.data.api.CourseDto
 import com.lyo.app.data.api.DueReviewItemDto
 import com.lyo.app.data.api.StackItemDto
-import com.lyo.app.ui.components.CardGradients
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
 import com.lyo.app.ui.components.LyoAvatar
@@ -90,9 +86,7 @@ import com.lyo.app.ui.components.learnerStats
 import com.lyo.app.ui.components.SectionHeader
 import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.LyoAmber
-import com.lyo.app.ui.theme.LyoBlue
 import com.lyo.app.ui.theme.LyoGreen
-import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
@@ -101,11 +95,9 @@ import kotlinx.coroutines.launch
 fun HomeScreen(nav: NavHostController) {
     var overview by remember { mutableStateOf<JsonObject?>(null) }
     var conceptSummary by remember { mutableStateOf<JsonObject?>(null) }
-    var featuredCourses by remember { mutableStateOf<List<CourseDto>>(emptyList()) }
     var courseStacks by remember { mutableStateOf<List<StackItemDto>>(emptyList()) }
     var dueReviews by remember { mutableStateOf<List<DueReviewItemDto>>(emptyList()) }
     var reviewError by remember { mutableStateOf<String?>(null) }
-    var catalogError by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var stackFilter by remember { mutableStateOf(FocusPresentation.Filter.All) }
     // Saved courses start stacked, and open on a tap. See the deck below.
@@ -117,15 +109,6 @@ fun HomeScreen(nav: NavHostController) {
 
         runCatching { ApiClient.api.conceptSummary() }
             .onSuccess { conceptSummary = it }
-
-        runCatching { ApiClient.api.courses(0, 5) }
-            .onSuccess {
-                featuredCourses = it
-                catalogError = null
-            }
-            .onFailure {
-                catalogError = it.localizedMessage ?: "The course catalog is unavailable."
-            }
 
         // Device- and platform-agnostic — the same list backs Focus/Home
         // on any device the user is signed into, unlike the old single-
@@ -503,7 +486,7 @@ fun HomeScreen(nav: NavHostController) {
                                             text = title,
                                             style = MaterialTheme.typography.titleSmall,
                                             color = TextPrimary,
-                                            maxLines = 1,
+                                            maxLines = 2,
                                             overflow = TextOverflow.Ellipsis,
                                         )
                                         Text(
@@ -541,76 +524,8 @@ fun HomeScreen(nav: NavHostController) {
             }
         }
 
-        item {
-            SectionHeader("Explore Courses")
-            when {
-                featuredCourses.isNotEmpty() -> {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        itemsIndexed(featuredCourses) { index, course ->
-                            CatalogCourseCard(
-                                course = course,
-                                gradient = CardGradients[index % CardGradients.size],
-                                onClick = { nav.navigate(Routes.courseDetail(course.idStr)) },
-                            )
-                        }
-                    }
-                }
-                catalogError != null -> GlassCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Text(
-                            text = "Course catalog unavailable",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary,
-                        )
-                        Text(
-                            text = catalogError ?: "The course catalog could not be loaded.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
-                }
-                else -> GlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { nav.navigate(Routes.COURSES) },
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Text(
-                            text = "No published courses",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary,
-                        )
-                        Text(
-                            text = "Open Courses to check for newly published learning content.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
-                }
-            }
-        }
-
-        item {
-            SectionHeader("Learning Actions")
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionCard(
-                    icon = Icons.Filled.MenuBook,
-                    label = "Browse Courses",
-                    tint = LyoPurple,
-                    onClick = { nav.navigate(Routes.COURSES) },
-                    modifier = Modifier.weight(1f),
-                )
-                QuickActionCard(
-                    icon = Icons.Filled.SmartToy,
-                    label = "Ask Lyo",
-                    tint = LyoBlue,
-                    onClick = { nav.navigate(Routes.CHAT) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
+        // Web keeps catalog browsing and Chat in their dedicated routes;
+        // duplicate stock tiles were making Focus visually noisy.
 
         item { Spacer(Modifier.height(8.dp)) }
     }
@@ -998,61 +913,3 @@ private fun EmptyLearningCard(onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun CatalogCourseCard(
-    course: CourseDto,
-    gradient: Brush,
-    onClick: () -> Unit,
-) {
-    GlassCard(
-        modifier = Modifier
-            .width(200.dp)
-            .clickable(onClick = onClick),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
-                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .background(gradient),
-        )
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = course.title ?: "Untitled Course",
-                style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = course.subject ?: "General",
-                style = MaterialTheme.typography.labelMedium,
-                color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun QuickActionCard(
-    icon: ImageVector,
-    label: String,
-    tint: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    GlassCard(modifier = modifier.clickable(onClick = onClick)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(24.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleSmall,
-                color = TextPrimary,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-    }
-}
