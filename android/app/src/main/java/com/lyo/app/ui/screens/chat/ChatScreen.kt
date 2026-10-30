@@ -201,6 +201,7 @@ fun ChatScreen(nav: NavHostController) {
     val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
     var dictating by remember { mutableStateOf(false) }
+    var recognizerInFlight by remember { mutableStateOf(false) }
     var inputError by remember { mutableStateOf<String?>(null) }
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
@@ -208,6 +209,11 @@ fun ChatScreen(nav: NavHostController) {
     var voiceConversation by remember { mutableStateOf(false) }
     var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
     var liveVoiceTranscript by remember { mutableStateOf("") }
+    var spokenVoiceCaption by remember { mutableStateOf("") }
+    var voiceThinkingNudge by remember { mutableStateOf("") }
+    val spokenRanges = remember { mutableMapOf<String, Pair<String, String>>() }
+    var bargeInCandidate by remember { mutableStateOf("") }
+    var bargeInConfirmations by remember { mutableStateOf(0) }
     var lastSpokenVoiceText by remember { mutableStateOf("") }
     var voiceListenNonce by remember { mutableStateOf(0) }
     var voiceSegmentStreamOpen by remember { mutableStateOf(false) }
@@ -230,10 +236,29 @@ fun ChatScreen(nav: NavHostController) {
             }
         }
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
+            override fun onStart(utteranceId: String?) {
+                mainHandler.post {
+                    if (voiceConversation && utteranceId != null) {
+                        spokenRanges[utteranceId]?.let { (prefix, _) -> spokenVoiceCaption = prefix }
+                    }
+                }
+            }
+
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                mainHandler.post {
+                    if (voiceConversation && utteranceId != null) {
+                        spokenRanges[utteranceId]?.let { (prefix, segment) ->
+                            spokenVoiceCaption = (prefix + " " + segment.take(end.coerceIn(0, segment.length))).trim()
+                        }
+                    }
+                }
+            }
 
             override fun onDone(utteranceId: String?) {
                 mainHandler.post {
+                    if (utteranceId != null) spokenRanges.remove(utteranceId)?.let { (prefix, segment) ->
+                        spokenVoiceCaption = (prefix + " " + segment).trim()
+                    }
                     if (utteranceId?.startsWith("voice-segment:") == true) {
                         pendingVoiceUtterances = (pendingVoiceUtterances - 1).coerceAtLeast(0)
                     }
@@ -371,6 +396,9 @@ fun ChatScreen(nav: NavHostController) {
         // Echo suppression must compare only against the assistant reply for
         // this turn, never the accumulated speech from earlier turns.
         lastSpokenVoiceText = ""
+        spokenVoiceCaption = ""
+        voiceThinkingNudge = ""
+        spokenRanges.clear()
 
         streamJob?.cancel()
         streamJob = scope.launch {
@@ -439,6 +467,7 @@ fun ChatScreen(nav: NavHostController) {
                                     val utteranceId =
                                         "voice-segment:${event.messageId}:${event.sequence}"
                                     pendingVoiceUtterances += 1
+                                    spokenRanges[utteranceId] = lastSpokenVoiceText to event.text
                                     val accepted = textToSpeech?.speak(
                                         event.text,
                                         if (pendingVoiceUtterances == 1) {
@@ -457,6 +486,7 @@ fun ChatScreen(nav: NavHostController) {
                                         ).filter { it.isNotBlank() }.joinToString(" ")
                                         speakingMessageId = utteranceId
                                     } else {
+                                        spokenRanges.remove(utteranceId)
                                         pendingVoiceUtterances =
                                             (pendingVoiceUtterances - 1).coerceAtLeast(0)
                                     }
@@ -478,6 +508,7 @@ fun ChatScreen(nav: NavHostController) {
                             ) {
                                 val utteranceId = event.messageId
                                 lastSpokenVoiceText = event.text
+                                spokenRanges[utteranceId] = "" to event.text
                                 speakingMessageId = utteranceId
                                 textToSpeech?.speak(
                                     event.text,
@@ -538,6 +569,7 @@ fun ChatScreen(nav: NavHostController) {
                 ) {
                     engine.stop()
                     lastSpokenVoiceText = spokenText
+                    spokenRanges[assistant.id] = "" to spokenText
                     speakingMessageId = assistant.id
                     engine.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, assistant.id)
                 } else if (
@@ -576,7 +608,12 @@ fun ChatScreen(nav: NavHostController) {
     fun stopVoiceConversation() {
         voiceConversation = false
         dictating = false
+        recognizerInFlight = false
         liveVoiceTranscript = ""
+        voiceThinkingNudge = ""
+        spokenRanges.clear()
+        bargeInCandidate = ""
+        bargeInConfirmations = 0
         runCatching { continuousRecognizer?.cancel() }
         textToSpeech?.stop()
         speakingMessageId = null
@@ -586,7 +623,7 @@ fun ChatScreen(nav: NavHostController) {
     }
 
     fun startVoiceRecognition() {
-        if (!voiceConversation || dictating) return
+        if (!voiceConversation || recognizerInFlight) return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
@@ -607,9 +644,11 @@ fun ChatScreen(nav: NavHostController) {
         }
         liveVoiceTranscript = ""
         runCatching {
+            recognizerInFlight = true
             recognizer.startListening(intent)
             dictating = true
         }.onFailure {
+            recognizerInFlight = false
             dictating = false
             inputError = "Speech recognition is not available on this device."
         }
@@ -627,15 +666,10 @@ fun ChatScreen(nav: NavHostController) {
                 }
 
                 override fun onBeginningOfSpeech() {
-                    // During model generation there is no playback to echo, so
-                    // actual speech can interrupt immediately. While Lyo is
-                    // speaking we wait for partial text and reject likely echo.
-                    if (speakingMessageId == null && isStreaming) {
-                        voiceInterruptedPreviousTurn = true
-                        streamJob?.cancel()
-                        streamJob = null
-                        isStreaming = false
-                    }
+                    // A single speech-start can be the speaker's echo.
+                    // Only confirmed, non-echo words may interrupt Lyo.
+                    bargeInCandidate = ""
+                    bargeInConfirmations = 0
                 }
 
                 override fun onRmsChanged(rmsdB: Float) = Unit
@@ -643,6 +677,7 @@ fun ChatScreen(nav: NavHostController) {
                 override fun onEndOfSpeech() { dictating = false }
 
                 override fun onError(error: Int) {
+                    recognizerInFlight = false
                     dictating = false
                     if (voiceConversation) {
                         mainHandler.postDelayed({ voiceListenNonce += 1 }, 250)
@@ -650,6 +685,7 @@ fun ChatScreen(nav: NavHostController) {
                 }
 
                 override fun onResults(results: Bundle?) {
+                    recognizerInFlight = false
                     dictating = false
                     val transcript = results
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -657,6 +693,8 @@ fun ChatScreen(nav: NavHostController) {
                         ?.trim()
                         .orEmpty()
                     liveVoiceTranscript = transcript
+                    bargeInCandidate = ""
+                    bargeInConfirmations = 0
 
                     if (transcript.isNotBlank() && voiceConversation && !isLikelyVoiceEcho(transcript)) {
                         if (speakingMessageId != null || isStreaming) {
@@ -680,18 +718,30 @@ fun ChatScreen(nav: NavHostController) {
                         ?.firstOrNull()
                         ?.trim()
                         .orEmpty()
+                    if (!voiceConversation || partial.isBlank() || isLikelyVoiceEcho(partial)) {
+                        return
+                    }
                     liveVoiceTranscript = partial
-                    if (
-                        partial.isNotBlank() &&
-                        voiceConversation &&
-                        speakingMessageId != null &&
-                        !isLikelyVoiceEcho(partial)
-                    ) {
-                        // Confirmed non-echo speech: barge in now instead of
-                        // waiting for the final recognition result.
+                    val recognizedWords = partial.split(Regex("\\s+")).filter { it.isNotBlank() }
+                    val speaking = speakingMessageId != null || pendingVoiceUtterances > 0
+                    if (speaking) {
+                        // Two stable hypotheses reduce false interruptions from
+                        // Lyo's speaker audio being heard by the recognizer.
+                        if (partial.length < 9 || recognizedWords.size < 2) return
+                        bargeInConfirmations = if (
+                            partial.startsWith(bargeInCandidate, ignoreCase = true) ||
+                            bargeInCandidate.startsWith(partial, ignoreCase = true)
+                        ) bargeInConfirmations + 1 else 1
+                        bargeInCandidate = partial
+                        if (bargeInConfirmations < 2) return
+                    }
+                    if (speaking || isStreaming) {
                         voiceInterruptedPreviousTurn = true
                         textToSpeech?.stop()
                         speakingMessageId = null
+                        pendingVoiceUtterances = 0
+                        voiceSegmentStreamOpen = false
+                        spokenRanges.clear()
                         if (isStreaming) {
                             streamJob?.cancel()
                             streamJob = null
@@ -711,8 +761,24 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
+    LaunchedEffect(voiceConversation, isStreaming, speakingMessageId, pendingVoiceUtterances) {
+        voiceThinkingNudge = ""
+        if (voiceConversation && isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0) {
+            delay(2400)
+            if (voiceConversation && isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0) {
+                voiceThinkingNudge = if (Locale.getDefault().language == "es")
+                    "Mmm, déjame ver…" else "Hmm, let me see…"
+            }
+            delay(4200)
+            if (voiceConversation && isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0) {
+                voiceThinkingNudge = if (Locale.getDefault().language == "es")
+                    "Sigo revisando…" else "Still checking…"
+            }
+        }
+    }
+
     LaunchedEffect(voiceConversation, voiceListenNonce, isStreaming, speakingMessageId) {
-        if (voiceConversation && !dictating) {
+        if (voiceConversation && !recognizerInFlight) {
             delay(180)
             startVoiceRecognition()
         }
@@ -833,6 +899,19 @@ fun ChatScreen(nav: NavHostController) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(max(0, messages.size - 1))
     }
 
+    if (voiceConversation) {
+        LiveVoiceConversationScreen(
+            listening = dictating && !isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0,
+            thinking = isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0,
+            speaking = speakingMessageId != null || pendingVoiceUtterances > 0,
+            userCaption = liveVoiceTranscript,
+            assistantCaption = spokenVoiceCaption,
+            thinkingNudge = voiceThinkingNudge,
+            messages = messages,
+            error = inputError,
+            onEnd = ::stopVoiceConversation,
+        )
+    } else {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1080,6 +1159,7 @@ fun ChatScreen(nav: NavHostController) {
                 )
             }
         }
+    }
     }
 }
 
