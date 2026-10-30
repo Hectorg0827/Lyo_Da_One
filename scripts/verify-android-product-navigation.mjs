@@ -51,6 +51,27 @@ rejectText(nav, 'BottomItem(Routes.CHAT', 'Android primary navigation');
 // above either gesture navigation or Samsung's three-button system bar.
 requireText(bottomBar, '.navigationBarsPadding()', 'Android bottom navigation system insets');
 
+// The visible mobile bar must keep all five destinations in product order,
+// including Community; a hidden launch gate must not replace it with whitespace.
+const visibleTabOrder = [
+  'GhostTab("Focus", Routes.HOME',
+  'GhostTab("Discover", Routes.DISCOVER',
+  'contentDescription = "Ask Lyo"',
+  'GhostTab("Community", Routes.COMMUNITY',
+  'GhostTab("Create", Routes.CREATE',
+];
+let lastVisibleIndex = -1;
+for (const marker of visibleTabOrder) {
+  const index = bottomBar.indexOf(marker);
+  if (index < 0 || index <= lastVisibleIndex) {
+    throw new Error(`Android visible tab order is wrong: ${marker}`);
+  }
+  lastVisibleIndex = index;
+}
+rejectText(bottomBar, 'communityLaunchEnabled = false', 'Android Community tab availability');
+requireText(nav, 'composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }', 'Community tab navigation');
+
+
 // Both names reach the one reel. "clips" stays registered because links to it
 // have already been shared, and a shared clip that opens nothing is worse than
 // an extra route. The places browser keeps its own route rather than sitting
