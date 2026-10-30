@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -151,16 +152,24 @@ fun HomeScreen(nav: NavHostController) {
         overview?.getAsJsonObject("user_level")?.get("level")?.asInt
     }.getOrNull() ?: Session.user?.resolvedLevel ?: 1
 
+    val hasLearningActivity = courseStacks.isNotEmpty() || xp > 0 || streak > 0
+
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        item {
-            androidx.compose.material3.Button(onClick = { nav.navigate(Routes.TEST_PREP) }, modifier = Modifier.fillMaxWidth()) {
-                Text("I have a test · Start or resume")
+        if (!hasLearningActivity) {
+            item {
+                FocusFrontDoor(
+                    knownLearner = false,
+                    onEnterClassroom = { nav.navigate(Routes.topicClassroom(it)) },
+                    onStartTestPrep = { nav.navigate(Routes.TEST_PREP) },
+                    onOpenChat = { nav.navigate(Routes.CHAT) },
+                )
             }
         }
+        if (hasLearningActivity) {
         item {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -188,10 +197,10 @@ fun HomeScreen(nav: NavHostController) {
                         tint = TextSecondary,
                     )
                 }
-                IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) {
+                IconButton(onClick = { nav.navigate(Routes.PROFILE) }) {
                     Icon(
-                        Icons.Filled.Settings,
-                        contentDescription = "Settings",
+                        Icons.Filled.Person,
+                        contentDescription = "Profile and settings",
                         tint = TextSecondary,
                     )
                 }
@@ -225,6 +234,7 @@ fun HomeScreen(nav: NavHostController) {
                     modifier = Modifier.weight(1f),
                 )
             }
+        }
         }
 
         if (dueReviews.isNotEmpty() || reviewError != null) {
@@ -300,6 +310,7 @@ fun HomeScreen(nav: NavHostController) {
             }
         }
 
+        if (hasLearningActivity) {
         item {
             // "Your Stacks" is the heading the cross-platform contract pins
             // (scripts/verify-android-focus-honesty.mjs), so it stays.
@@ -495,6 +506,15 @@ fun HomeScreen(nav: NavHostController) {
                     onClick = { nav.navigate(Routes.COURSES) },
                 )
             }
+        }
+        item {
+            FocusFrontDoor(
+                knownLearner = true,
+                onEnterClassroom = { nav.navigate(Routes.topicClassroom(it)) },
+                onStartTestPrep = { nav.navigate(Routes.TEST_PREP) },
+                onOpenChat = { nav.navigate(Routes.CHAT) },
+            )
+        }
         }
 
         item {
