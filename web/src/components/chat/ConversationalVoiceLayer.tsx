@@ -1202,9 +1202,10 @@ export default function ConversationalVoiceLayer() {
 
   if (!active) return null;
 
-  const latestAssistant = [...(conversation?.messages ?? [])].reverse()
-    .find((message) => message.role === 'assistant');
-  const liveAssistantCaption = spokenText && latestAssistant && spokenText.messageId === latestAssistant.id
+  // Spoken words can arrive before the canonical assistant message is inserted
+  // into the chat store. Still show them live, without replacing an older answer.
+  const liveAssistantCaption = spokenText
+    && spokenText.messageId === responseMessageIdRef.current
     ? spokenText.text : '';
   const status = phase === 'listening'
     ? (micSilent ? 'Check your microphone permission' : 'Listening')
@@ -1299,7 +1300,7 @@ export default function ConversationalVoiceLayer() {
               {transcriptMessages.length === 0 && <p className="text-sm text-white/50">Your conversation will appear here as you speak.</p>}
               {transcriptMessages.map((message) => {
                 const assistantCurrentlySpeaking = phase === 'speaking'
-                  && message.role === 'assistant' && message.id === latestAssistant?.id;
+                  && message.role === 'assistant' && message.id === spokenText?.messageId;
                 const text = assistantCurrentlySpeaking
                   ? liveAssistantCaption : message.content;
                 if (!text.trim()) return null;
@@ -1313,6 +1314,13 @@ export default function ConversationalVoiceLayer() {
                   </div>
                 );
               })}
+              {phase === 'speaking' && liveAssistantCaption
+                && !transcriptMessages.some((message) => message.id === spokenText?.messageId) && (
+                <div className="rounded-xl bg-white/10 mr-6 p-3 text-sm" aria-live="polite">
+                  <span className="block text-[11px] text-white/45 mb-1">Lyo · live</span>
+                  <p className="whitespace-pre-wrap">{liveAssistantCaption}</p>
+                </div>
+              )}
               {phase === 'listening' && liveTranscript && (
                 <div className="rounded-xl bg-violet-500/20 ml-6 p-3 text-sm">
                   <span className="block text-[11px] text-white/45 mb-1">You · live</span>
