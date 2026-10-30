@@ -86,6 +86,11 @@ export default function ConversationalVoiceLayer() {
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
+  const [preferredSpeechLanguage, setPreferredSpeechLanguage] = useState<'device' | 'en-US' | 'es-ES'>('device');
+  const preferredSpeechLanguageRef = useRef<'device' | 'en-US' | 'es-ES'>('device');
+  const speechLocale = useCallback(() => preferredSpeechLanguageRef.current === 'device'
+    ? (typeof navigator !== 'undefined' ? navigator.language || 'en-US' : 'en-US')
+    : preferredSpeechLanguageRef.current, []);
   const [thinkingNudge, setThinkingNudge] = useState('');
   const conversation = useChatStore((state) => state.conversations.find((item) => item.id === state.activeConversationId));
   const spokenText = useChatStore((state) => state.voiceSpokenText);
@@ -402,7 +407,7 @@ export default function ConversationalVoiceLayer() {
       voiceSession: true,
       voiceInterruptedPreviousTurn: interruptedPreviousTurn,
       voiceTurnId: turnId,
-      voiceLocale: navigator.language || 'auto',
+      voiceLocale: speechLocale(),
     });
   }, [
     cancelPendingTurn,
@@ -440,7 +445,7 @@ export default function ConversationalVoiceLayer() {
       return;
     }
     recognitionRef.current = recognition;
-    recognition.lang = normalizeSpeechLang(navigator.language);
+    recognition.lang = normalizeSpeechLang(speechLocale());
     recognition.interimResults = true;
     recognition.continuous = true;
     recognition.maxAlternatives = 3;
@@ -698,7 +703,7 @@ export default function ConversationalVoiceLayer() {
   const browserSpeechFallback = useCallback((text: string, signal: AbortSignal) =>
     speakVoiceFallback(text, {
       signal,
-      language: navigator.language || 'en-US',
+      language: speechLocale(),
       onStart: () => markFirstAudio('device_tts'),
     }), [markFirstAudio]);
 
@@ -868,7 +873,7 @@ export default function ConversationalVoiceLayer() {
       spokenVoiceSegmentKeysRef.current.add(segmentKey);
       const controller = new AbortController();
       const audio = api.tts.synthesizeStream(event.text, {
-        language: navigator.language || 'auto',
+        language: speechLocale(),
         speed: 1.02,
         signal: controller.signal,
       }).catch(() => null);
@@ -897,7 +902,7 @@ export default function ConversationalVoiceLayer() {
           spokenVoiceSegmentKeysRef.current.add(fallbackKey);
           const controller = new AbortController();
           const audio = api.tts.synthesizeStream(event.text, {
-            language: navigator.language || 'auto',
+            language: speechLocale(),
             speed: 1.02,
             signal: controller.signal,
           }).catch(() => null);
@@ -934,7 +939,7 @@ export default function ConversationalVoiceLayer() {
       voiceSegmentQueueRef.current.push({
         text: spoken, sequence, messageId, controller,
         audio: api.tts.synthesizeStream(spoken, {
-          language: navigator.language || 'auto', speed: 1.02, signal: controller.signal,
+          language: speechLocale(), speed: 1.02, signal: controller.signal,
         }).catch(() => null),
       });
     });
@@ -1175,7 +1180,7 @@ export default function ConversationalVoiceLayer() {
       return;
     }
     const spanish = typeof navigator !== 'undefined'
-      && navigator.language.toLowerCase().startsWith('es');
+      && speechLocale().toLowerCase().startsWith('es');
     const nudges = spanish
       ? ['Mmm, déjame ver…', 'Sigo revisando…', 'Un momento más…']
       : ['Hmm, let me see…', 'Still checking…', 'One more moment…'];
@@ -1197,6 +1202,19 @@ export default function ConversationalVoiceLayer() {
       window.speechSynthesis?.cancel();
     };
   }, [active, phase]);
+
+  const changeVoiceLanguage = (value: 'device' | 'en-US' | 'es-ES') => {
+    preferredSpeechLanguageRef.current = value;
+    setPreferredSpeechLanguage(value);
+    if (phaseRef.current === 'listening') {
+      stopRecognition();
+      // Restart with the new model after the previous speech service releases
+      // the mic; the text already collected in this turn remains intact.
+      setTimeout(() => {
+        if (activeRef.current && phaseRef.current === 'listening') startRecognition();
+      }, 100);
+    }
+  };
 
   const endSession = () => setVoiceSessionActive(false);
 
@@ -1241,6 +1259,17 @@ export default function ConversationalVoiceLayer() {
             </div>
             <p className="text-xs text-white/55 mt-1">A real conversation, in English or Spanish</p>
           </div>
+          <label className="sr-only" htmlFor="lyo-voice-language">Voice language</label>
+          <select id="lyo-voice-language" aria-label="Voice language"
+            value={preferredSpeechLanguage}
+            onChange={(event) => changeVoiceLanguage(event.target.value as 'device' | 'en-US' | 'es-ES')}
+            disabled={phase === 'thinking' || phase === 'speaking'}
+            className="max-w-[9rem] rounded-full border border-white/20 bg-[#211837] px-3 py-2 text-xs text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-50"
+          >
+            <option value="device">Device language</option>
+            <option value="en-US">English</option>
+            <option value="es-ES">Español</option>
+          </select>
           <button type="button" onClick={endSession}
             className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
             aria-label="End live voice and return to chat">
