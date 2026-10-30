@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.IconButton
@@ -49,18 +48,15 @@ import com.lyo.app.R
 /**
  * LYO's premium Android tab bar, matched to web MobileNav.
  *
- * The currently launched Web hides Community pending its release gate, so
- * native Android reserves that slot and shows Discover on the right as Web does.
- * The mascot opens canonical Chat; Create retains the native create flow. Profile and settings are
- * reachable from Home, not by adding a sixth icon to a five-position bar.
+ * Native Android has five explicit destinations: Focus, Discover, Ask Lyo,
+ * Community, and the Create (+) sheet. The mascot opens canonical Chat.
+ * Profile and Settings are reached through Home's avatar menu.
  * Custom 24-unit glyphs mirror the approved web NavIcons, including their
  * one warm-orange filled shape. No generic Material icon placeholders.
  */
 @Composable
 internal fun LyoBottomBar(currentRoute: String?, onNavigate: (String) -> Unit) {
     var createOpen by remember { mutableStateOf(false) }
-    // Match current web MobileNav launch state. Turn on together with its Web gate.
-    val communityLaunchEnabled = false
     val breathing = rememberInfiniteTransition(label = "bottomMascot")
     val mascotScale by breathing.animateFloat(
         initialValue = 0.98f,
@@ -81,11 +77,7 @@ internal fun LyoBottomBar(currentRoute: String?, onNavigate: (String) -> Unit) {
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
         GhostTab("Focus", Routes.HOME, "focus", currentRoute == Routes.HOME, onNavigate)
-        if (communityLaunchEnabled) {
-            GhostTab("Discover", Routes.DISCOVER, "discover", currentRoute == Routes.DISCOVER, onNavigate)
-        } else {
-            Spacer(Modifier.weight(1f))
-        }
+        GhostTab("Discover", Routes.DISCOVER, "discover", currentRoute == Routes.DISCOVER, onNavigate)
 
         Box(
             modifier = Modifier.weight(1.3f).height(84.dp)
@@ -109,11 +101,7 @@ internal fun LyoBottomBar(currentRoute: String?, onNavigate: (String) -> Unit) {
             )
         }
 
-        if (communityLaunchEnabled) {
-            GhostTab("Community", Routes.COMMUNITY, "community", currentRoute == Routes.COMMUNITY, onNavigate)
-        } else {
-            GhostTab("Discover", Routes.DISCOVER, "discover", currentRoute == Routes.DISCOVER, onNavigate)
-        }
+        GhostTab("Community", Routes.COMMUNITY, "community", currentRoute == Routes.COMMUNITY, onNavigate)
         GhostTab("Create", Routes.CREATE, "create",
             createOpen || currentRoute == Routes.CREATE) { createOpen = true }
     }
