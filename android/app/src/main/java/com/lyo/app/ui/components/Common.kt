@@ -33,6 +33,7 @@ import com.lyo.app.ui.theme.LyoPink
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.LyoViolet
 import com.lyo.app.ui.theme.Surface
+import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
 
 /** Rotating gradient palette used for cards/avatars without images. */
@@ -114,6 +115,7 @@ fun SectionHeader(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
         style = MaterialTheme.typography.headlineSmall,
+        color = TextPrimary,
         modifier = modifier.padding(vertical = 8.dp),
     )
 }
