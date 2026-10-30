@@ -50,6 +50,7 @@ class LyoAIViewModel: ObservableObject {
     @Published var isAISpeaking: Bool = false
     @Published var activeLiveWidget: [String: Any]?
     @Published var lastLiveTranscript: String = ""
+    @Published var voiceWaitCue: String = ""
     @Published var isAudioOutputEnabled: Bool = false
     private var lastSentToTTSText: String = ""
     private var shouldAutoSpeakCurrentResponse: Bool = false
@@ -61,6 +62,9 @@ class LyoAIViewModel: ObservableObject {
     private var voiceLoopActive: Bool = false
     private var voiceTurnDebounceTask: Task<Void, Never>?
     private var voiceInterruptedPreviousTurn = false
+    private var voiceWaitTask: Task<Void, Never>?
+    private var voiceBargeCandidate = ""
+    private var voiceBargeConfirmations = 0
     
     /// Current AI emotion (warm, excited, neutral, frustrated, confused)
     @Published var currentEmotion: String = "neutral"
@@ -177,6 +181,21 @@ class LyoAIViewModel: ObservableObject {
                 // prevents residual speaker echo from becoming a new user turn.
                 if self.isAISpeaking && self.isLikelyVoiceEcho(text) {
                     return
+                }
+
+                // Confirm repeated, meaningful non-echo words before stopping
+                // Lyo; one noisy partial is not a learner interruption.
+                if self.isAISpeaking {
+                    let words = text.split(whereSeparator: { $0.isWhitespace })
+                    guard text.count >= 9, words.count >= 2 else { return }
+                    if text.lowercased().hasPrefix(self.voiceBargeCandidate.lowercased())
+                        || self.voiceBargeCandidate.lowercased().hasPrefix(text.lowercased()) {
+                        self.voiceBargeConfirmations += 1
+                    } else {
+                        self.voiceBargeConfirmations = 1
+                    }
+                    self.voiceBargeCandidate = text
+                    guard self.voiceBargeConfirmations >= 2 else { return }
                 }
 
                 self.inputText = text
@@ -332,7 +351,11 @@ class LyoAIViewModel: ObservableObject {
             .sink { [weak self] speaking in
                 self?.isAISpeaking = speaking
                 self?.aiLiveAudioLevel = speaking ? 1.0 : 0.0
-                if speaking { self?.isAIThinking = false }
+                if speaking {
+                    self?.isAIThinking = false
+                    self?.voiceWaitTask?.cancel()
+                    self?.voiceWaitCue = ""
+                }
             }
             .store(in: &cancellables)
 
@@ -343,6 +366,20 @@ class LyoAIViewModel: ObservableObject {
             .sink { [weak self] loading in
                 self?.isLoading = loading
                 self?.isAIThinking = loading && !(self?.isAISpeaking ?? false)
+                self?.voiceWaitTask?.cancel()
+                self?.voiceWaitCue = ""
+                if loading && self?.isLiveMode == true {
+                    self?.voiceWaitTask = Task { [weak self] in
+                        try? await Task.sleep(for: .milliseconds(2400))
+                        guard !Task.isCancelled, let self, self.isLiveMode, self.isLoading, !self.isAISpeaking else { return }
+                        self.voiceWaitCue = Locale.current.languageCode == "es"
+                            ? "Mmm, déjame ver…" : "Hmm, let me see…"
+                        try? await Task.sleep(for: .milliseconds(4200))
+                        guard !Task.isCancelled, self.isLiveMode, self.isLoading, !self.isAISpeaking else { return }
+                        self.voiceWaitCue = Locale.current.languageCode == "es"
+                            ? "Sigo revisando…" : "Still checking…"
+                    }
+                }
             }
             .store(in: &cancellables)
 
@@ -549,6 +586,7 @@ class LyoAIViewModel: ObservableObject {
         // "Live" is now continuous I/O around the exact same Unified Chat
         // contract, memory, tools, multimodal context and teaching policy.
         isLiveMode = true
+        voiceWaitCue = ""
         isAudioOutputEnabled = true
         voiceLoopActive = true
         startListening()
@@ -556,12 +594,18 @@ class LyoAIViewModel: ObservableObject {
 
     func stopLiveMode() {
         isLiveMode = false
+        voiceLoopActive = false
+        shouldAutoSpeakCurrentResponse = false
+        voiceWaitTask?.cancel()
+        voiceWaitCue = ""
         isAudioOutputEnabled = false
         voiceTurnDebounceTask?.cancel()
         voiceTurnDebounceTask = nil
         inputText = ""
         stopListening()
         lastLiveTranscript = ""
+        voiceBargeCandidate = ""
+        voiceBargeConfirmations = 0
         userLiveAudioLevel = 0
         aiLiveAudioLevel = 0
         isAIThinking = false
@@ -604,12 +648,7 @@ class LyoAIViewModel: ObservableObject {
         voiceLoopActive = false  // Manual stop ends the conversational loop
         stopSpeaking()  // Also stop TTS if we are fully stopping voice mode
 
-        // If we have text, send it automatically in conversational mode
-        if !inputText.isEmpty {
-            Task {
-                await sendMessage()
-            }
-        }
+        // Leaving voice mode never submits an unfinished partial utterance.
     }
 
     func speak(text: String, messageId: String? = nil) {
@@ -820,7 +859,9 @@ class LyoAIViewModel: ObservableObject {
         let voiceTurnId = UUID().uuidString
         voiceInterruptedPreviousTurn = false
         
-        // Reset TTS buffer for the new response
+        // Reset TTS buffer and interruption confirmation for this response
+        voiceBargeCandidate = ""
+        voiceBargeConfirmations = 0
         lastSentToTTSText = ""
         streamedVoiceSegmentKeys.removeAll()
         voiceSegmentStreamOpen = false

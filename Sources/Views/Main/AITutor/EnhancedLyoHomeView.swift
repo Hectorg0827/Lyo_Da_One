@@ -112,6 +112,14 @@ struct EnhancedLyoHomeView: View {
                 .environmentObject(uiState)
                 .zIndex(200)
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { viewModel.isLiveMode },
+            set: { presenting in
+                if !presenting && viewModel.isLiveMode { viewModel.stopLiveMode() }
+            }
+        )) {
+            VoiceSessionBottomSheet(viewModel: viewModel)
+        }
         .onAppear {
             viewModel.loadInitialSuggestions()
             Task {

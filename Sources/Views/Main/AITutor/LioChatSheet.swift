@@ -137,6 +137,14 @@ struct LioChatSheet: View {
                     CourseDetailSheet(course: course, isPresented: $uiState.showCourseDetail)
                 }
             }
+            .fullScreenCover(isPresented: Binding(
+            get: { viewModel.isLiveMode },
+            set: { presenting in
+                if !presenting && viewModel.isLiveMode { viewModel.stopLiveMode() }
+            }
+        )) {
+            VoiceSessionBottomSheet(viewModel: viewModel)
+        }
         }
     }
     

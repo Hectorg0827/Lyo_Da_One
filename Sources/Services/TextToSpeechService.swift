@@ -8,6 +8,7 @@ class TextToSpeechService: NSObject, ObservableObject {
     static let shared = TextToSpeechService()
 
     @Published var isSpeaking: Bool = false
+    @Published private(set) var liveSpokenText: String = ""
     var onSpeechFinished: (() -> Void)?
 
     private let repository: TTSRepository = DefaultTTSRepository()
@@ -17,6 +18,9 @@ class TextToSpeechService: NSObject, ObservableObject {
     private var player: AVPlayer?
     private var playerItem: AVPlayerItem?
     private var playbackObserver: NSObjectProtocol?
+    private var progressObserver: Any?
+    private var spokenPrefix = ""
+    private var currentSegment = ""
     private var playbackContinuation: CheckedContinuation<Void, Error>?
     private var currentVoice: TTSVoice = .nova
     private var currentSpeed: Double = 0.96
@@ -73,6 +77,9 @@ class TextToSpeechService: NSObject, ObservableObject {
         cancelActivePlayback()
         deviceFallbackSynthesizer.stopSpeaking(at: .immediate)
         isSpeaking = false
+        liveSpokenText = ""
+        spokenPrefix = ""
+        currentSegment = ""
 
         if !VoiceInputService.shared.isRecording {
             do {
@@ -101,6 +108,7 @@ class TextToSpeechService: NSObject, ObservableObject {
             guard !speechQueue.isEmpty else { break }
 
             let item = speechQueue.removeFirst()
+            currentSegment = item.text
             isSpeaking = true
 
             do {
@@ -119,6 +127,9 @@ class TextToSpeechService: NSObject, ObservableObject {
                     Log.audio.error("Localized device TTS fallback failed: \(error)")
                 }
             }
+            guard !Task.isCancelled && generation == playbackGeneration else { break }
+            spokenPrefix = (spokenPrefix + " " + currentSegment).trimmingCharacters(in: .whitespacesAndNewlines)
+            liveSpokenText = spokenPrefix
         }
 
         // A canceled turn may finish after a new question has started speech.
@@ -179,6 +190,21 @@ class TextToSpeechService: NSObject, ObservableObject {
                         self?.resumePlaybackContinuation()
                     }
                 }
+                progressObserver = player.addPeriodicTimeObserver(
+                    forInterval: CMTime(seconds: 0.15, preferredTimescale: 600),
+                    queue: .main
+                ) { [weak self, weak player] time in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.player === player else { return }
+                        let duration = player?.currentItem?.duration.seconds ?? 0
+                        guard duration.isFinite, duration > 0 else { return }
+                        let fraction = min(1, max(0, time.seconds / duration))
+                        let words = self.currentSegment.split(separator: " ")
+                        let read = words.prefix(Int(Double(words.count) * fraction)).joined(separator: " ")
+                        self.liveSpokenText = (self.spokenPrefix + " " + read)
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
                 player.play()
             }
         }, onCancel: {
@@ -236,6 +262,7 @@ class TextToSpeechService: NSObject, ObservableObject {
     }
 
     private func cancelActivePlayback() {
+        removeProgressObserver()
         player?.pause()
         player = nil
         playerItem = nil
@@ -250,6 +277,7 @@ class TextToSpeechService: NSObject, ObservableObject {
     }
 
     private func cleanupPlayer(keepSessionActive: Bool = false) {
+        removeProgressObserver()
         player?.pause()
         player = nil
         playerItem = nil
@@ -261,6 +289,13 @@ class TextToSpeechService: NSObject, ObservableObject {
             } catch {
                 Log.audio.error("Failed to deactivate audio session: \(error)")
             }
+        }
+    }
+
+    private func removeProgressObserver() {
+        if let progressObserver {
+            player?.removeTimeObserver(progressObserver)
+            self.progressObserver = nil
         }
     }
 
