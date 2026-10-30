@@ -218,6 +218,7 @@ fun ChatScreen(nav: NavHostController) {
     var bargeInCandidate by remember { mutableStateOf("") }
     var bargeInConfirmations by remember { mutableStateOf(0) }
     var lastSpokenVoiceText by remember { mutableStateOf("") }
+    var lastThinkingNudgeText by remember { mutableStateOf("") }
     var voiceListenNonce by remember { mutableStateOf(0) }
     var voiceSegmentStreamOpen by remember { mutableStateOf(false) }
     var pendingVoiceUtterances by remember { mutableStateOf(0) }
@@ -408,6 +409,7 @@ fun ChatScreen(nav: NavHostController) {
         // Echo suppression must compare only against the assistant reply for
         // this turn, never the accumulated speech from earlier turns.
         lastSpokenVoiceText = ""
+        lastThinkingNudgeText = ""
         spokenVoiceCaption = ""
         voiceThinkingNudge = ""
         spokenRanges.clear()
@@ -706,7 +708,9 @@ fun ChatScreen(nav: NavHostController) {
                         ?.trim()
                         .orEmpty()
                     val wasSpeaking = speakingMessageId != null || pendingVoiceUtterances > 0
-                    val accepted = voiceConversation && VoiceTurnSafety.shouldSubmitFinal(
+                    val accepted = voiceConversation &&
+                        !VoiceTurnSafety.isLikelyEcho(transcript, lastThinkingNudgeText) &&
+                        VoiceTurnSafety.shouldSubmitFinal(
                         heard = transcript,
                         assistantText = lastSpokenVoiceText,
                         assistantAudible = wasSpeaking,
@@ -738,7 +742,10 @@ fun ChatScreen(nav: NavHostController) {
                         ?.firstOrNull()
                         ?.trim()
                         .orEmpty()
-                    if (!voiceConversation || partial.isBlank() || VoiceTurnSafety.isLikelyEcho(partial, lastSpokenVoiceText)) {
+                    if (!voiceConversation || partial.isBlank() ||
+                        VoiceTurnSafety.isLikelyEcho(partial, lastSpokenVoiceText) ||
+                        VoiceTurnSafety.isLikelyEcho(partial, lastThinkingNudgeText)
+                    ) {
                         return
                     }
                     liveVoiceTranscript = partial
@@ -791,13 +798,24 @@ fun ChatScreen(nav: NavHostController) {
         voiceThinkingNudge = ""
         if (voiceConversation && isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0) {
             delay(2400)
-            if (voiceConversation && isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0) {
-                voiceThinkingNudge = if (Locale.getDefault().language == "es")
+            if (voiceConversation && isStreaming && speakingMessageId == null &&
+                pendingVoiceUtterances == 0 && !voiceSegmentStreamOpen
+            ) {
+                voiceThinkingNudge = if (voiceLanguageTag.startsWith("es"))
                     "Mmm, déjame ver…" else "Hmm, let me see…"
+                lastThinkingNudgeText = voiceThinkingNudge
+                // Only the first gentle nudge speaks. Later wait messages are
+                // visual, so Lyo does not chatter or obscure a user interruption.
+                if (textToSpeechReady) {
+                    textToSpeech?.speak(
+                        voiceThinkingNudge, TextToSpeech.QUEUE_FLUSH,
+                        null, "voice-thinking-nudge",
+                    )
+                }
             }
             delay(4200)
             if (voiceConversation && isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0) {
-                voiceThinkingNudge = if (Locale.getDefault().language == "es")
+                voiceThinkingNudge = if (voiceLanguageTag.startsWith("es"))
                     "Sigo revisando…" else "Still checking…"
             }
         }
