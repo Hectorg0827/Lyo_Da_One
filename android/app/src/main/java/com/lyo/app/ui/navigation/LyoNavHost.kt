@@ -1,5 +1,7 @@
 package com.lyo.app.ui.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +27,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -61,7 +65,9 @@ import com.lyo.app.ui.screens.notifications.NotificationsScreen
 import com.lyo.app.ui.screens.profile.ProfileScreen
 import com.lyo.app.ui.screens.settings.SettingsScreen
 import com.lyo.app.ui.screens.stories.StoriesScreen
-import com.lyo.app.ui.theme.Background
+import com.lyo.app.ui.theme.BackgroundDeep1
+import com.lyo.app.ui.theme.BackgroundDeep2
+import com.lyo.app.ui.theme.BackgroundDeep3
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.Surface
 import com.lyo.app.ui.theme.TextPrimary
@@ -124,6 +130,10 @@ object Routes {
     fun communityInvite(token: String) = "community/invite/$token"
     fun courseDetail(courseId: String) = "courses/$courseId"
     fun classroom(courseId: String) = "classroom/$courseId"
+    fun topicClassroom(topic: String): String {
+        val sessionId = "topic-${java.util.UUID.randomUUID()}"
+        return "test-prep/classroom/$sessionId?topic=${android.net.Uri.encode(topic)}&mode=solo"
+    }
     fun reviewClassroom(skillId: String, topic: String): String {
         val session = android.net.Uri.encode("review-$skillId")
         return "review/classroom/$session?topic=${android.net.Uri.encode(topic)}" +
@@ -197,8 +207,18 @@ private fun LyoNavHost() {
 
     val showBottomBar = currentRoute in bottomItems.map { it.route }
 
+    // The web Focus surface uses a near-black, layered backdrop. Keeping
+    // the Android scaffold transparent lets each native screen share that
+    // visual depth without introducing a second navigation runtime.
+    Box(
+        modifier = Modifier.fillMaxSize().background(
+            Brush.verticalGradient(
+                listOf(BackgroundDeep1, BackgroundDeep2, BackgroundDeep3),
+            ),
+        ),
+    ) {
     Scaffold(
-        containerColor = Background,
+        containerColor = Color.Transparent,
         bottomBar = {
             if (showBottomBar) {
                 LyoBottomBar(currentRoute) { route ->
@@ -323,6 +343,7 @@ private fun LyoNavHost() {
             composable(Routes.NOTIFICATIONS) { NotificationsScreen(nav) }
             composable(Routes.SETTINGS) { SettingsScreen(nav) }
         }
+    }
     }
 }
 
