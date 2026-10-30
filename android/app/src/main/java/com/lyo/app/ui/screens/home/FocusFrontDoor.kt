@@ -16,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,13 +28,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 
 /**
  * Android's actual learning entry mirrors web FrontDoor: a topic can go
- * directly into the canonical Classroom. A new learner sees this first,
- * before any empty XP/streak/dashboard cards. Returning learners see a more
- * compact version after their saved course stack.
+ * directly into the canonical Classroom. Both new and returning learners
+ * see this hero before progress and review cards, as on mobile Web.
  */
 @Composable
 internal fun FocusFrontDoor(
@@ -49,12 +50,12 @@ internal fun FocusFrontDoor(
             .border(1.dp, Color.White.copy(alpha = 0.16f), shape)
             .background(
                 Brush.linearGradient(
-                    listOf(Color(0xFF3C246B), Color(0xFF211238), Color(0xFF150D2E)),
+                    listOf(Color(0xFF321B61), Color(0xFF7141BE), Color(0xFF1B1537)),
                 ),
                 shape,
             )
-            .padding(if (knownLearner) 18.dp else 22.dp),
-        verticalArrangement = Arrangement.spacedBy(13.dp),
+            .padding(22.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
             text = if (knownLearner) "START A NEW COURSE" else "●  A LIVE TEACHER, NOT A PLAYLIST",
@@ -79,9 +80,20 @@ internal fun FocusFrontDoor(
         OutlinedTextField(
             value = topic,
             onValueChange = { topic = it },
-            label = { Text("A subject, skill or chapter") },
-            placeholder = { Text("Try: Teach me fractions") },
+            placeholder = { Text("Anything — a subject, a skill, a chapter") },
             singleLine = true,
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = Color.White,
+                unfocusedTextColor = Color.White,
+                cursorColor = Color.White,
+                focusedPlaceholderColor = Color.White.copy(alpha = 0.62f),
+                unfocusedPlaceholderColor = Color.White.copy(alpha = 0.62f),
+                focusedBorderColor = Color.White.copy(alpha = 0.48f),
+                unfocusedBorderColor = Color.White.copy(alpha = 0.26f),
+                focusedContainerColor = Color(0xAA100B24),
+                unfocusedContainerColor = Color(0xAA100B24),
+            ),
             modifier = Modifier.fillMaxWidth(),
         )
         Button(
@@ -98,16 +110,30 @@ internal fun FocusFrontDoor(
         ) {
             Text("Enter Classroom", fontWeight = FontWeight.Bold)
         }
+        Text(
+            text = "Live Classroom is a guided lesson with teacher narration, a visual board and check-ins. Prefer asking questions at your own pace?",
+            color = Color.White.copy(alpha = 0.75f),
+            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+        )
+        TextButton(onClick = onOpenChat) {
+            Text(
+                text = "Ask LYO Tutor in chat",
+                color = Color(0xFFE0D4FF),
+                textDecoration = TextDecoration.Underline,
+            )
+        }
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         ) {
+            Text(
+                text = "Try",
+                color = Color.White.copy(alpha = 0.7f),
+                modifier = Modifier.padding(top = 14.dp),
+            )
             listOf("AP Chemistry", "Spanish for my trip", "Teach me fractions").forEach { example ->
                 AssistChip(onClick = { topic = example }, label = { Text(example) })
             }
-        }
-        TextButton(onClick = onOpenChat) {
-            Text("Prefer a conversation? Ask LYO in Chat", color = Color(0xFFD8C9FF))
         }
         OutlinedButton(
             onClick = onStartTestPrep,
