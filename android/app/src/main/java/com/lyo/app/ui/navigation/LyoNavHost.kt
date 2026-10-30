@@ -135,7 +135,9 @@ object Routes {
 private data class BottomItem(val route: String, val label: String, val icon: ImageVector)
 
 /**
- * Mirrors the iOS product hierarchy: Focus, Discover, Create, Community, Profile.
+ * Routes allowed to keep the mobile navigation visible. The bar itself uses
+ * web's four glyphs around the central mascot; Profile stays reachable from
+ * Home, and stays listed here so its screen retains navigation on return.
  * Chat remains a contextual destination opened from Create and other learning surfaces.
  *
  * "Discover" is the clip reel. The two were one surface under two names: this
@@ -199,29 +201,13 @@ private fun LyoNavHost() {
         containerColor = Background,
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(containerColor = Surface) {
-                    bottomItems.forEach { item ->
-                        NavigationBarItem(
-                            selected = currentRoute == item.route,
-                            onClick = {
-                                if (currentRoute != item.route) {
-                                    nav.navigate(item.route) {
-                                        popUpTo(Routes.HOME) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            },
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = LyoPurple,
-                                selectedTextColor = LyoPurple,
-                                unselectedIconColor = TextSecondary,
-                                unselectedTextColor = TextSecondary,
-                                indicatorColor = LyoPurple.copy(alpha = 0.15f),
-                            ),
-                        )
+                LyoBottomBar(currentRoute) { route ->
+                    if (currentRoute != route) {
+                        nav.navigate(route) {
+                            popUpTo(Routes.HOME) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
                 }
             }
