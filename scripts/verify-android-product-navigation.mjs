@@ -17,6 +17,7 @@ function rejectText(source, forbidden, label) {
 }
 
 const nav = read('android/app/src/main/java/com/lyo/app/ui/navigation/LyoNavHost.kt');
+const bottomBar = read('android/app/src/main/java/com/lyo/app/ui/navigation/LyoBottomBar.kt');
 const createHub = read('android/app/src/main/java/com/lyo/app/ui/screens/create/CreateScreen.kt');
 const createClip = read('android/app/src/main/java/com/lyo/app/ui/screens/create/CreateClipScreen.kt');
 const createPost = read('android/app/src/main/java/com/lyo/app/ui/screens/create/CreatePostScreen.kt');
@@ -45,6 +46,10 @@ for (const marker of expectedOrder) {
 }
 
 rejectText(nav, 'BottomItem(Routes.CHAT', 'Android primary navigation');
+
+// Edge-to-edge rendering is enabled by MainActivity. Keep the native tab row
+// above either gesture navigation or Samsung's three-button system bar.
+requireText(bottomBar, '.navigationBarsPadding()', 'Android bottom navigation system insets');
 
 // Both names reach the one reel. "clips" stays registered because links to it
 // have already been shared, and a shared clip that opens nothing is worse than
