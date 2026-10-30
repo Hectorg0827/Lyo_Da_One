@@ -1,6 +1,7 @@
 package com.lyo.app.ui.screens.profile
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -239,7 +240,8 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(Surface)
+                                .background(Color.White.copy(alpha = 0.05f))
+                                .border(1.dp, Color.White.copy(alpha = 0.16f), RoundedCornerShape(12.dp))
                                 .clickable { nav.navigate(Routes.SETTINGS) }
                                 .padding(horizontal = 20.dp, vertical = 10.dp),
                         ) {
