@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AudioLines, MicOff, Volume2 } from 'lucide-react';
+import { AudioLines, MessageSquareText, Mic, MicOff, Volume2, X } from 'lucide-react';
+import MascotAvatar from './MascotAvatar';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
@@ -84,6 +85,10 @@ export default function ConversationalVoiceLayer() {
   const recognitionRestartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [thinkingNudge, setThinkingNudge] = useState('');
+  const conversation = useChatStore((state) => state.conversations.find((item) => item.id === state.activeConversationId));
+  const spokenText = useChatStore((state) => state.voiceSpokenText);
   const [errorDetail, setErrorDetail] = useState('');
   const [micSilent, setMicSilent] = useState(false);
   // Opening the chat with ?voicedebug=1 shows what the speech engine is
@@ -1161,61 +1166,178 @@ export default function ConversationalVoiceLayer() {
     return () => window.clearTimeout(timer);
   }, [active, phase]);
 
+  // Long waits get a short, optional spoken acknowledgement. The canonical
+  // answer still comes from the chat stream; filler is never saved as an answer.
+  // Clearing the timer and cancelling its utterance avoids talking over Lyo.
+  useEffect(() => {
+    if (!active || phase !== 'thinking') {
+      setThinkingNudge('');
+      return;
+    }
+    const spanish = typeof navigator !== 'undefined'
+      && navigator.language.toLowerCase().startsWith('es');
+    const nudges = spanish
+      ? ['Mmm, déjame ver…', 'Sigo revisando…', 'Un momento más…']
+      : ['Hmm, let me see…', 'Still checking…', 'One more moment…'];
+    const timers = nudges.map((line, index) => window.setTimeout(() => {
+      if (!activeRef.current || phaseRef.current !== 'thinking') return;
+      setThinkingNudge(line);
+      // Only the first nudge speaks, preventing an artificial monologue
+      // during long requests. Browsers may block synthesis without a gesture.
+      if (index === 0 && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window) {
+        const cue = new SpeechSynthesisUtterance(line);
+        cue.lang = spanish ? 'es-ES' : 'en-US';
+        cue.rate = 1.08;
+        cue.volume = 0.65;
+        try { window.speechSynthesis.speak(cue); } catch { /* visual cue remains */ }
+      }
+    }, [2400, 6500, 11500][index]));
+    return () => {
+      timers.forEach(window.clearTimeout);
+      window.speechSynthesis?.cancel();
+    };
+  }, [active, phase]);
+
   const endSession = () => setVoiceSessionActive(false);
 
   if (!active) return null;
 
-  const label = phase === 'listening'
-    ? (liveTranscript
-        || (micSilent
-          ? 'Not hearing anything yet — check this site’s microphone permission.'
-          : 'Listening…'))
-    : phase === 'thinking'
-      ? 'Lyo is thinking…'
-      : phase === 'speaking'
-        ? (interruptionMode === 'speech'
-          ? 'Lyo is speaking — start talking to interrupt'
-          : 'Lyo is speaking — tap Interrupt to speak')
+  const latestAssistant = [...(conversation?.messages ?? [])].reverse()
+    .find((message) => message.role === 'assistant');
+  const liveAssistantCaption = spokenText?.messageId === latestAssistant?.id
+    ? spokenText.text : '';
+  const status = phase === 'listening'
+    ? (micSilent ? 'Check your microphone permission' : 'Listening')
+    : phase === 'thinking' ? 'Lyo is thinking'
+      : phase === 'speaking' ? 'Lyo is speaking'
+        : phase === 'error' ? 'Voice needs attention' : 'Connecting';
+  const caption = phase === 'listening'
+    ? (liveTranscript || 'Go ahead. I’m listening.')
+    : phase === 'speaking'
+      ? (liveAssistantCaption || 'Speaking…')
+      : phase === 'thinking'
+        ? (thinkingNudge || 'Thinking about your question…')
         : phase === 'error'
-          ? (errorDetail || 'Voice unavailable')
-          : 'Voice ready';
+          ? (errorDetail || 'Check your microphone and try again.')
+          : 'Getting your microphone ready…';
+  const transcriptMessages = (conversation?.messages ?? [])
+    .filter((message) => message.role === 'assistant' || message.role === 'user');
 
   return (
-    <div className="max-w-3xl mx-auto mb-2 rounded-2xl border border-lyo-500/25 bg-lyo-500/10 px-3 py-2.5">
-      <div className="flex items-center gap-3">
-        <div className={cn(
-          'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
-          phase === 'speaking' ? 'bg-lyo-500/20 text-lyo-200' : 'bg-white/10 text-white/80'
-        )}>
-          {phase === 'speaking' ? <Volume2 className="w-4 h-4" /> : phase === 'error' ? <MicOff className="w-4 h-4" /> : <AudioLines className="w-4 h-4" />}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-xs font-semibold text-white/85">Live conversation</div>
-          <div className={cn('text-xs text-white/55', !debugEnabled && 'truncate')}>{label}</div>
-        </div>
-        {(phase === 'speaking' || phase === 'thinking') && (
-          <button
-            type="button"
-            onClick={interruptPlayback}
-            aria-label="Interrupt Lyo and start speaking"
-            className="px-3 py-2 rounded-full bg-lyo-500/25 hover:bg-lyo-500/40 text-xs text-white shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-          >
-            Interrupt
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="LYO live voice conversation"
+      className="fixed inset-0 z-[100] overflow-hidden bg-[#090817] text-white"
+    >
+      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_38%,rgba(132,80,231,0.24),transparent_54%),radial-gradient(circle_at_80%_100%,rgba(249,115,22,0.13),transparent_44%)]" />
+      <div className="relative flex h-full flex-col mx-auto w-full max-w-3xl px-5 pt-[max(env(safe-area-inset-top),1.25rem)] pb-[max(env(safe-area-inset-bottom),1.25rem)]">
+        <header className="flex items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <h2 className="text-lg font-semibold tracking-tight">Live with Lyo</h2>
+            </div>
+            <p className="text-xs text-white/55 mt-1">A real conversation, in English or Spanish</p>
+          </div>
+          <button type="button" onClick={endSession}
+            className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            aria-label="End live voice and return to chat">
+            <X className="h-4 w-4" /> End
           </button>
+        </header>
+
+        <main className="flex-1 min-h-0 flex flex-col items-center justify-center gap-5 sm:gap-7">
+          <div
+            className={cn('relative flex items-center justify-center rounded-full transition-transform duration-300',
+              phase === 'speaking' && 'scale-[1.035]',
+              phase === 'listening' && liveTranscript && 'scale-105')}
+            onClick={interruptionMode === 'tap' && (phase === 'speaking' || phase === 'thinking') ? interruptPlayback : undefined}
+            role={interruptionMode === 'tap' && (phase === 'speaking' || phase === 'thinking') ? 'button' : undefined}
+            tabIndex={interruptionMode === 'tap' && (phase === 'speaking' || phase === 'thinking') ? 0 : undefined}
+            onKeyDown={(event) => {
+              if (interruptionMode === 'tap' && (event.key === 'Enter' || event.key === ' ')
+                && (phase === 'speaking' || phase === 'thinking')) interruptPlayback();
+            }}
+            aria-label={interruptionMode === 'tap' ? 'Tap the mascot to speak' : undefined}
+          >
+            <div className={cn('absolute w-56 h-56 sm:w-72 sm:h-72 rounded-full blur-3xl opacity-50',
+              phase === 'speaking' ? 'bg-orange-500/45 animate-pulse'
+                : phase === 'listening' ? 'bg-emerald-500/30 animate-pulse' : 'bg-violet-500/40')} />
+            <div className={cn('absolute w-[240px] h-[240px] sm:w-[300px] sm:h-[300px] rounded-full border-2',
+              phase === 'speaking' ? 'border-orange-400/45 animate-ping'
+                : phase === 'listening' ? 'border-emerald-400/40 animate-pulse' : 'border-violet-400/25')} />
+            <div className="relative w-48 h-48 sm:w-60 sm:h-60 flex items-center justify-center">
+              <MascotAvatar thinking={phase === 'thinking'} idle={phase !== 'thinking'} size={240}
+                alt={status} />
+            </div>
+          </div>
+          <div className="flex flex-col items-center max-w-xl w-full gap-3 text-center">
+            <div className="flex items-center gap-2 text-sm font-medium text-violet-200" role="status" aria-live="polite">
+              {phase === 'speaking' ? <Volume2 className="h-4 w-4" />
+                : phase === 'error' ? <MicOff className="h-4 w-4" />
+                  : <Mic className="h-4 w-4" />}
+              {status}
+            </div>
+            <p className="text-xl sm:text-2xl leading-relaxed font-medium min-h-[4.5rem] max-h-36 overflow-y-auto px-2"
+              aria-live="polite" aria-atomic="false">{caption}</p>
+            <p className="text-xs text-white/45">
+              {phase === 'listening' ? 'Speak naturally — Lyo will answer when you finish.'
+                : phase === 'speaking' && interruptionMode === 'speech' ? 'Just start talking to interrupt.'
+                  : (phase === 'speaking' || phase === 'thinking') && interruptionMode === 'tap'
+                    ? 'Hands-free interruption is unavailable in this browser. Tap Lyo to speak.'
+                    : phase === 'thinking' ? 'Your conversation is being saved.' : ' '}
+            </p>
+          </div>
+        </main>
+
+        {showTranscript && (
+          <section className="shrink-0 max-h-[38vh] overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-4 mb-4"
+            aria-label="Live transcript" id="lyo-voice-transcript">
+            <h3 className="font-semibold text-sm text-white/75 mb-3">Conversation transcript</h3>
+            <div className="flex flex-col gap-3">
+              {transcriptMessages.length === 0 && <p className="text-sm text-white/50">Your conversation will appear here as you speak.</p>}
+              {transcriptMessages.map((message) => {
+                const assistantCurrentlySpeaking = phase === 'speaking'
+                  && message.role === 'assistant' && message.id === latestAssistant?.id;
+                const text = assistantCurrentlySpeaking
+                  ? liveAssistantCaption : message.content;
+                if (!text.trim()) return null;
+                return (
+                  <div key={message.id} className={cn('text-sm leading-relaxed rounded-xl p-3',
+                    message.role === 'user' ? 'bg-violet-500/20 ml-6' : 'bg-white/10 mr-6')}>
+                    <span className="block text-[11px] font-semibold text-white/45 mb-1">
+                      {message.role === 'user' ? 'You' : 'Lyo'}
+                    </span>
+                    <p className="whitespace-pre-wrap">{text}</p>
+                  </div>
+                );
+              })}
+              {phase === 'listening' && liveTranscript && (
+                <div className="rounded-xl bg-violet-500/20 ml-6 p-3 text-sm">
+                  <span className="block text-[11px] text-white/45 mb-1">You · live</span>
+                  {liveTranscript}
+                </div>
+              )}
+            </div>
+          </section>
         )}
-        <button
-          type="button"
-          onClick={endSession}
-          className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs text-white/75 shrink-0"
-        >
-          End
-        </button>
+        <footer className="flex items-center justify-center gap-3">
+          <button type="button" onClick={() => setShowTranscript((shown) => !shown)}
+            aria-expanded={showTranscript} aria-controls="lyo-voice-transcript"
+            className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-medium hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+            <MessageSquareText className="h-4 w-4" />
+            {showTranscript ? 'Hide transcript' : 'Transcript'}
+          </button>
+          {phase === 'error' && (
+            <button type="button" onClick={() => { setErrorDetail(''); changePhase('listening'); startRecognition(); }}
+              className="rounded-full bg-violet-500 px-5 py-3 text-sm font-medium">Try microphone again</button>
+          )}
+        </footer>
+        {debugEnabled && <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-white/50">
+          {debugLog.length ? debugLog.join('\n') : 'waiting for speech engine…'}
+        </pre>}
       </div>
-      {debugEnabled && (
-        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-xl bg-black/50 px-2.5 py-2 font-mono text-[10px] leading-snug text-white/60">
-          {debugLog.length ? debugLog.join('\n') : 'waiting for the speech engine…'}
-        </pre>
-      )}
     </div>
   );
 }
