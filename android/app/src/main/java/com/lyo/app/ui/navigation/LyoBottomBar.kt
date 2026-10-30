@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
@@ -68,8 +69,14 @@ internal fun LyoBottomBar(currentRoute: String?, onNavigate: (String) -> Unit) {
         label = "mascotBreathing",
     )
     Row(
-        modifier = Modifier.fillMaxWidth().height(84.dp)
-            .background(Color(0xD00D0F18)),
+        // MainActivity enables edge-to-edge drawing. The app's navigation
+        // surface needs its own system-bar inset; otherwise Samsung's 3-button
+        // navigation obscures the tabs and the floating mascot.
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xD00D0F18))
+            .navigationBarsPadding()
+            .height(84.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
