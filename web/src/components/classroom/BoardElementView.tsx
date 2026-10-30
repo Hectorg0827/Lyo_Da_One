@@ -380,7 +380,9 @@ function QuizView({
         <p
           className={cn(
             'text-sm rounded-lg border px-3 py-2',
-            el.wasCorrect
+            el.wasCorrect === undefined
+              ? 'text-lyo-100 bg-lyo-500/10 border-lyo-400/25'
+              : el.wasCorrect
               ? 'text-green-200 bg-green-500/10 border-green-500/25'
               : 'text-amber-100 bg-amber-500/10 border-amber-500/25',
           )}

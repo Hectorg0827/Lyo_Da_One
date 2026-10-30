@@ -88,6 +88,53 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
 const taught = store => store.getState().board.filter(el => el.kind !== 'opening');
 const component = (type, rest) => ({ event_type: 'component_render', component: { type, component_id: type, ...rest } });
 
+test('diagnostic feedback is visible and spoken while the next scene is still pending', () => {
+  const { store, sockets, tick } = classroom();
+  const socket = sockets[0];
+  socket.onopen();
+  socket.receive(component('QuizCard', { component_id: 'probe', question: 'Which piece is larger?',
+    options: [{ id: 'a', label: 'One half' }, { id: 'b', label: 'One third' }] }));
+  store.getState().answerQuiz('probe', { id: 'a', label: 'One half' });
+  const event = { event_type: 'answer_feedback', session_id: 'lesson', data: {
+    component_id: 'probe', verdict: 'correct', language_code: 'en-US',
+    feedback: "That's correct. Fewer equal pieces leave more on each one. Let's start with practice.",
+  } };
+  socket.receive(event);
+  const result = taught(store)[0];
+  assert.equal(result.wasCorrect, true);
+  assert.equal(result.feedback, event.data.feedback);
+  assert.equal(store.getState().caption.text, event.data.feedback);
+  assert.equal(store.getState().waitingForScene, true);
+  assert.equal(store.getState().canContinue, false);
+  const transcriptLength = store.getState().transcript.length;
+  socket.receive(event);
+  socket.receive({ ...event, session_id: 'another-lesson', data: { ...event.data, feedback: 'Stale result' } });
+  socket.receive({ ...event, data: { ...event.data, component_id: 'old-probe', feedback: 'Wrong question' } });
+  assert.equal(store.getState().transcript.length, transcriptLength);
+  assert.equal(taught(store)[0].feedback, event.data.feedback);
+  tick(20);
+  assert.equal(store.getState().stallPhase, 'slow');
+  socket.receive({ event_type: 'scene_start', scene: {} });
+  socket.receive(component('ExampleBlock', { content: 'Our next worked example.' }));
+  assert.equal(store.getState().waitingForScene, false);
+  assert.equal(store.getState().boardHistory.at(-1).find(item => item.id === 'probe').feedback, event.data.feedback);
+  store.getState().disconnect();
+});
+
+test('incorrect and not-sure results keep their distinct server verdicts', () => {
+  for (const [verdict, expected] of [['incorrect', false], ['declined', undefined]]) {
+    const { store, sockets } = classroom();
+    sockets[0].receive(component('QuizCard', { component_id: 'probe', question: 'Which piece?', options: [] }));
+    store.getState().answerQuiz('probe', { id: 'b', label: 'My answer' });
+    sockets[0].receive({ event_type: 'answer_feedback', session_id: 'lesson', data: {
+      component_id: 'probe', verdict, feedback: 'Let us build this from the beginning.',
+    } });
+    assert.equal(taught(store)[0].wasCorrect, expected);
+    assert.ok(taught(store)[0].feedback);
+    store.getState().disconnect();
+  }
+});
+
 test('new speech preserves the current board until replacement board content arrives', () => {
   const { store, sockets } = classroom(); const socket = sockets[0];
   socket.receive(component('TeacherMessage', { text: JSON.stringify([{ type: 'board', content: 'Current example' }]) }));
