@@ -23,7 +23,10 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -73,14 +76,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
+import com.lyo.app.R
+import com.lyo.app.data.Session
 import com.lyo.app.data.api.AiConversationMessageDto
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.ChatStreamClient
@@ -959,7 +967,7 @@ fun ChatScreen(nav: NavHostController) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(Color.Transparent)
             .imePadding(),
     ) {
         Row(
@@ -967,7 +975,24 @@ fun ChatScreen(nav: NavHostController) {
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            Text("LYO", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                modifier = Modifier.weight(1f),
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.mascot_standing),
+                    contentDescription = null,
+                    modifier = Modifier.size(32.dp),
+                )
+                Column {
+                    Text("Lyo", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+                    Text(
+                        "● online", color = Color(0xFF86EFAC),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
             TextButton(onClick = { nav.navigate("test-prep") }) { Text("Test Prep", color = LyoPurple) }
             TextButton(
                 enabled = !isStreaming && !uploadingAttachment,
@@ -994,32 +1019,58 @@ fun ChatScreen(nav: NavHostController) {
                     .padding(horizontal = 24.dp),
             ) {
                 Text(
-                    text = "LYO",
+                    text = "Hello, ${Session.user?.displayName?.substringBefore(" ")?.takeIf { it.isNotBlank() } ?: "there"}!",
                     style = MaterialTheme.typography.headlineLarge,
-                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFFFA34D),
                 )
                 Text(
-                    text = "Ask me anything about learning",
+                    text = "Ready to embark on a learning journey?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
+                    color = TextPrimary.copy(alpha = 0.82f),
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
                 )
-                Suggestions.forEach { suggestion ->
+                Box(contentAlignment = Alignment.Center) {
                     Box(
-                        modifier = Modifier
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Surface)
-                            .border(1.dp, BorderColor, RoundedCornerShape(20.dp))
-                            .clickable(enabled = !isStreaming) { send(suggestion) }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                    ) {
-                        Text(
-                            text = suggestion,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary,
-                        )
+                        modifier = Modifier.size(180.dp).background(
+                            Brush.radialGradient(
+                                listOf(Color(0x667C3AED), Color(0x33FF8C00), Color.Transparent),
+                            ),
+                            CircleShape,
+                        ),
+                    )
+                    Image(
+                        painter = painterResource(R.drawable.mascot_standing),
+                        contentDescription = "Lyo is ready to help you learn",
+                        modifier = Modifier.size(160.dp),
+                    )
+                }
+                Text(
+                    text = "Ask me anything about learning",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(vertical = 12.dp),
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                ) {
+                    Suggestions.forEach { suggestion ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .border(1.dp, Color.White.copy(alpha = 0.13f), RoundedCornerShape(20.dp))
+                                .clickable(enabled = !isStreaming) { send(suggestion) }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                        ) {
+                            Text(
+                                text = suggestion,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextPrimary,
+                            )
+                        }
                     }
                 }
             }
@@ -1099,7 +1150,7 @@ fun ChatScreen(nav: NavHostController) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Surface)
+                .background(Color(0xE80D0F18))
                 .padding(horizontal = 8.dp, vertical = 8.dp),
         ) {
             IconButton(
@@ -1292,8 +1343,8 @@ private fun MessageBubble(
             .let {
                 if (isUser) it.background(LyoBrandGradient)
                 else it
-                    .background(Surface)
-                    .border(1.dp, BorderColor, bubbleShape)
+                    .background(Color.White.copy(alpha = 0.075f))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), bubbleShape)
             }
             .padding(horizontal = 14.dp, vertical = 10.dp)
 
