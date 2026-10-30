@@ -207,6 +207,9 @@ interface LyoApiService {
     @GET("gamification/overview")
     suspend fun gamificationOverview(): JsonObject
 
+    @GET("api/v1/personalization/concepts/summary")
+    suspend fun conceptSummary(): JsonObject
+
     @GET("gamification/my-achievements")
     suspend fun achievements(
         @Query("completed_only") completedOnly: Boolean = false,
