@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MenuBook
@@ -50,6 +51,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -68,6 +70,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -194,16 +198,7 @@ fun HomeScreen(nav: NavHostController) {
                 ) {
                     Icon(Icons.Filled.Email, contentDescription = "Messages", tint = TextSecondary)
                 }
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.size(38.dp).clickable { nav.navigate(Routes.PROFILE) },
-                ) {
-                    LyoAvatar(
-                        name = Session.user?.displayName ?: "Learner",
-                        avatarUrl = null,
-                        size = 36,
-                    )
-                }
+                HomeAccountMenu(nav)
             }
         }
 
@@ -853,6 +848,93 @@ private fun FlipButton(
  * sheet; "Post to Community" publishes inside Lyo's own Community feed — see
  * StackRepository.postCourseToCommunity's doc comment.
  */
+/**
+ * Mirrors the Web TopBar avatar menu: tapping the learner's identity must
+ * offer explicit destinations, not immediately navigate to Profile.
+ */
+@Composable
+private fun HomeAccountMenu(nav: NavHostController) {
+    var expanded by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val user = Session.user
+
+    Box {
+        IconButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier
+                .size(40.dp)
+                .semantics { contentDescription = "Open profile menu" },
+        ) {
+            LyoAvatar(
+                name = user?.displayName ?: user?.username ?: "Learner",
+                avatarUrl = null,
+                size = 36,
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .width(240.dp)
+                .background(Color(0xFF0D0F18)),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    text = user?.displayName?.takeIf { it.isNotBlank() }
+                        ?: user?.username ?: "Your account",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = user?.email.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            DropdownMenuItem(
+                text = { Text("Profile", color = TextSecondary) },
+                leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null, tint = TextSecondary) },
+                onClick = {
+                    expanded = false
+                    nav.navigate(Routes.PROFILE) { launchSingleTop = true }
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Settings", color = TextSecondary) },
+                leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null, tint = TextSecondary) },
+                onClick = {
+                    expanded = false
+                    nav.navigate(Routes.SETTINGS) { launchSingleTop = true }
+                },
+            )
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            DropdownMenuItem(
+                text = { Text("Logout", color = Color(0xFFF87171)) },
+                leadingIcon = {
+                    Icon(Icons.Filled.ExitToApp, contentDescription = null, tint = Color(0xFFF87171))
+                },
+                onClick = {
+                    expanded = false
+                    scope.launch {
+                        Session.logout()
+                        nav.navigate(Routes.LOGIN) { popUpTo(0) }
+                    }
+                },
+            )
+        }
+    }
+}
+
 @Composable
 private fun StackCardMenu(
     onShareExternally: () -> Unit,
