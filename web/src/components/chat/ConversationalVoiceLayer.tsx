@@ -1204,7 +1204,7 @@ export default function ConversationalVoiceLayer() {
 
   const latestAssistant = [...(conversation?.messages ?? [])].reverse()
     .find((message) => message.role === 'assistant');
-  const liveAssistantCaption = spokenText?.messageId === latestAssistant?.id
+  const liveAssistantCaption = spokenText && latestAssistant && spokenText.messageId === latestAssistant.id
     ? spokenText.text : '';
   const status = phase === 'listening'
     ? (micSilent ? 'Check your microphone permission' : 'Listening')
