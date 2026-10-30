@@ -20,6 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -50,6 +54,8 @@ import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
 import com.lyo.app.ui.components.LyoAvatar
 import com.lyo.app.ui.components.LyoBrandGradient
+import com.lyo.app.ui.components.LearnerStatsGrid
+import com.lyo.app.ui.components.learnerStats
 import com.lyo.app.ui.components.formatTimeAgo
 import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.screens.clips.CreatorStats
@@ -63,7 +69,7 @@ import java.io.IOException
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 
-private val OwnProfileTabs = listOf("Activity", "Clips", "Achievements", "Stats")
+private val OwnProfileTabs = listOf("Activity", "Clips", "Achievements")
 private val PublicProfileTabs = listOf("Activity")
 
 private data class AchievementUi(
@@ -106,6 +112,7 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
     var clipsError by remember(userId) { mutableStateOf<String?>(null) }
 
     var overview by remember(userId) { mutableStateOf<JsonObject?>(null) }
+    var conceptSummary by remember(userId) { mutableStateOf<JsonObject?>(null) }
     var statsLoading by remember(userId) { mutableStateOf(false) }
     var statsLoaded by remember(userId) { mutableStateOf(false) }
     var statsError by remember(userId) { mutableStateOf<String?>(null) }
@@ -177,9 +184,13 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
             statsLoaded = false
             statsError = null
             overview = null
+            conceptSummary = null
             runCatching { ApiClient.api.gamificationOverview() }
                 .onSuccess { overview = it }
                 .onFailure { statsError = contentLoadMessage(it, "stats") }
+            // Same authoritative concept mastery endpoint as Web Profile.
+            runCatching { ApiClient.api.conceptSummary() }
+                .onSuccess { conceptSummary = it }
             statsLoading = false
             statsLoaded = true
         } else {
@@ -188,6 +199,7 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
             achievementsLoaded = false
             achievementsError = null
             overview = null
+            conceptSummary = null
             statsLoading = false
             statsLoaded = false
             statsError = null
@@ -218,62 +230,10 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier
             .fillMaxSize()
-            .background(Background),
+            .background(Color.Transparent),
     ) {
         item {
-            GlassCard(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                ) {
-                    LyoAvatar(
-                        name = user.displayName,
-                        avatarUrl = user.avatarUrl,
-                        size = 80,
-                    )
-                    Text(
-                        text = user.displayName,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = TextPrimary,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                    user.username?.takeIf { it.isNotBlank() }?.let { username ->
-                        Text(
-                            text = "@$username",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary,
-                        )
-                    }
-                    if (!user.bio.isNullOrBlank()) {
-                        Text(
-                            text = user.bio,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
-                        modifier = Modifier.padding(top = 14.dp),
-                    ) {
-                        CountStat(user.followersCount ?: 0, "Followers")
-                        CountStat(user.followingCount ?: 0, "Following")
-                        CountStat(user.coursesCompleted ?: 0, "Completed")
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.padding(top = 14.dp),
-                    ) {
-                        StatChip("🔥 ${user.streak ?: 0} day streak")
-                        StatChip("⚡ ${user.resolvedXp} XP")
-                        StatChip("Lv ${user.resolvedLevel}")
-                    }
-
-                    Spacer(Modifier.height(16.dp))
+            ProfileHero(user = user) {
                     if (isOwn) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -284,13 +244,13 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                                 .padding(horizontal = 20.dp, vertical = 10.dp),
                         ) {
                             Icon(
-                                Icons.Filled.Settings,
+                                Icons.Filled.Edit,
                                 contentDescription = null,
                                 tint = TextSecondary,
                                 modifier = Modifier.size(16.dp),
                             )
                             Text(
-                                text = "  Settings",
+                                text = "  Edit Profile",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = TextPrimary,
                             )
@@ -349,7 +309,12 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
                             )
                         }
                     }
-                }
+            }
+        }
+
+        if (isOwn) {
+            item {
+                LearnerStatsGrid(learnerStats(overview, conceptSummary, user))
             }
         }
 
@@ -357,19 +322,34 @@ fun ProfileScreen(nav: NavHostController, userId: String? = null) {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(profileTabs) { tab ->
                     val active = selectedTab == tab
-                    Text(
-                        text = tab,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (active) Color.White else TextSecondary,
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp),
                         modifier = Modifier
                             .clip(RoundedCornerShape(12.dp))
                             .let {
                                 if (active) it.background(LyoBrandGradient)
-                                else it.background(Surface)
+                                else it.background(Color.White.copy(alpha = 0.045f))
                             }
                             .clickable { selectedTab = tab }
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                    )
+                            .padding(horizontal = 15.dp, vertical = 10.dp),
+                    ) {
+                        Icon(
+                            imageVector = when (tab) {
+                                "Activity" -> Icons.Filled.People
+                                "Clips" -> Icons.Filled.PlayCircle
+                                else -> Icons.Filled.Star
+                            },
+                            contentDescription = null,
+                            tint = if (active) Color.White else TextSecondary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            tab,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (active) Color.White else TextSecondary,
+                        )
+                    }
                 }
             }
         }
