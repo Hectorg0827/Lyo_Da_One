@@ -201,6 +201,7 @@ fun ChatScreen(nav: NavHostController) {
     val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
     var dictating by remember { mutableStateOf(false) }
+    var recognizerInFlight by remember { mutableStateOf(false) }
     var inputError by remember { mutableStateOf<String?>(null) }
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
@@ -607,6 +608,7 @@ fun ChatScreen(nav: NavHostController) {
     fun stopVoiceConversation() {
         voiceConversation = false
         dictating = false
+        recognizerInFlight = false
         liveVoiceTranscript = ""
         voiceThinkingNudge = ""
         spokenRanges.clear()
@@ -621,7 +623,7 @@ fun ChatScreen(nav: NavHostController) {
     }
 
     fun startVoiceRecognition() {
-        if (!voiceConversation || dictating) return
+        if (!voiceConversation || recognizerInFlight) return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
@@ -642,9 +644,11 @@ fun ChatScreen(nav: NavHostController) {
         }
         liveVoiceTranscript = ""
         runCatching {
+            recognizerInFlight = true
             recognizer.startListening(intent)
             dictating = true
         }.onFailure {
+            recognizerInFlight = false
             dictating = false
             inputError = "Speech recognition is not available on this device."
         }
@@ -673,6 +677,7 @@ fun ChatScreen(nav: NavHostController) {
                 override fun onEndOfSpeech() { dictating = false }
 
                 override fun onError(error: Int) {
+                    recognizerInFlight = false
                     dictating = false
                     if (voiceConversation) {
                         mainHandler.postDelayed({ voiceListenNonce += 1 }, 250)
@@ -680,6 +685,7 @@ fun ChatScreen(nav: NavHostController) {
                 }
 
                 override fun onResults(results: Bundle?) {
+                    recognizerInFlight = false
                     dictating = false
                     val transcript = results
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -772,7 +778,7 @@ fun ChatScreen(nav: NavHostController) {
     }
 
     LaunchedEffect(voiceConversation, voiceListenNonce, isStreaming, speakingMessageId) {
-        if (voiceConversation && !dictating) {
+        if (voiceConversation && !recognizerInFlight) {
             delay(180)
             startVoiceRecognition()
         }
