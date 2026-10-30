@@ -48,6 +48,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -84,6 +85,8 @@ import com.lyo.app.ui.components.CardGradients
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
 import com.lyo.app.ui.components.LyoAvatar
+import com.lyo.app.ui.components.LearnerStatsStrip
+import com.lyo.app.ui.components.learnerStats
 import com.lyo.app.ui.components.SectionHeader
 import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.LyoAmber
@@ -97,6 +100,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(nav: NavHostController) {
     var overview by remember { mutableStateOf<JsonObject?>(null) }
+    var conceptSummary by remember { mutableStateOf<JsonObject?>(null) }
     var featuredCourses by remember { mutableStateOf<List<CourseDto>>(emptyList()) }
     var courseStacks by remember { mutableStateOf<List<StackItemDto>>(emptyList()) }
     var dueReviews by remember { mutableStateOf<List<DueReviewItemDto>>(emptyList()) }
@@ -110,6 +114,9 @@ fun HomeScreen(nav: NavHostController) {
     LaunchedEffect(Unit) {
         runCatching { ApiClient.api.gamificationOverview() }
             .onSuccess { overview = it }
+
+        runCatching { ApiClient.api.conceptSummary() }
+            .onSuccess { conceptSummary = it }
 
         runCatching { ApiClient.api.courses(0, 5) }
             .onSuccess {
@@ -150,11 +157,9 @@ fun HomeScreen(nav: NavHostController) {
     val xp = runCatching {
         overview?.getAsJsonObject("xp_summary")?.get("total")?.asInt
     }.getOrNull() ?: Session.user?.resolvedXp ?: 0
-    val level = runCatching {
-        overview?.getAsJsonObject("user_level")?.get("level")?.asInt
-    }.getOrNull() ?: Session.user?.resolvedLevel ?: 1
-
-    val hasLearningActivity = courseStacks.isNotEmpty() || xp > 0 || streak > 0
+    val conceptTotal = runCatching { conceptSummary?.get("total")?.asInt }.getOrNull() ?: 0
+    val hasLearningActivity = courseStacks.isNotEmpty() || xp > 0 || streak > 0 || conceptTotal > 0
+    val learner = Session.user
 
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
@@ -230,107 +235,12 @@ fun HomeScreen(nav: NavHostController) {
             )
         }
 
-        if (hasLearningActivity) {
-        item {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                StatCard(
-                    emoji = "🔥",
-                    value = "$streak",
-                    label = "Day streak",
-                    accent = LyoAmber,
-                    modifier = Modifier.weight(1f),
-                )
-                StatCard(
-                    emoji = "⚡",
-                    value = "$xp",
-                    label = "XP earned",
-                    accent = LyoPurple,
-                    modifier = Modifier.weight(1f),
-                )
-                StatCard(
-                    emoji = "🏆",
-                    value = "$level",
-                    label = "Level",
-                    accent = LyoGreen,
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
-        }
-
-        if (dueReviews.isNotEmpty() || reviewError != null) {
+        if (hasLearningActivity && learner != null) {
             item {
-                SectionHeader("Ready to review")
-                when {
-                    dueReviews.isNotEmpty() -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            dueReviews.take(3).forEach { review ->
-                                val title = review.skillName?.takeIf { it.isNotBlank() }
-                                    ?: humanizeSkillId(review.skillId)
-                                GlassCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            nav.navigate(
-                                                Routes.reviewClassroom(
-                                                    skillId = review.skillId,
-                                                    topic = title,
-                                                ),
-                                            )
-                                        },
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(14.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.MenuBook,
-                                            contentDescription = null,
-                                            tint = LyoPurple,
-                                            modifier = Modifier.size(22.dp),
-                                        )
-                                        Column(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .padding(start = 10.dp),
-                                        ) {
-                                            Text(
-                                                text = title,
-                                                style = MaterialTheme.typography.titleSmall,
-                                                color = TextPrimary,
-                                            )
-                                            Text(
-                                                text = when {
-                                                    review.daysOverdue <= 0 ->
-                                                        "Due now · fresh retrieval"
-                                                    review.daysOverdue == 1 ->
-                                                        "1 day overdue · fresh retrieval"
-                                                    else ->
-                                                        "${review.daysOverdue} days overdue · fresh retrieval"
-                                                },
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = TextSecondary,
-                                                modifier = Modifier.padding(top = 2.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else -> GlassCard(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = reviewError
-                                ?: "Your review schedule could not be loaded right now.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(14.dp),
-                        )
-                    }
-                }
+                LearnerStatsStrip(
+                    stats = learnerStats(overview, conceptSummary, learner),
+                    onOpenProfile = { nav.navigate(Routes.PROFILE) },
+                )
             }
         }
 
@@ -360,6 +270,13 @@ fun HomeScreen(nav: NavHostController) {
                             selected = stackFilter == filter,
                             onClick = { stackFilter = filter },
                             label = { Text("${filter.label} $count") },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = Color(0xFF161B2E),
+                                labelColor = TextSecondary,
+                                selectedContainerColor = Color(0xFF55447B),
+                                selectedLabelColor = Color.White,
+                            ),
                         )
                     }
                 }
@@ -533,6 +450,97 @@ fun HomeScreen(nav: NavHostController) {
         }
         }
 
+        if (dueReviews.isNotEmpty() || reviewError != null) {
+            item {
+                SectionHeader("Next for you")
+                if (dueReviews.isNotEmpty()) {
+                    Text(
+                        text = if (dueReviews.size == 1)
+                            "1 concept is ready for a retrieval check."
+                        else "${dueReviews.size} concepts are ready for a retrieval check.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 10.dp),
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        dueReviews.take(3).forEach { review ->
+                            val title = review.skillName?.takeIf { it.isNotBlank() }
+                                ?: humanizeSkillId(review.skillId)
+                            GlassCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        nav.navigate(
+                                            Routes.reviewClassroom(
+                                                skillId = review.skillId,
+                                                topic = title,
+                                            ),
+                                        )
+                                    },
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(11.dp),
+                                    modifier = Modifier.padding(12.dp),
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(Color(0x22F59E0B))
+                                            .border(1.dp, Color(0x44F59E0B), RoundedCornerShape(12.dp)),
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.MenuBook,
+                                            contentDescription = null,
+                                            tint = LyoAmber,
+                                            modifier = Modifier.size(21.dp),
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = title,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = TextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = when {
+                                                review.daysOverdue <= 0 -> "Due now · fresh retrieval"
+                                                review.daysOverdue == 1 -> "1 day overdue · fresh retrieval"
+                                                else -> "${review.daysOverdue} days overdue · fresh retrieval"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    Text(
+                                        "Review ›",
+                                        color = Color(0xFFA9B7FF),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    GlassCard(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = reviewError ?: "Your review schedule could not be loaded right now.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(14.dp),
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             SectionHeader("Explore Courses")
             when {
@@ -616,40 +624,6 @@ private fun humanizeSkillId(value: String): String =
         .joinToString(" ") { token ->
             token.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         }
-
-@Composable
-private fun StatCard(
-    emoji: String,
-    value: String,
-    label: String,
-    accent: Color,
-    modifier: Modifier = Modifier,
-) {
-    GlassCard(modifier = modifier) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp, horizontal = 8.dp),
-        ) {
-            Text(emoji, style = MaterialTheme.typography.headlineSmall)
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                color = accent,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-    }
-}
 
 /**
  * A card in the "Your Stacks" row — a course the user has actually
