@@ -12,7 +12,7 @@ import {
   tidyTranscript,
 } from '@/lib/speech-transcript.mjs';
 import { joinSpoken, spokenPrefix } from '@/lib/voice-reveal.mjs';
-import { playVoiceBlob, speakVoiceFallback, unspokenRemainder } from '@/lib/voice-playback.mjs';
+import { playVoiceBlob, speakVoiceFallback, unspokenRemainder, pauseAfterSpeechMs, waitForSpeechPause } from '@/lib/voice-playback.mjs';
 import { prefersTapInterruption, shouldEndTurnOnSpeech } from '@/lib/voice-barge-in.mjs';
 import type { MicMonitorState } from '@/lib/voice-barge-in.mjs';
 import {
@@ -822,6 +822,10 @@ export default function ConversationalVoiceLayer() {
         if (!current()) return;
         commitSpoken(segment.messageId, spoken);
         ttsAbortRef.current = null;
+        // Clip boundaries otherwise sound abrupt; stop immediately on barge-in.
+        if (current() && voiceSegmentQueueRef.current.length > 0) {
+          await waitForSpeechPause(pauseAfterSpeechMs(spoken), { signal: owner.signal });
+        }
       }
     } catch {
       if (current()) {
@@ -874,7 +878,7 @@ export default function ConversationalVoiceLayer() {
       const controller = new AbortController();
       const audio = api.tts.synthesizeStream(event.text, {
         language: speechLocale(),
-        speed: 1.02,
+        speed: 0.98,
         signal: controller.signal,
       }).catch(() => null);
       voiceSegmentQueueRef.current.push({
@@ -903,7 +907,7 @@ export default function ConversationalVoiceLayer() {
           const controller = new AbortController();
           const audio = api.tts.synthesizeStream(event.text, {
             language: speechLocale(),
-            speed: 1.02,
+            speed: 0.98,
             signal: controller.signal,
           }).catch(() => null);
           voiceSegmentQueueRef.current.push({
@@ -939,7 +943,7 @@ export default function ConversationalVoiceLayer() {
       voiceSegmentQueueRef.current.push({
         text: spoken, sequence, messageId, controller,
         audio: api.tts.synthesizeStream(spoken, {
-          language: speechLocale(), speed: 1.02, signal: controller.signal,
+          language: speechLocale(), speed: 0.98, signal: controller.signal,
         }).catch(() => null),
       });
     });
