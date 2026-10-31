@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.media.AudioAttributes
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -143,6 +144,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 
+private const val VOICE_ENGINE_HELP = "Lyo can't speak yet. Check Android Settings > General management > Text-to-speech output, then tap Test speaker."
+private const val VOICE_PLAYBACK_HELP = "Lyo couldn't play audio. Check Media volume and Text-to-speech output, then tap Test speaker."
 private const val MAX_CHAT_CHARS = 4_000
 private const val MAX_CHAT_ATTACHMENT_BYTES = 10L * 1024 * 1024
 private const val MAX_CHAT_ATTACHMENT_TOTAL_BYTES = 20L * 1024 * 1024
@@ -246,6 +249,8 @@ fun ChatScreen(nav: NavHostController) {
     var inputError by remember { mutableStateOf<String?>(null) }
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
+    var ttsOutputProblem by remember { mutableStateOf<String?>(null) }
+    var voiceListeningArmed by remember { mutableStateOf(true) }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
     var voiceConversation by remember { mutableStateOf(false) }
     var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
@@ -271,18 +276,42 @@ fun ChatScreen(nav: NavHostController) {
     DisposableEffect(context) {
         lateinit var engine: TextToSpeech
         engine = TextToSpeech(context) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val languageResult = engine.setLanguage(Locale.getDefault())
-                textToSpeechReady = languageResult != TextToSpeech.LANG_MISSING_DATA &&
-                    languageResult != TextToSpeech.LANG_NOT_SUPPORTED
-            } else {
-                textToSpeechReady = false
+            // TTS can initialize on a binder thread. Post to the UI thread,
+            // after the constructor assigns engine, before touching Compose.
+            mainHandler.post {
+                if (status == TextToSpeech.SUCCESS) {
+                    var languageResult = engine.setLanguage(Locale.getDefault())
+                    if (languageResult == TextToSpeech.LANG_MISSING_DATA ||
+                        languageResult == TextToSpeech.LANG_NOT_SUPPORTED
+                    ) {
+                        languageResult = engine.setLanguage(Locale.US)
+                    }
+                    val ready = languageResult != TextToSpeech.LANG_MISSING_DATA &&
+                        languageResult != TextToSpeech.LANG_NOT_SUPPORTED
+                    textToSpeechReady = ready
+                    if (ready) {
+                        engine.setSpeechRate(0.98f)
+                        engine.setAudioAttributes(
+                            AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_MEDIA)
+                                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                                .build(),
+                        )
+                        ttsOutputProblem = null
+                    } else {
+                        ttsOutputProblem = VOICE_ENGINE_HELP
+                    }
+                } else {
+                    textToSpeechReady = false
+                    ttsOutputProblem = VOICE_ENGINE_HELP
+                }
             }
         }
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {
                 mainHandler.post {
                     if (voiceConversation && utteranceId != null) {
+                        if (!utteranceId.startsWith("voice-pause:")) ttsOutputProblem = null
                         spokenRanges[utteranceId]?.let { (prefix, _) -> spokenVoiceCaption = prefix }
                     }
                 }
@@ -320,6 +349,11 @@ fun ChatScreen(nav: NavHostController) {
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
                 mainHandler.post {
+                    if (voiceConversation && utteranceId != null &&
+                        !utteranceId.startsWith("voice-pause:")
+                    ) {
+                        ttsOutputProblem = VOICE_PLAYBACK_HELP
+                    }
                     if (utteranceId?.startsWith("voice-segment:") == true) {
                         pendingVoiceUtterances = (pendingVoiceUtterances - 1).coerceAtLeast(0)
                     }
@@ -374,6 +408,7 @@ fun ChatScreen(nav: NavHostController) {
     ) { granted ->
         if (granted) {
             voiceConversation = true
+            voiceListeningArmed = true
             voiceListenNonce += 1
             inputError = null
         } else {
@@ -555,7 +590,10 @@ fun ChatScreen(nav: NavHostController) {
                                         spokenRanges.remove(utteranceId)
                                         pendingVoiceUtterances =
                                             (pendingVoiceUtterances - 1).coerceAtLeast(0)
+                                        ttsOutputProblem = VOICE_PLAYBACK_HELP
                                     }
+                                } else if (!textToSpeechReady) {
+                                    ttsOutputProblem = VOICE_ENGINE_HELP
                                 }
                             }
                         }
@@ -576,12 +614,17 @@ fun ChatScreen(nav: NavHostController) {
                                 lastSpokenVoiceText = event.text
                                 spokenRanges[utteranceId] = "" to event.text
                                 speakingMessageId = utteranceId
-                                textToSpeech?.speak(
+                                val accepted = textToSpeech?.speak(
                                     event.text,
                                     TextToSpeech.QUEUE_FLUSH,
                                     null,
                                     utteranceId,
-                                )
+                                ) == TextToSpeech.SUCCESS
+                                if (!accepted) {
+                                    speakingMessageId = null
+                                    spokenRanges.remove(utteranceId)
+                                    ttsOutputProblem = VOICE_PLAYBACK_HELP
+                                }
                             } else if (
                                 voiceConversation &&
                                 pendingVoiceUtterances == 0 &&
@@ -626,6 +669,10 @@ fun ChatScreen(nav: NavHostController) {
                 val spokenText = assistant?.let { parseChatContent(it.content).text }?.trim().orEmpty()
                 val engine = textToSpeech
                 val streamedSegments = streamedVoiceSegmentKeys.isNotEmpty()
+                if (assistant != null && spokenText.isNotBlank() && !textToSpeechReady) {
+                    ttsOutputProblem = VOICE_ENGINE_HELP
+                    voiceListeningArmed = false
+                }
                 if (
                     !streamedSegments &&
                     assistant != null &&
@@ -637,7 +684,15 @@ fun ChatScreen(nav: NavHostController) {
                     lastSpokenVoiceText = spokenText
                     spokenRanges[assistant.id] = "" to spokenText
                     speakingMessageId = assistant.id
-                    engine.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, assistant.id)
+                    val accepted = engine.speak(
+                        spokenText, TextToSpeech.QUEUE_FLUSH, null, assistant.id,
+                    ) == TextToSpeech.SUCCESS
+                    if (!accepted) {
+                        speakingMessageId = null
+                        spokenRanges.remove(assistant.id)
+                        ttsOutputProblem = VOICE_PLAYBACK_HELP
+                        voiceListeningArmed = false
+                    }
                 } else if (
                     !voiceSegmentStreamOpen &&
                     pendingVoiceUtterances == 0 &&
@@ -656,6 +711,7 @@ fun ChatScreen(nav: NavHostController) {
 
     fun stopVoiceConversation() {
         voiceConversation = false
+        voiceListeningArmed = false
         dictating = false
         recognizerInFlight = false
         liveVoiceTranscript = ""
@@ -671,8 +727,66 @@ fun ChatScreen(nav: NavHostController) {
         streamedVoiceSegmentKeys.clear()
     }
 
+    fun testVoiceSpeaker() {
+        if (!voiceConversation) return
+        // Avoid the recognizer's own audible start/stop tone while checking
+        // whether the system TTS engine can actually produce speech.
+        voiceListeningArmed = false
+        recognizerInFlight = false
+        dictating = false
+        runCatching { continuousRecognizer?.cancel() }
+        textToSpeech?.stop()
+        val engine = textToSpeech
+        if (!textToSpeechReady || engine == null) {
+            ttsOutputProblem = VOICE_ENGINE_HELP
+            return
+        }
+        val sample = if (voiceLanguageTag.startsWith("es", ignoreCase = true)) {
+            "Hola, soy Lyo. ¿Puedes escuchar mi voz?"
+        } else {
+            "Hi! I'm Lyo. Can you hear me?"
+        }
+        ttsOutputProblem = null
+        spokenVoiceCaption = ""
+        val utteranceId = "voice-speaker-test"
+        spokenRanges[utteranceId] = "" to sample
+        speakingMessageId = utteranceId
+        val accepted = engine.speak(
+            sample, TextToSpeech.QUEUE_FLUSH, null, utteranceId,
+        ) == TextToSpeech.SUCCESS
+        if (!accepted) {
+            speakingMessageId = null
+            spokenRanges.remove(utteranceId)
+            ttsOutputProblem = VOICE_PLAYBACK_HELP
+        }
+    }
+
+    fun interruptVoiceAnswer() {
+        if (!voiceConversation) return
+        textToSpeech?.stop()
+        speakingMessageId = null
+        spokenRanges.clear()
+        pendingVoiceUtterances = 0
+        voiceSegmentStreamOpen = false
+        if (isStreaming) {
+            voiceInterruptedPreviousTurn = true
+            streamJob?.cancel()
+            streamJob = null
+            isStreaming = false
+        }
+        voiceListeningArmed = true
+        voiceListenNonce += 1
+    }
+
     fun startVoiceRecognition() {
-        if (!voiceConversation || recognizerInFlight) return
+        if (!VoiceTurnSafety.canStartRecognizer(
+            active = voiceConversation,
+            listeningEnabled = voiceListeningArmed,
+            generating = isStreaming,
+            assistantSpeaking = speakingMessageId != null,
+            pendingUtterances = pendingVoiceUtterances,
+            recognizerInFlight = recognizerInFlight,
+        )) return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
@@ -738,16 +852,24 @@ fun ChatScreen(nav: NavHostController) {
                 override fun onError(error: Int) {
                     recognizerInFlight = false
                     dictating = false
+                    // The platform may beep on every startListening call.
+                    // A silent timeout or no-match is not permission to restart
+                    // indefinitely; show a Tap to listen control instead.
+                    if (!voiceConversation || !voiceListeningArmed) return
+                    voiceListeningArmed = false
+                    when (error) {
+                        SpeechRecognizer.ERROR_NO_MATCH,
+                        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> Unit
+                        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
+                            inputError = "Microphone permission is required."
+                        else -> inputError =
+                            "Speech recognition paused. Tap Listen to try again."
+                    }
                     if (Build.VERSION.SDK_INT >= 34 && (
                         error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
                             error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE
                     )) {
-                        // Model pack missing: recover in the selected device
-                        // locale without looping through an unsupported mode.
                         enableAutomaticLanguageSwitch = false
-                    }
-                    if (voiceConversation) {
-                        mainHandler.postDelayed({ voiceListenNonce += 1 }, 250)
                     }
                 }
 
@@ -760,7 +882,7 @@ fun ChatScreen(nav: NavHostController) {
                         ?.trim()
                         .orEmpty()
                     val wasSpeaking = speakingMessageId != null || pendingVoiceUtterances > 0
-                    val accepted = voiceConversation &&
+                    val accepted = voiceConversation && voiceListeningArmed &&
                         !VoiceTurnSafety.isLikelyEcho(transcript, lastThinkingNudgeText) &&
                         VoiceTurnSafety.shouldSubmitFinal(
                         heard = transcript,
@@ -784,8 +906,11 @@ fun ChatScreen(nav: NavHostController) {
                             isStreaming = false
                         }
                         send(transcript)
+                        voiceListenNonce += 1
+                    } else {
+                        // Do not restart the recognizer after empty/echo results.
+                        voiceListeningArmed = false
                     }
-                    if (voiceConversation) voiceListenNonce += 1
                 }
 
                 override fun onPartialResults(partialResults: Bundle?) {
@@ -794,7 +919,7 @@ fun ChatScreen(nav: NavHostController) {
                         ?.firstOrNull()
                         ?.trim()
                         .orEmpty()
-                    if (!voiceConversation || partial.isBlank() ||
+                    if (!voiceConversation || !voiceListeningArmed || partial.isBlank() ||
                         VoiceTurnSafety.isLikelyEcho(partial, lastSpokenVoiceText) ||
                         VoiceTurnSafety.isLikelyEcho(partial, lastThinkingNudgeText)
                     ) {
@@ -873,8 +998,18 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
-    LaunchedEffect(voiceConversation, voiceListenNonce, isStreaming, speakingMessageId) {
-        if (voiceConversation && !recognizerInFlight) {
+    LaunchedEffect(
+        voiceConversation, voiceListenNonce, voiceListeningArmed, isStreaming,
+        speakingMessageId, pendingVoiceUtterances,
+    ) {
+        if (VoiceTurnSafety.canStartRecognizer(
+            active = voiceConversation,
+            listeningEnabled = voiceListeningArmed,
+            generating = isStreaming,
+            assistantSpeaking = speakingMessageId != null,
+            pendingUtterances = pendingVoiceUtterances,
+            recognizerInFlight = recognizerInFlight,
+        )) {
             delay(180)
             startVoiceRecognition()
         }
@@ -1037,8 +1172,15 @@ fun ChatScreen(nav: NavHostController) {
             assistantCaption = spokenVoiceCaption,
             thinkingNudge = voiceThinkingNudge,
             messages = messages,
-            error = inputError,
+            error = ttsOutputProblem ?: inputError,
             onEnd = ::stopVoiceConversation,
+            onListen = {
+                voiceListeningArmed = true
+                inputError = null
+                voiceListenNonce += 1
+            },
+            onTestSpeaker = ::testVoiceSpeaker,
+            onInterrupt = ::interruptVoiceAnswer,
         )
     } else {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -1319,6 +1461,7 @@ fun ChatScreen(nav: NavHostController) {
                                 android.content.pm.PackageManager.PERMISSION_GRANTED
                             ) {
                                 voiceConversation = true
+                                voiceListeningArmed = true
                                 voiceListenNonce += 1
                             } else {
                                 voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
