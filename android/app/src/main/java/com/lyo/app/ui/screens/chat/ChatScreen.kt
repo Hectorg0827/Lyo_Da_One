@@ -480,8 +480,20 @@ fun ChatScreen(nav: NavHostController) {
                                 ) {
                                     val utteranceId =
                                         "voice-segment:${event.messageId}:${event.sequence}"
+                                    // Queue a tiny silence only when another clip is already
+                                    // speaking or queued. Barge-in stops the whole TTS queue.
+                                    val pauseMs = if (pendingVoiceUtterances > 0) {
+                                        VoiceTurnSafety.pauseAfterSegmentMs(lastSpokenVoiceText)
+                                    } else 0L
                                     pendingVoiceUtterances += 1
                                     spokenRanges[utteranceId] = lastSpokenVoiceText to event.text
+                                    if (pauseMs > 0L) {
+                                        textToSpeech?.playSilentUtterance(
+                                            pauseMs,
+                                            TextToSpeech.QUEUE_ADD,
+                                            "voice-pause:" + event.messageId + ":" + event.sequence,
+                                        )
+                                    }
                                     val accepted = textToSpeech?.speak(
                                         event.text,
                                         if (pendingVoiceUtterances == 1) {
