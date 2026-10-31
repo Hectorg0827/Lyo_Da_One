@@ -16,8 +16,16 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -84,6 +92,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
@@ -218,6 +227,14 @@ fun ChatScreen(nav: NavHostController) {
     val messages = remember { mutableStateListOf<ChatMsg>() }
     val conversations = remember { mutableStateListOf<AiConversationSummaryDto>() }
     var showHistory by remember { mutableStateOf(false) }
+    val mascotEntrance = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        mascotEntrance.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 760, easing = FastOutSlowInEasing),
+        )
+    }
+    BackHandler(enabled = showHistory) { showHistory = false }
     var historyError by remember { mutableStateOf<String?>(null) }
     var input by remember { mutableStateOf("") }
     var isStreaming by remember { mutableStateOf(false) }
@@ -1083,7 +1100,17 @@ fun ChatScreen(nav: NavHostController) {
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
                 )
-                Box(contentAlignment = Alignment.Center) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.graphicsLayer {
+                        // The bottom-tab mascot rises into its full-size greeting,
+                        // following the mobile-web Chat entrance motion.
+                        translationY = (1f - mascotEntrance.value) * 390.dp.toPx()
+                        scaleX = 0.42f + mascotEntrance.value * 0.58f
+                        scaleY = 0.42f + mascotEntrance.value * 0.58f
+                        alpha = 0.45f + mascotEntrance.value * 0.55f
+                    },
+                ) {
                     Box(
                         modifier = Modifier.size(180.dp).background(
                             Brush.radialGradient(
@@ -1332,7 +1359,17 @@ fun ChatScreen(nav: NavHostController) {
             }
         }
     }
-    if (showHistory) {
+    AnimatedVisibility(
+        visible = showHistory,
+        enter = slideInHorizontally(
+            initialOffsetX = { -it },
+            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        ) + fadeIn(animationSpec = tween(220)),
+        exit = slideOutHorizontally(
+            targetOffsetX = { -it },
+            animationSpec = tween(durationMillis = 200),
+        ) + fadeOut(animationSpec = tween(170)),
+    ) {
         Row(
             modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.64f)),
         ) {
@@ -1348,9 +1385,22 @@ fun ChatScreen(nav: NavHostController) {
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 ) {
-                    Text("LYO", color = TextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(9.dp),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Brush.linearGradient(listOf(LyoPurple, Color(0xFF8D49DB)))),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("LYO", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Text("LYO", color = TextPrimary, fontWeight = FontWeight.Bold)
+                    }
                     IconButton(onClick = { showHistory = false }) {
                         Icon(Icons.Default.Close, contentDescription = "Close conversation history",
                             tint = TextSecondary)
