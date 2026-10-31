@@ -105,7 +105,7 @@ internal class GptLiveTrialStream(
                                 when (json.get("type")?.asString) {
                                     "ready" -> {
                                         startAudio()
-                                        callbacks.onReady()
+                                        if (active.get()) callbacks.onReady()
                                     }
                                     "audio" -> {
                                         val encoded = json.get("audio")?.asString ?: return
