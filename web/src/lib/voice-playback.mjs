@@ -58,7 +58,7 @@ export function speakVoiceFallback(text, { signal, language, onStart } = {}) {
     };
     signal?.addEventListener('abort', abort, { once: true });
     utterance.lang = language || 'en-US';
-    utterance.rate = 1.02;
+    utterance.rate = 0.98;
     utterance.onstart = () => { if (!settled) onStart?.(); };
     utterance.onend = () => finish();
     utterance.onerror = () => finish(new Error('Device speech failed'));
