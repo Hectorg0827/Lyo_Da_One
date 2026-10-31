@@ -241,6 +241,8 @@ test('failed audio speaks only its remainder and proceeds to the next segment', 
   });
   assert.equal(h.utterances[0].text, 'three four.');
   await flush(() => h.utterances[0].onend());
+  assert.equal(h.audios.length, 1, 'the next clip waits for a natural thought boundary');
+  await flush(() => t.mock.timers.tick(130));
   assert.equal(h.audios.length, 2);
   await h.ready();
   await flush(() => h.audios[1].onended());
