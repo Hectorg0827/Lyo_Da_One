@@ -604,10 +604,12 @@ fun ClipsScreen(nav: NavHostController) {
         if (!searchOpen) {
             CreateVideoPill(
                 onClick = { videoPicker.launch("video/*") },
+                // Keep creation on the left of the reel, outside the right-side
+                // Like/Comment/Share/Save rail even on narrow Android phones.
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
+                    .align(Alignment.TopStart)
                     .statusBarsPadding()
-                    .padding(top = 78.dp, end = 16.dp),
+                    .padding(top = 78.dp, start = 12.dp),
             )
         }
     }
@@ -1132,10 +1134,11 @@ private fun CreateVideoPill(onClick: () -> Unit, modifier: Modifier = Modifier) 
             .clip(RoundedCornerShape(50.dp))
             .background(Brush.horizontalGradient(listOf(Color(0xFF2563EB), Color(0xFF9333EA))))
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-        Text("Create video", color = Color.White, fontWeight = FontWeight.Bold)
+        Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Text("Create video", color = Color.White, fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -1384,17 +1387,17 @@ private fun ClipPage(
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 10.dp, bottom = 104.dp),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onLike, enabled = !likePending) {
+                IconButton(onClick = onLike, enabled = !likePending, modifier = Modifier.size(44.dp)) {
                     if (likePending) {
                         CircularProgressIndicator(
                             color = Color.White,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(22.dp),
                             strokeWidth = 2.dp,
                         )
                     } else {
@@ -1402,44 +1405,44 @@ private fun ClipPage(
                             if (liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                             contentDescription = if (liked) "Unlike" else "Like",
                             tint = if (liked) LyoPink else Color.White,
-                            modifier = Modifier.size(30.dp),
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                 }
-                Text(likeCount.toString(), style = MaterialTheme.typography.labelMedium, color = Color.White)
+                Text(likeCount.toString(), style = MaterialTheme.typography.labelSmall, color = Color.White)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onComments) {
+                IconButton(onClick = onComments, modifier = Modifier.size(44.dp)) {
                     Icon(
                         Icons.Outlined.ChatBubbleOutline,
                         contentDescription = "Comments",
                         tint = Color.White,
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier.size(24.dp),
                     )
                 }
                 Text(
                     (clip.commentCount ?: 0).toString(),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                 )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onShare) {
+                IconButton(onClick = onShare, modifier = Modifier.size(44.dp)) {
                     Icon(
                         Icons.Filled.Share,
                         contentDescription = "Share",
                         tint = Color.White,
-                        modifier = Modifier.size(26.dp),
+                        modifier = Modifier.size(23.dp),
                     )
                 }
-                Text("Share", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                Text("Share", style = MaterialTheme.typography.labelSmall, color = Color.White)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onSave, enabled = !savePending) {
+                IconButton(onClick = onSave, enabled = !savePending, modifier = Modifier.size(44.dp)) {
                     if (savePending) {
                         CircularProgressIndicator(
                             color = Color.White,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(22.dp),
                             strokeWidth = 2.dp,
                         )
                     } else {
@@ -1447,28 +1450,28 @@ private fun ClipPage(
                             if (saved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                             contentDescription = if (saved) "Remove saved clip" else "Save",
                             tint = Color.White,
-                            modifier = Modifier.size(28.dp),
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                 }
                 Text(
                     if (saved) "Saved" else "Save",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                 )
             }
             // Report (and Block, inside the sheet); not on the learner's own video.
             onReport?.let { report ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(onClick = report) {
+                    IconButton(onClick = report, modifier = Modifier.size(44.dp)) {
                         Icon(
                             Icons.Outlined.Flag,
                             contentDescription = "Report video",
                             tint = Color.White,
-                            modifier = Modifier.size(26.dp),
+                            modifier = Modifier.size(23.dp),
                         )
                     }
-                    Text("Report", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                    Text("Report", style = MaterialTheme.typography.labelSmall, color = Color.White)
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1476,12 +1479,12 @@ private fun ClipPage(
                     Icons.Outlined.Visibility,
                     contentDescription = "Views",
                     tint = Color.White,
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(23.dp),
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
                     (clip.viewCount ?: 0).toString(),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                 )
             }
