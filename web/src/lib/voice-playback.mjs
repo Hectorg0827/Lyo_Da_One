@@ -72,3 +72,32 @@ export function unspokenRemainder(text, fraction = 0) {
   const played = Number.isFinite(fraction) ? Math.max(0, Math.min(1, fraction)) : 0;
   return words.slice(Math.floor(words.length * played)).join(' ');
 }
+
+
+/** A tiny conversational gap between complete thought clips, never within words. */
+export function pauseAfterSpeechMs(text) {
+  const end = text.trim().replace(/["'”’\\)\\]]+$/u, '').slice(-1);
+  if (end === '?' || end === '!') return 170;
+  if (end === '.') return 125;
+  if (end === ',' || end === ';' || end === ':') return 80;
+  return 0;
+}
+
+/** Barge-in must cancel a pause as promptly as it cancels speech. */
+export function waitForSpeechPause(milliseconds, { signal } = {}) {
+  if (signal?.aborted) return Promise.reject(new DOMException('Cancelled', 'AbortError'));
+  if (milliseconds <= 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const done = (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      if (error) reject(error); else resolve();
+    };
+    const abort = () => done(new DOMException('Cancelled', 'AbortError'));
+    const timer = setTimeout(() => done(), milliseconds);
+    signal?.addEventListener('abort', abort, { once: true });
+  });
+}
