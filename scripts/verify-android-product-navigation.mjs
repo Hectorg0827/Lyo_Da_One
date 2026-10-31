@@ -69,6 +69,12 @@ for (const marker of visibleTabOrder) {
   lastVisibleIndex = index;
 }
 rejectText(bottomBar, 'communityLaunchEnabled = false', 'Android Community tab availability');
+// The + glyph must open the current creation studio, not the legacy sheet.
+// A prior APK had the new CreateScreen but the tab still intercepted it.
+requireText(bottomBar,
+  'GhostTab("Create", Routes.CREATE, "create", currentRoute == Routes.CREATE, onNavigate)',
+  'Android Create studio entry');
+rejectText(bottomBar, 'LyoCreateSheet(', 'Android legacy Create sheet interception');
 requireText(nav, 'composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }', 'Community tab navigation');
 
 
@@ -107,5 +113,16 @@ requireText(createCommunity, 'ApiClient.api.createStudyGroup', 'Android study gr
 requireText(createCommunity, 'vm.createEvent(', 'Android event publish');
 requireText(communityViewModel, 'api.createCommunityEvent(request)', 'Android event publish request');
 requireText(createCommunity, 'endAt.isAfter(startAt)', 'Android event time validation');
+
+
+// The Discover creator control belongs on the left of the video, away from
+// the Like/Comment/Share/Save rail on compact Samsung displays.
+const clipScreen = read('android/app/src/main/java/com/lyo/app/ui/screens/clips/ClipsScreen.kt');
+const createPillCall = clipScreen.slice(
+  clipScreen.indexOf('CreateVideoPill('),
+  clipScreen.indexOf('CreateVideoPill(') + 550,
+);
+requireText(createPillCall, '.align(Alignment.TopStart)', 'Discover Create control placement');
+rejectText(createPillCall, '.align(Alignment.TopEnd)', 'Discover Create control placement');
 
 console.log('Android primary navigation and complete Create workflows match the supported iOS product hierarchy.');
