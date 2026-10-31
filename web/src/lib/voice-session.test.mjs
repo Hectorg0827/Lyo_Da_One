@@ -84,8 +84,9 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
   let messages = [];
   let state = {
     voiceSessionActive: true, isGenerating: false, activeConversationId: 'conversation-1',
+    conversations: [], voiceSpokenText: null,
     setVoiceSessionActive: (value) => update({ voiceSessionActive: value }),
-    setVoiceSpokenText: () => {},
+    setVoiceSpokenText: (value) => update({ voiceSpokenText: value }),
     getActiveConversation: () => ({ messages }),
     interruptGeneration: () => update({ isGenerating: false }),
     sendMessage: async (text, attachments, options) => {
@@ -105,6 +106,7 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
       return promise;
     } } } },
     '@/lib/utils': { cn: (...classes) => classes.filter(Boolean).join(' ') },
+    './MascotAvatar': { __esModule: true, default: () => React.createElement('div', { 'data-testid': 'mascot' }) },
     '@/stores/chat-store': { useChatStore: store },
     '@/lib/speech-transcript.mjs': transcripts,
     '@/lib/voice-reveal.mjs': reveal,
@@ -149,11 +151,33 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
     emit,
     async ready() { await emit({ type: 'voice_ready', text: 'Done.', speak: true }); await flush(() => update({ isGenerating: false })); },
     async click(label) {
-      await flush(() => [...document.querySelectorAll('button')].find((b) => b.textContent === label).click());
+      await flush(() => {
+        const target = label === 'Interrupt'
+          ? document.querySelector('[aria-label="Tap the mascot to speak"]')
+          : [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === label);
+        assert.ok(target, `Missing action: ${label}`);
+        target.click();
+      });
     },
     async restart() { await flush(() => update({ voiceSessionActive: true })); },
+    async setLanguage(language) {
+      await flush(() => {
+        const picker = document.querySelector('select[aria-label="Voice language"]');
+        assert.ok(picker, 'voice language picker must be visible');
+        picker.value = language;
+        picker.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+      });
+      await flush(() => t.mock.timers.tick(100));
+    },
   };
 }
+
+test('end-of-turn timing is fast for complete questions but gives unfinished speech room', () => {
+  assert.equal(conversational.voiceEndOfTurnDelayMs('What is gravity?'), 430);
+  assert.equal(conversational.voiceEndOfTurnDelayMs('Yes'), 420);
+  assert.equal(conversational.voiceEndOfTurnDelayMs('Let me explain because'), 1500);
+  assert.equal(conversational.voiceEndOfTurnDelayMs('I think, '), 1500);
+});
 
 test('Android plays its answer without another mic capture or phantom echo turn', async (t) => {
   const h = await harness(t);
@@ -164,7 +188,7 @@ test('Android plays its answer without another mic capture or phantom echo turn'
   assert.equal(h.captures, 0);
   assert.equal(h.recognizers.filter((r) => r.running).length, 0);
   assert.equal(h.audios.length, 1);
-  assert.match(h.text(), /tap Interrupt/);
+  assert.match(h.text(), /Tap Lyo to speak/);
   await h.ready();
   await flush(() => h.audios[0].onended());
   assert.match(h.text(), /Listening/);
@@ -217,6 +241,8 @@ test('failed audio speaks only its remainder and proceeds to the next segment', 
   });
   assert.equal(h.utterances[0].text, 'three four.');
   await flush(() => h.utterances[0].onend());
+  assert.equal(h.audios.length, 1, 'the next clip waits for a natural thought boundary');
+  await flush(() => t.mock.timers.tick(130));
   assert.equal(h.audios.length, 2);
   await h.ready();
   await flush(() => h.audios[1].onended());
@@ -243,7 +269,7 @@ test('desktop monitor failure keeps playback intact and offers tap interruption'
   await h.say('Explain gravity.');
   await h.emit({ type: 'voice_text_segment', text: 'An answer.', sequence: 0 });
   assert.equal(h.captures, 1);
-  assert.match(h.text(), /tap Interrupt/);
+  assert.match(h.text(), /Tap Lyo to speak/);
   assert.equal(h.audios.length, 1);
   assert.equal(h.recognizers.filter((r) => r.running).length, 0);
   await h.click('Interrupt');
@@ -313,4 +339,45 @@ test('a closed incomplete stream drains queued audio and resumes listening', asy
   await flush(() => h.audios[0].onended());
   assert.match(h.text(), /Listening/);
   assert.equal(h.telemetry.find((e) => e.event === 'assistant_turn_complete').metrics.outcome, 'incomplete');
+});
+
+test('live voice is a separate full-screen stage and its transcript can be reopened', async (t) => {
+  const h = await harness(t);
+  const stage = document.querySelector('[role="dialog"][aria-modal="true"]');
+  assert.ok(stage, 'voice must open a distinct modal stage');
+  assert.match(stage.getAttribute('aria-label'), /live voice/i);
+  assert.match(h.text(), /Live with Lyo/);
+  await h.click('Transcript');
+  assert.match(h.text(), /Conversation transcript/);
+  await h.click('Hide transcript');
+  assert.doesNotMatch(h.text(), /Conversation transcript/);
+  await h.click('End');
+  assert.equal(document.querySelector('[aria-label="LYO live voice conversation"]'), null);
+});
+
+test('live transcript follows words actually spoken before the saved message arrives', async (t) => {
+  const h = await harness(t);
+  await h.click('Transcript');
+  await flush(() => h.recognizers.at(-1).result('Can you explain why the moon shines?'));
+  assert.match(h.text(), /You · live/);
+  assert.match(h.text(), /Can you explain why the moon shines/);
+  await flush(() => t.mock.timers.tick(conversational.voiceEndOfTurnDelayMs('Can you explain why the moon shines?')));
+  await h.emit({ type: 'voice_text_segment', text: 'The moon reflects sunlight.', sequence: 0 });
+  await flush(() => {
+    h.audios[0].currentTime = 6;
+    h.audios[0].ontimeupdate();
+  });
+  assert.match(h.text(), /Lyo · live/);
+  assert.match(h.text(), /The moon reflects/);
+  assert.doesNotMatch(h.text(), /Your conversation will appear here as you speak/);
+});
+
+test('web voice can explicitly switch English and Spanish recognition and spoken response', async (t) => {
+  const h = await harness(t);
+  await h.setLanguage('es-ES');
+  assert.equal(h.recognizers.at(-1).lang, 'es-ES');
+  await h.say('¿Puedes explicar la gravedad?');
+  assert.equal(h.submissions[0].options.voiceLocale, 'es-ES');
+  await h.emit({ type: 'voice_text_segment', text: 'La gravedad atrae la materia.', sequence: 0 });
+  assert.equal(h.requests[0].options.language, 'es-ES');
 });
