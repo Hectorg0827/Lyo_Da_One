@@ -60,4 +60,16 @@ internal object VoiceTurnSafety {
             else -> 0L
         }
     }
+
+    /** Keep Samsung's recognition service from beeping through each AI response. */
+    fun canStartRecognizer(
+        active: Boolean,
+        listeningEnabled: Boolean,
+        generating: Boolean,
+        assistantSpeaking: Boolean,
+        pendingUtterances: Int,
+        recognizerInFlight: Boolean,
+    ): Boolean = active && listeningEnabled && !generating && !assistantSpeaking &&
+        pendingUtterances == 0 && !recognizerInFlight
+
 }
