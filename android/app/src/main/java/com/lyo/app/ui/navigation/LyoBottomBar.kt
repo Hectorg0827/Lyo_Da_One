@@ -23,9 +23,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
@@ -49,14 +46,13 @@ import com.lyo.app.R
  * LYO's premium Android tab bar, matched to web MobileNav.
  *
  * Native Android has five explicit destinations: Focus, Discover, Ask Lyo,
- * Community, and the Create (+) sheet. The mascot opens canonical Chat.
+ * Community, and the Create (+) studio. The mascot opens canonical Chat.
  * Profile and Settings are reached through Home's avatar menu.
  * Custom 24-unit glyphs mirror the approved web NavIcons, including their
  * one warm-orange filled shape. No generic Material icon placeholders.
  */
 @Composable
 internal fun LyoBottomBar(currentRoute: String?, onNavigate: (String) -> Unit) {
-    var createOpen by remember { mutableStateOf(false) }
     val breathing = rememberInfiniteTransition(label = "bottomMascot")
     val mascotScale by breathing.animateFloat(
         initialValue = 0.98f,
@@ -102,17 +98,9 @@ internal fun LyoBottomBar(currentRoute: String?, onNavigate: (String) -> Unit) {
         }
 
         GhostTab("Community", Routes.COMMUNITY, "community", currentRoute == Routes.COMMUNITY, onNavigate)
-        GhostTab("Create", Routes.CREATE, "create",
-            createOpen || currentRoute == Routes.CREATE) { createOpen = true }
-    }
-    if (createOpen) {
-        LyoCreateSheet(
-            onDismiss = { createOpen = false },
-            onNavigate = { route ->
-                createOpen = false
-                onNavigate(route)
-            },
-        )
+        // Open the same four-mode Create studio as mobile web. The old sheet
+        // intercepted this tab, making the redesigned Create screen unreachable.
+        GhostTab("Create", Routes.CREATE, "create", currentRoute == Routes.CREATE, onNavigate)
     }
 }
 
