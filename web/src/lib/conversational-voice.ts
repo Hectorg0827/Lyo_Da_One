@@ -90,7 +90,7 @@ export function voiceEndOfTurnDelayMs(text: string): number {
   if (!normalized) return 900;
   if (SHORT_COMPLETE_UTTERANCE_RE.test(normalized)) return 420;
   if (INCOMPLETE_ENDING_RE.test(normalized) || OPEN_ENDED_LAST_WORD_RE.test(normalized)) {
-    return 2200;
+    return 1500;
   }
   if (/[.!?]\s*$/.test(normalized)) return 430;
   const words = normalized.split(/\s+/).filter(Boolean).length;

@@ -10,9 +10,9 @@ const module = { exports: {} };
 new Function('exports', 'module', compiled)(module.exports, module);
 const { voiceEndOfTurnDelayMs } = module.exports;
 
-test('unfinished thoughts and ellipses allow a two-second thinking pause', () => {
+test('unfinished thoughts retain a 1.5-second thinking pause', () => {
   for (const text of ['I think the reason is...', 'I think…', 'I wanted to', 'Creo que es porque']) {
-    assert.equal(voiceEndOfTurnDelayMs(text), 2200);
+    assert.equal(voiceEndOfTurnDelayMs(text), 1500);
   }
 });
 
