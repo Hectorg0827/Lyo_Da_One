@@ -43,6 +43,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.lyo.app.BuildConfig
 import com.lyo.app.R
 import com.lyo.app.ui.theme.LyoPurple
 import java.util.Locale
@@ -66,6 +67,7 @@ internal fun LiveVoiceConversationScreen(
     onListen: () -> Unit,
     onTestSpeaker: () -> Unit,
     onInterrupt: () -> Unit,
+    onTryHumanVoice: () -> Unit,
 ) {
     var transcriptVisible by remember { mutableStateOf(false) }
     var readingFrame by remember { mutableStateOf(0) }
@@ -273,6 +275,16 @@ internal fun LiveVoiceConversationScreen(
                 TextButton(onClick = onTestSpeaker) {
                     Text(if (spanish) "Probar voz" else "Test speaker", color = Color(0xFFCBBAFF))
                 }
+            }
+        }
+
+        if (BuildConfig.API_ENVIRONMENT == "staging" && BuildConfig.GPT_LIVE_TRIAL_UI) {
+            TextButton(onClick = onTryHumanVoice) {
+                Text(
+                    if (spanish) "Laboratorio de voz natural · solo prueba"
+                    else "Try more human voice · staging",
+                    color = Color(0xFF95EDC3),
+                )
             }
         }
 
