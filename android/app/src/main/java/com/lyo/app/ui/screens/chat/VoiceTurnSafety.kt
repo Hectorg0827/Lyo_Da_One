@@ -44,4 +44,20 @@ internal object VoiceTurnSafety {
         if (heard.isBlank() || isLikelyEcho(heard, assistantText)) return false
         return !assistantAudible || confirmedDuringPlayback
     }
+
+    /**
+     * A brief natural gap between queued spoken thoughts. The caller must not
+     * enqueue one after the last clip, so listening resumes without dead air.
+     */
+    fun pauseAfterSegmentMs(previousSegment: String): Long {
+        val end = previousSegment.trim().trimEnd {
+            it == '"' || it == '”' || it == ')' || it == '’' || it.code == 39
+        }.lastOrNull()
+        return when (end) {
+            '?', '!' -> 170L
+            '.' -> 125L
+            ',', ';', ':' -> 80L
+            else -> 0L
+        }
+    }
 }
