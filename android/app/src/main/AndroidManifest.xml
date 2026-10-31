@@ -28,6 +28,9 @@
             <intent-filter><action android:name="com.google.firebase.MESSAGING_EVENT" /></intent-filter>
         </service>
 
+        <!-- Opt-in staging-only screen; never exported to other apps. -->
+        <activity android:name=".ui.screens.chat.GptLiveTrialActivity" android:exported="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
