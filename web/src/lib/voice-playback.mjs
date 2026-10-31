@@ -76,7 +76,7 @@ export function unspokenRemainder(text, fraction = 0) {
 
 /** A tiny conversational gap between complete thought clips, never within words. */
 export function pauseAfterSpeechMs(text) {
-  const end = text.trim().replace(/["'”’\\)\\]]+$/u, '').slice(-1);
+  const end = text.trim().replace(/["'”’)]+$/u, '').slice(-1);
   if (end === '?' || end === '!') return 170;
   if (end === '.') return 125;
   if (end === ',' || end === ';' || end === ':') return 80;
