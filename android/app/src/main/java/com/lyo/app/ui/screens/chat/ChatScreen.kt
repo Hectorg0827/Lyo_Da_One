@@ -1164,7 +1164,7 @@ fun ChatScreen(nav: NavHostController) {
     }
 
     if (voiceConversation) {
-        LiveVoiceConversationScreen(
+        MagicalLyoLiveScreen(
             listening = dictating && !isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0,
             thinking = isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0,
             speaking = speakingMessageId != null || pendingVoiceUtterances > 0,
