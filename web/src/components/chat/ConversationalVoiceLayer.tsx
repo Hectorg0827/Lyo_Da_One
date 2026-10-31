@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioLines, MessageSquareText, Mic, MicOff, Volume2, X } from 'lucide-react';
 import MascotAvatar from './MascotAvatar';
-import './lyo-live-magic.css';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
@@ -1281,7 +1280,7 @@ export default function ConversationalVoiceLayer() {
             <option value="es-ES">Español</option>
           </select>
           <button type="button" onClick={endSession} className="lyo-live-magic__close"
-            aria-label="End live voice and return to chat"><X size={22} /></button>
+            aria-label="End live voice and return to chat"><X size={22} /><span className="sr-only">End</span></button>
         </div>
       </header>
 
@@ -1289,7 +1288,7 @@ export default function ConversationalVoiceLayer() {
         {showTranscript ? (
           <section className="lyo-live-magic__transcript"
             aria-label="Live transcript" id="lyo-voice-transcript">
-            <h2>Our conversation</h2>
+            <h2>Conversation transcript</h2>
             {transcriptMessages.length === 0 && !liveAssistantCaption && !liveTranscript && (
               <p className="lyo-live-magic__muted">Your conversation will appear here as you speak.</p>
             )}
@@ -1324,7 +1323,7 @@ export default function ConversationalVoiceLayer() {
               className={cn('lyo-live-magic__hero', isTapFallback && 'lyo-live-magic__hero--tap')}
               role={isTapFallback ? 'button' : undefined}
               tabIndex={isTapFallback ? 0 : undefined}
-              aria-label={isTapFallback ? 'Tap Lyo to speak' : undefined}
+              aria-label={isTapFallback ? 'Tap the mascot to speak' : undefined}
               onClick={isTapFallback ? interruptPlayback : undefined}
               onKeyDown={(event) => {
                 if (isTapFallback && (event.key === 'Enter' || event.key === ' ')) {
@@ -1367,7 +1366,7 @@ export default function ConversationalVoiceLayer() {
             </div>
             <div className="lyo-live-magic__state" role="status" aria-live="polite">
               {phase === 'error' ? <MicOff size={18} /> : <AudioLines size={19} />}
-              {status === 'Listening' ? "I'm listening…" : status}
+              {status}
             </div>
             <h2 className="lyo-live-magic__headline">{heroHeadline}</h2>
             <div className="lyo-live-magic__understroke" aria-hidden="true" />
@@ -1376,8 +1375,11 @@ export default function ConversationalVoiceLayer() {
             </div>
             {isTapFallback && (
               <p className="lyo-live-magic__hint">
-                Hands-free interruption isn’t available in this browser. Tap Lyo or the microphone to speak.
+                Hands-free interruption isn’t available in this browser. Tap Lyo to speak, or use the microphone button.
               </p>
+            )}
+            {phase === 'speaking' && interruptionMode === 'speech' && (
+              <p className="lyo-live-magic__hint">Just start talking to interrupt.</p>
             )}
           </div>
         )}
@@ -1387,7 +1389,7 @@ export default function ConversationalVoiceLayer() {
         <button type="button" onClick={() => setShowTranscript((shown) => !shown)}
           aria-expanded={showTranscript} aria-controls="lyo-voice-transcript"
           className="lyo-live-magic__transcript-toggle">
-          <MessageSquareText size={17} /> {showTranscript ? 'Back to Lyo' : 'See transcript'}
+          <MessageSquareText size={17} /> {showTranscript ? 'Hide transcript' : 'Transcript'}
         </button>
         <div className="lyo-live-magic__dock">
           <button type="button" className="lyo-live-magic__mic"
