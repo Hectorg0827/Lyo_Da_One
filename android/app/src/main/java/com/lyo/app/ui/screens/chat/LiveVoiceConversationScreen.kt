@@ -63,6 +63,9 @@ internal fun LiveVoiceConversationScreen(
     messages: List<ChatMsg>,
     error: String?,
     onEnd: () -> Unit,
+    onListen: () -> Unit,
+    onTestSpeaker: () -> Unit,
+    onInterrupt: () -> Unit,
 ) {
     var transcriptVisible by remember { mutableStateOf(false) }
     var readingFrame by remember { mutableStateOf(0) }
@@ -186,12 +189,14 @@ internal fun LiveVoiceConversationScreen(
                 )
                 Text(
                     when {
-                        speaking -> if (spanish) "Habla para interrumpir a Lyo"
-                            else "Just start talking to interrupt Lyo"
+                        speaking -> if (spanish) "Toca Interrumpir para hacer otra pregunta"
+                            else "Tap Interrupt to jump in"
                         thinking -> if (spanish) "Estoy preparando la respuesta"
                             else "I'm working on your answer"
-                        else -> if (spanish) "Lyo responderá al terminar de hablar"
+                        listening -> if (spanish) "Lyo responderá al terminar de hablar"
                             else "Lyo will answer when you finish speaking"
+                        else -> if (spanish) "Toca Escuchar cuando estés listo"
+                            else "Tap Listen when you're ready"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White.copy(alpha = 0.55f),
@@ -247,6 +252,26 @@ internal fun LiveVoiceConversationScreen(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
+                }
+            }
+        }
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (speaking || thinking) {
+                TextButton(onClick = onInterrupt) {
+                    Text(if (spanish) "Interrumpir" else "Interrupt", color = Color(0xFFFFBCA8))
+                }
+            } else if (!listening) {
+                TextButton(onClick = onListen) {
+                    Text(if (spanish) "Escuchar" else "Tap to listen", color = Color(0xFF95EDC3))
+                }
+            }
+            if (!speaking && !thinking) {
+                TextButton(onClick = onTestSpeaker) {
+                    Text(if (spanish) "Probar voz" else "Test speaker", color = Color(0xFFCBBAFF))
                 }
             }
         }
