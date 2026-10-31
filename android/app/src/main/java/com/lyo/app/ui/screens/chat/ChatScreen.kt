@@ -1181,6 +1181,10 @@ fun ChatScreen(nav: NavHostController) {
             },
             onTestSpeaker = ::testVoiceSpeaker,
             onInterrupt = ::interruptVoiceAnswer,
+            onTryHumanVoice = {
+                stopVoiceConversation()
+                context.startActivity(Intent(context, GptLiveTrialActivity::class.java))
+            },
         )
     } else {
     Box(modifier = Modifier.fillMaxSize()) {
