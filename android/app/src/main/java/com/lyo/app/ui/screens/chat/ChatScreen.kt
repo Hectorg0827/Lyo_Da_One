@@ -951,14 +951,23 @@ fun ChatScreen(nav: NavHostController) {
         )
     }
 
-    // Resume the most recent server conversation on any Android device.
+    // The web Create studio seeds an actual new chat turn to generate a course.
+    // The normal Android entry still restores the last server conversation.
     LaunchedEffect(Unit) {
-        runCatching {
-            val latest = ApiClient.api.aiConversations().conversations.firstOrNull() ?: return@runCatching
-            val detail = ApiClient.api.aiConversation(latest.id)
-            activeConversationId = detail.id
+        val seededPrompt = nav.previousBackStackEntry?.savedStateHandle
+            ?.remove<String>("lyo_chat_seed_prompt")
+        if (!seededPrompt.isNullOrBlank()) {
+            activeConversationId = null
             messages.clear()
-            messages.addAll(detail.messages.map { it.toChatMsg() })
+            send(seededPrompt)
+        } else {
+            runCatching {
+                val latest = ApiClient.api.aiConversations().conversations.firstOrNull() ?: return@runCatching
+                val detail = ApiClient.api.aiConversation(latest.id)
+                activeConversationId = detail.id
+                messages.clear()
+                messages.addAll(detail.messages.map { it.toChatMsg() })
+            }
         }
     }
 
