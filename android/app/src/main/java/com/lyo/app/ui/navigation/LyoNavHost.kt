@@ -205,7 +205,9 @@ private fun LyoNavHost() {
         }
     }
 
-    val showBottomBar = currentRoute in bottomItems.map { it.route }
+    // Chat shares the web's persistent tab bar; Create opens as a full-screen studio.
+    val showBottomBar = currentRoute == Routes.CHAT ||
+        (currentRoute != Routes.CREATE && currentRoute in bottomItems.map { it.route })
 
     // The web Focus surface uses a near-black, layered backdrop. Keeping
     // the Android scaffold transparent lets each native screen share that
