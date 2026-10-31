@@ -352,7 +352,7 @@ internal fun MagicalLyoLiveScreen(
                         contentDescription = when {
                             speaking || thinking -> if (spanish) "Interrumpir y hablar" else "Interrupt to speak"
                             listening -> if (spanish) "Escuchando" else "Listening"
-                            else -> if (spanish) "Escuchar" else "Listen",
+                            else -> if (spanish) "Escuchar" else "Listen"
                         },
                         tint = LiveWhite, modifier = Modifier.size(28.dp),
                     )
