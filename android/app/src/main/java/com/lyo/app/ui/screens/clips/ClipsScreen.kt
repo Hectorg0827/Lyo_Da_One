@@ -31,7 +31,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -582,8 +581,7 @@ fun ClipsScreen(nav: NavHostController) {
                 searchOpen = false
             },
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding(),
+                .align(Alignment.TopCenter),
         )
 
         val visibleError = interactionError ?: loadError?.takeIf { clips.isNotEmpty() }
@@ -596,7 +594,6 @@ fun ClipsScreen(nav: NavHostController) {
                 },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .statusBarsPadding()
                     .padding(top = 132.dp, start = 16.dp, end = 16.dp),
             )
         }
@@ -608,7 +605,6 @@ fun ClipsScreen(nav: NavHostController) {
                 // Like/Comment/Share/Save rail even on narrow Android phones.
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .statusBarsPadding()
                     .padding(top = 78.dp, start = 12.dp),
             )
         }
@@ -1309,7 +1305,6 @@ private fun ClipPage(
                 color = Color.White,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .statusBarsPadding()
                     .padding(top = 68.dp)
                     .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(20.dp))
                     .clickable(onClick = onRetryView)
