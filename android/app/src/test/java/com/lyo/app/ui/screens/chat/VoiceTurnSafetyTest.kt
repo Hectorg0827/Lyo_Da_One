@@ -45,4 +45,14 @@ class VoiceTurnSafetyTest {
             assistantAudible = false, confirmedDuringPlayback = false,
         ))
     }
+
+    @Test fun spokenThoughtsGetShortPunctuationPauses() {
+        assertEquals(170L, VoiceTurnSafety.pauseAfterSegmentMs("Really?"))
+        assertEquals(170L, VoiceTurnSafety.pauseAfterSegmentMs("You got it!”"))
+        assertEquals(125L, VoiceTurnSafety.pauseAfterSegmentMs("Exactly."))
+        assertEquals(80L, VoiceTurnSafety.pauseAfterSegmentMs("Well,"))
+        assertEquals(80L, VoiceTurnSafety.pauseAfterSegmentMs("First:"))
+        assertEquals(0L, VoiceTurnSafety.pauseAfterSegmentMs("and then"))
+        assertEquals(0L, VoiceTurnSafety.pauseAfterSegmentMs(" "))
+    }
 }
