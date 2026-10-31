@@ -122,7 +122,7 @@ fun CreateScreen(nav: NavHostController) {
     Column(
         modifier = Modifier.fillMaxSize().background(
             Brush.linearGradient(
-                listOf(dark, mode.accent.copy(alpha = 0.34f).compositeOver(dark), dark),
+                listOf(dark, mode.accent.copy(alpha = 0.24f), dark),
             ),
         ),
     ) {
