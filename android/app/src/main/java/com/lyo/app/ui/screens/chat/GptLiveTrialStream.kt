@@ -68,7 +68,7 @@ internal class GptLiveTrialStream(
         }
         connectJob = scope.launch(Dispatchers.IO) {
             try {
-                val base = BuildConfig.API_BASE_URL.trimEnd('/')
+                val base = BuildConfig.VOICE_LAB_BASE_URL.trimEnd('/')
                 require(base.startsWith("https://")) { "A secure staging connection is required." }
                 val bearer = TokenManager.accessToken
                     ?: error("Please sign in to LYO before starting the voice trial.")

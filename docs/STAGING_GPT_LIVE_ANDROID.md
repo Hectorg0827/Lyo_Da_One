@@ -5,14 +5,17 @@ Samsung no-beeps Android branch from PR #189. Its regular voice mode remains
 intact and is still the default experience.
 
 The new "Try more human voice · staging" link appears in the Android Live with
-Lyo screen **only** when BOTH are true in a debug/staging APK:
+Lyo screen **only** when all three settings are provided in a debug/staging APK:
 
-- `LYO_STAGING_API_BASE_URL=https://<dedicated-staging-host>`
+- `LYO_STAGING_API_BASE_URL=https://lyojourneystagingbackend-staging.up.railway.app` (the normal LYO staging API)
+- `LYO_VOICE_LAB_BASE_URL=https://lyovoicelabbackend-staging.up.railway.app` (the separate voice-only staging service)
 - `LYO_GPT_LIVE_TRIAL_UI=true`
 
 A release build always hardcodes `GPT_LIVE_TRIAL_UI=false`; a debug APK
 without an explicit staging backend also compiles it off. The new Android
 activity is `android:exported="false"`.
+
+The two backend addresses must never be exchanged. An APK without both approved staging addresses hides the Voice Lab. Release builds hardcode its URL to empty and turn the trial UI off. Do not point ordinary LYO sign-in, chat, or classroom calls at the voice-only service.
 
 The Voice Lab uses Android `AudioRecord` and `AudioTrack` at 24kHz mono PCM16,
 with hardware acoustic echo cancellation when available. The mic stays on while
@@ -31,7 +34,7 @@ silently written into chat history.
 
 ## Verification before first paid use
 
-1. Keep the backend's `LYO_GPT_LIVE_TRIAL_ENABLED=false`.
+1. Keep the backend's `LYO_GPT_LIVE_TRIAL_ENABLED=false`. The public staging health endpoint currently returns 200 and the ticket endpoint returns HTTP 403 while locked. This preview app cannot make paid calls.
 2. Check backend budget tests and Android unit/build tests on this draft.
 3. Configure separate staging backend/DB/hostname and a dedicated OpenAI
    project/key **without enabling the paid flag**.
