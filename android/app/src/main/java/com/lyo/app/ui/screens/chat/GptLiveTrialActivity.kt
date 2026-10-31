@@ -151,6 +151,12 @@ class GptLiveTrialActivity : ComponentActivity() {
         stage = "Trial finished"
     }
 
+    override fun onStop() {
+        // A trial must not keep capturing the microphone in the background.
+        stopTrial()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         stopTrial()
         super.onDestroy()
