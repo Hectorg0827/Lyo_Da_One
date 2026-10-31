@@ -22,6 +22,10 @@ val LyoAmber = Color(0xFFF59E0B) // semantic.warning
 val LyoGreen = Color(0xFF10B981) // semantic.success
 val LyoBlue = Color(0xFF3B82F6) // semantic.info
 val LyoRed = Color(0xFFEF4444) // semantic.danger
+val LyoAccentOrange = Color(0xFFFF8C00) // brand.accentOrange
+val BackgroundDeep1 = Color(0xFF050810) // surface.backgroundDeep[0]
+val BackgroundDeep2 = Color(0xFF0A1020) // surface.backgroundDeep[1]
+val BackgroundDeep3 = Color(0xFF0D0F18) // surface.backgroundDeep[2]
 
 val Background = Color(0xFF0B1230) // surface.background
 val Surface = Color(0xFF0E173D) // surface.surface

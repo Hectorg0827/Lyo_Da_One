@@ -28,11 +28,13 @@ const recentStore = read('android/app/src/main/java/com/lyo/app/data/RecentCours
 // — see the navigation assertion below) but is no longer HomeScreen's
 // source of truth.
 requireText(home, 'SectionHeader("Your Stacks")', 'Android Focus learner section');
-requireText(home, 'SectionHeader("Explore Courses")', 'Android Focus catalog section');
 requireText(home, 'StackRepository.listCourseStacks()', 'Android Focus real, backend-synced Stacks list');
-requireText(home, 'ApiClient.api.courses(0, 5)', 'Android Focus public catalog exploration');
 requireText(home, 'ApiClient.api.dueReviews()', 'Android Focus canonical review schedule');
-requireText(home, 'SectionHeader("Ready to review")', 'Android Focus review section');
+requireText(home, 'SectionHeader("Next for you")', 'Android Focus recommendations section');
+requireText(home, 'LearnerStatsStrip(', 'Android Focus compact Web-equivalent stats strip');
+rejectText(home, 'SectionHeader("Explore Courses")', 'Web parity: no duplicate catalog tiles on Focus');
+rejectText(home, 'SectionHeader("Learning Actions")', 'Web parity: no duplicate navigation tiles on Focus');
+rejectText(home, 'ApiClient.api.courses(0, 5)', 'Web parity: Focus should not prefetch a public catalog it no longer displays');
 requireText(home, 'Routes.reviewClassroom(', 'Android Focus review entry');
 requireText(navigation, 'RecentCourseStore.save(context, courseId)', 'Android real course visit recording');
 requireText(recentStore, 'Device-local pointer', 'Android recent-course scope disclosure');
@@ -49,4 +51,4 @@ for (const forbidden of [
   rejectText(home + recentStore, forbidden, 'Android Focus honesty');
 }
 
-console.log('Android Focus sources Your Stacks from the real, device-agnostic backend list, separate from the public catalog.');
+console.log('Android Focus sources personalized learning from the real backend and matches Web without duplicate stock catalog tiles.');

@@ -34,6 +34,8 @@ val releaseApiUrl = apiBaseUrl("LYO_API_BASE_URL", setting("LYO_API_BASE_URL") ?
 // Debug and staging builds talk to staging once a staging URL is configured,
 // and fall back to production (as before) until then.
 val stagingApiUrl = setting("LYO_STAGING_API_BASE_URL")?.let { apiBaseUrl("LYO_STAGING_API_BASE_URL", it) }
+// Visible only when the APK points to explicit staging and UI is opt-in.
+val trialUiEnabled = stagingApiUrl != null && setting("LYO_GPT_LIVE_TRIAL_UI")?.equals("true", ignoreCase = true) == true
 
 // Release signing (Play Store upload key). Read from android/keystore.properties
 // (gitignored) or environment variables; never committed. When absent, debug
@@ -86,6 +88,7 @@ android {
         debug {
             buildConfigField("String", "API_BASE_URL", "\"${stagingApiUrl ?: productionApiUrl}\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (stagingApiUrl != null) "staging" else "production"}\"")
+            buildConfigField("boolean", "GPT_LIVE_TRIAL_UI", if (trialUiEnabled) "true" else "false")
         }
         create("staging") {
             isMinifyEnabled = true
@@ -98,6 +101,7 @@ android {
             matchingFallbacks += listOf("release")
             buildConfigField("String", "API_BASE_URL", "\"${stagingApiUrl ?: productionApiUrl}\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (stagingApiUrl != null) "staging" else "production"}\"")
+            buildConfigField("boolean", "GPT_LIVE_TRIAL_UI", if (trialUiEnabled) "true" else "false")
         }
         release {
             isMinifyEnabled = true
@@ -108,6 +112,7 @@ android {
             if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "API_BASE_URL", "\"$releaseApiUrl\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (releaseApiUrl == productionApiUrl) "production" else "custom"}\"")
+            buildConfigField("boolean", "GPT_LIVE_TRIAL_UI", "false")
         }
     }
     compileOptions {

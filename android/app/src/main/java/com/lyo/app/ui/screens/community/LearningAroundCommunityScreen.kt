@@ -19,6 +19,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -99,6 +100,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -208,25 +210,38 @@ fun LearningAroundCommunityScreen(nav: NavHostController) {
             .background(Background),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            // Mirror the mobile-web map header: tabs and Create share one compact row,
+            // leaving the maximum possible height for the map and bottom sheet.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        "Community",
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = TextPrimary,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.semantics { heading() },
-                    )
-                    Text("Learn from the places and people around you", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                Box(modifier = Modifier.weight(1f)) {
+                    CommunityTabs(selectedTab = selectedTab, onSelect = { selectedTab = it })
                 }
-                Box {
-                    IconButton(onClick = { createMenuExpanded = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Create in Community", tint = TextPrimary)
+                Box(modifier = Modifier.padding(start = 8.dp)) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(LyoPurple)
+                            .clickable {
+                                if (selectedTab == 2) nav.navigate(Routes.CREATE_POST)
+                                else createMenuExpanded = true
+                            },
+                    ) {
+                        if (selectedTab == 2) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Add, contentDescription = "Create Community post",
+                                    tint = Color.White)
+                            }
+                        } else {
+                            Icon(Icons.Default.Add, contentDescription = "Create in Community",
+                                tint = Color.White)
+                        }
                     }
                     DropdownMenu(expanded = createMenuExpanded, onDismissRequest = { createMenuExpanded = false }) {
                         DropdownMenuItem(text = { Text("Learning event") }, onClick = { createMenuExpanded = false; nav.navigate(Routes.CREATE_EVENT) })
@@ -236,8 +251,6 @@ fun LearningAroundCommunityScreen(nav: NavHostController) {
                     }
                 }
             }
-
-            CommunityTabs(selectedTab = selectedTab, onSelect = { selectedTab = it })
 
             when (selectedTab) {
                 0 -> AroundMeTab(
@@ -273,12 +286,15 @@ private fun CommunityTabs(selectedTab: Int, onSelect: (Int) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp),
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.04f))
+            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(16.dp))
+            .padding(4.dp),
     ) {
         labels.forEachIndexed { index, label ->
             Surface(
-                color = if (index == selectedTab) LyoPurple else SurfaceElevated,
-                shape = RoundedCornerShape(10.dp),
+                color = if (index == selectedTab) LyoPurple else Color.Transparent,
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .weight(1f)
                     .clickable(role = Role.Tab) { onSelect(index) }
@@ -288,7 +304,8 @@ private fun CommunityTabs(selectedTab: Int, onSelect: (Int) -> Unit) {
                     label,
                     color = if (index == selectedTab) Color.White else TextSecondary,
                     style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(vertical = 12.dp),
+                    maxLines = 1,
+                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 2.dp),
                     textAlign = TextAlign.Center,
                 )
             }

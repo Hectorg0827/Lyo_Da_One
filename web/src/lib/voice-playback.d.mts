@@ -11,3 +11,5 @@ export function speakVoiceFallback(text: string, options: {
   onStart?: () => void;
 }): Promise<void>;
 export function unspokenRemainder(text: string, fraction?: number): string;
+export function pauseAfterSpeechMs(text: string): number;
+export function waitForSpeechPause(milliseconds: number, options?: { signal?: AbortSignal }): Promise<void>;
