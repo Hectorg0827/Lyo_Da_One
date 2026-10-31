@@ -18,11 +18,10 @@ function rejectText(forbidden, label) {
 }
 
 // "Clips" is a creator's own work and what it has added up to. It sits beside
-// Activity rather than inside Stats, because Stats is learning progress — XP,
-// streaks, level — and a creator checking whether anyone watched is asking a
-// different question.
+// Activity, as on Web Profile. Full learning progress lives above the tabs,
+// rather than behind an extra Android-only Stats tab.
 requireText(
-  'private val OwnProfileTabs = listOf("Activity", "Clips", "Achievements", "Stats")',
+  'private val OwnProfileTabs = listOf("Activity", "Clips", "Achievements")',
   'owner-only profile tabs',
 );
 
@@ -38,6 +37,10 @@ requireText('private val PublicProfileTabs = listOf("Activity")', 'public profil
 requireText('if (isOwn) {', 'current-user data gate');
 requireText('ApiClient.api.achievements()', 'owner achievements endpoint');
 requireText('ApiClient.api.gamificationOverview()', 'owner gamification endpoint');
+requireText('ApiClient.api.conceptSummary()', 'owner concept mastery endpoint');
+requireText('LearnerStatsGrid(learnerStats(overview, conceptSummary, user))', 'Web-equivalent learning stats grid');
+requireText('ProfileHero(user = user)', 'Web-equivalent profile identity header');
+requireText('text = "  Edit Profile"', 'Edit Profile goes to native settings');
 requireText('profileError', 'profile loading failure state');
 requireText('activityError', 'activity loading failure state');
 requireText('followPending', 'transactional follow state');
