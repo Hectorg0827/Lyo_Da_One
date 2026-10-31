@@ -24,8 +24,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,12 +36,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -48,9 +52,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
@@ -77,19 +85,23 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.lyo.app.R
 import com.lyo.app.data.Session
 import com.lyo.app.data.api.AiConversationMessageDto
+import com.lyo.app.data.api.AiConversationSummaryDto
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.ChatStreamClient
 import com.lyo.app.data.api.ChatStreamEvent
@@ -193,10 +205,10 @@ private data class ParsedChatContent(
 )
 
 private val Suggestions = listOf(
-    "Explain quantum computing",
-    "Make me a study plan",
-    "Help me learn Spanish",
-    "Summarize photosynthesis",
+    "Teach me something new",
+    "Create a course for me",
+    "Quiz me on a topic",
+    "Help me study for an exam",
 )
 
 @Composable
@@ -204,6 +216,9 @@ fun ChatScreen(nav: NavHostController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val messages = remember { mutableStateListOf<ChatMsg>() }
+    val conversations = remember { mutableStateListOf<AiConversationSummaryDto>() }
+    var showHistory by remember { mutableStateOf(false) }
+    var historyError by remember { mutableStateOf<String?>(null) }
     var input by remember { mutableStateOf("") }
     var isStreaming by remember { mutableStateOf(false) }
     var activeConversationId by remember { mutableStateOf<String?>(null) }
@@ -951,6 +966,30 @@ fun ChatScreen(nav: NavHostController) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(max(0, messages.size - 1))
     }
 
+    LaunchedEffect(showHistory) {
+        if (showHistory) {
+            historyError = null
+            runCatching { ApiClient.api.aiConversations().conversations }
+                .onSuccess { loaded ->
+                    conversations.clear()
+                    conversations.addAll(loaded)
+                }
+                .onFailure { historyError = "Could not load your conversations. Please try again." }
+        }
+    }
+
+    fun newChat() {
+        textToSpeech?.stop()
+        speakingMessageId = null
+        streamJob?.cancel()
+        streamJob = null
+        activeConversationId = null
+        pendingAttachments.clear()
+        inputError = null
+        messages.clear()
+        showHistory = false
+    }
+
     if (voiceConversation) {
         LiveVoiceConversationScreen(
             listening = dictating && !isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0,
@@ -964,6 +1003,7 @@ fun ChatScreen(nav: NavHostController) {
             onEnd = ::stopVoiceConversation,
         )
     } else {
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -972,41 +1012,40 @@ fun ChatScreen(nav: NavHostController) {
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0x550C0C17))
+                .border(0.5.dp, Color.White.copy(alpha = 0.06f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-                modifier = Modifier.weight(1f),
+            IconButton(
+                onClick = { showHistory = true },
+                enabled = !isStreaming,
+                modifier = Modifier.size(40.dp),
             ) {
-                Image(
-                    painter = painterResource(R.drawable.mascot_standing),
-                    contentDescription = null,
-                    modifier = Modifier.size(32.dp),
-                )
-                Column {
-                    Text("Lyo", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
-                    Text(
-                        "● online", color = Color(0xFF86EFAC),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
+                Icon(Icons.Default.Menu, contentDescription = "Open conversation history", tint = TextSecondary)
             }
-            TextButton(onClick = { nav.navigate("test-prep") }) { Text("Test Prep", color = LyoPurple) }
-            TextButton(
+            Image(
+                painter = painterResource(R.drawable.mascot_standing),
+                contentDescription = null,
+                modifier = Modifier.padding(start = 6.dp).size(30.dp),
+            )
+            Text(
+                "Lyo", style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold, color = TextPrimary,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+            Text(
+                "● online", style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF86EFAC), modifier = Modifier.padding(start = 8.dp).weight(1f),
+            )
+            IconButton(
+                onClick = ::newChat,
                 enabled = !isStreaming && !uploadingAttachment,
-                onClick = {
-                    textToSpeech?.stop()
-                    speakingMessageId = null
-                    streamJob?.cancel()
-                    streamJob = null
-                    activeConversationId = null
-                    pendingAttachments.clear()
-                    inputError = null
-                    messages.clear()
-                },
-            ) { Text("New chat", color = LyoPurple) }
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "New chat", tint = TextPrimary)
+            }
         }
 
         if (messages.isEmpty()) {
@@ -1020,9 +1059,13 @@ fun ChatScreen(nav: NavHostController) {
             ) {
                 Text(
                     text = "Hello, ${Session.user?.displayName?.substringBefore(" ")?.takeIf { it.isNotBlank() } ?: "there"}!",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFFFA34D),
+                    style = TextStyle(
+                        brush = Brush.horizontalGradient(
+                            listOf(Color(0xFFFFC46A), Color(0xFFFF8956), Color(0xFFED80D4)),
+                        ),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 28.sp,
+                    ),
                 )
                 Text(
                     text = "Ready to embark on a learning journey?",
@@ -1046,15 +1089,12 @@ fun ChatScreen(nav: NavHostController) {
                         modifier = Modifier.size(160.dp),
                     )
                 }
-                Text(
-                    text = "Ask me anything about learning",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
-                    modifier = Modifier.padding(vertical = 12.dp),
-                )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(top = 8.dp, bottom = 8.dp),
                 ) {
                     Suggestions.forEach { suggestion ->
                         Box(
@@ -1146,114 +1186,259 @@ fun ChatScreen(nav: NavHostController) {
             }
         }
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+        // The mobile-web input island: text above a compact row of controls.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xE80D0F18))
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-        ) {
-            IconButton(
-                onClick = {
-                    attachmentPicker.launch(
-                        arrayOf(
-                            "image/jpeg", "image/png", "image/webp", "image/heic",
-                            "application/pdf", "text/plain", "text/markdown", "text/csv",
-                            "application/json",
-                        ),
-                    )
-                },
-                enabled = !isStreaming && !uploadingAttachment &&
-                    pendingAttachments.size < MAX_CHAT_ATTACHMENTS,
-                modifier = Modifier.size(44.dp),
-            ) {
-                if (uploadingAttachment) {
-                    CircularProgressIndicator(
-                        color = LyoPurple,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(20.dp),
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.AttachFile,
-                        contentDescription = "Attach an image or document",
-                        tint = TextSecondary,
-                    )
-                }
-            }
-
-            IconButton(
-                onClick = {
-                    if (voiceConversation) {
-                        stopVoiceConversation()
-                    } else if (
-                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                        android.content.pm.PackageManager.PERMISSION_GRANTED
-                    ) {
-                        voiceConversation = true
-                        voiceListenNonce += 1
-                    } else {
-                        voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                },
-                enabled = !uploadingAttachment,
-                modifier = Modifier.size(44.dp),
-            ) {
-                Icon(
-                    imageVector = if (voiceConversation) Icons.Default.Stop else Icons.Default.Mic,
-                    contentDescription = if (voiceConversation) "End live voice" else "Start live voice",
-                    tint = if (voiceConversation) LyoPurple else TextSecondary,
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xF210111C))
+                .border(
+                    1.dp,
+                    Brush.horizontalGradient(
+                        listOf(Color(0x884C62DB), Color(0x998B5CF6), Color(0x779D4EDD)),
+                    ),
+                    RoundedCornerShape(24.dp),
                 )
-            }
-
-            OutlinedTextField(
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            BasicTextField(
                 value = input,
                 onValueChange = { if (it.length <= MAX_CHAT_CHARS) input = it },
                 enabled = !isStreaming,
-                placeholder = {
-                    Text(
-                        when {
-                            isStreaming -> "Lyo is thinking…"
-                            voiceConversation && dictating -> "Listening…"
-                            dictating -> "Listening…"
-                            else -> "Ask Lyo anything…"
-                        },
-                        color = TextSecondary,
-                    )
-                },
-                shape = RoundedCornerShape(24.dp),
+                textStyle = TextStyle(color = TextPrimary, fontSize = 16.sp, lineHeight = 23.sp),
+                cursorBrush = SolidColor(LyoPurple),
                 maxLines = 4,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = LyoPurple,
-                    unfocusedBorderColor = BorderColor,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    cursorColor = LyoPurple,
-                ),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp, max = 120.dp),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.padding(vertical = 3.dp)) {
+                        if (input.isEmpty()) {
+                            Text(
+                                when {
+                                    isStreaming -> "Lyo is thinking…"
+                                    dictating -> "Listening…"
+                                    else -> "Message Lyo..."
+                                },
+                                color = TextSecondary.copy(alpha = 0.75f),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
             )
-
-            IconButton(
-                onClick = { send(input) },
-                enabled = !isStreaming &&
-                    !uploadingAttachment &&
-                    (input.isNotBlank() || pendingAttachments.isNotEmpty()),
-                modifier = Modifier
-                    .padding(start = 6.dp)
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isStreaming || uploadingAttachment) LyoPurple.copy(alpha = 0.4f)
-                        else LyoPurple,
-                    ),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    tint = Color.White,
-                )
+                IconButton(
+                    onClick = {
+                        attachmentPicker.launch(
+                            arrayOf(
+                                "image/jpeg", "image/png", "image/webp", "image/heic",
+                                "application/pdf", "text/plain", "text/markdown", "text/csv",
+                                "application/json",
+                            ),
+                        )
+                    },
+                    enabled = !isStreaming && !uploadingAttachment &&
+                        pendingAttachments.size < MAX_CHAT_ATTACHMENTS,
+                    modifier = Modifier
+                        .size(34.dp).clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.10f)),
+                ) {
+                    if (uploadingAttachment) {
+                        CircularProgressIndicator(
+                            color = LyoPurple, strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    } else {
+                        Icon(Icons.Default.Add, contentDescription = "Attach an image or document",
+                            tint = TextPrimary, modifier = Modifier.size(20.dp))
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.10f))
+                        .clickable(enabled = !uploadingAttachment) {
+                            if (voiceConversation) {
+                                stopVoiceConversation()
+                            } else if (
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                                android.content.pm.PackageManager.PERMISSION_GRANTED
+                            ) {
+                                voiceConversation = true
+                                voiceListenNonce += 1
+                            } else {
+                                voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Icon(Icons.Default.Mic, contentDescription = null,
+                        tint = TextPrimary, modifier = Modifier.size(16.dp))
+                    Text(
+                        if (voiceConversation) "Stop" else "Talk",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+                Box(modifier = Modifier.weight(1f))
+                if (input.length > MAX_CHAT_CHARS * 9 / 10) {
+                    Text(
+                        "${MAX_CHAT_CHARS - input.length}",
+                        color = TextSecondary, style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                IconButton(
+                    onClick = ::startDictation,
+                    enabled = !isStreaming,
+                    modifier = Modifier.size(34.dp),
+                ) {
+                    Icon(Icons.Default.Mic, contentDescription = "Dictate a message",
+                        tint = if (dictating) Color(0xFFFFAC65) else TextPrimary,
+                        modifier = Modifier.size(20.dp))
+                }
+                val canSend = !isStreaming && !uploadingAttachment &&
+                    (input.isNotBlank() || pendingAttachments.isNotEmpty())
+                IconButton(
+                    onClick = { send(input) },
+                    enabled = canSend,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(if (canSend) Color.White else Color.White.copy(alpha = 0.12f)),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowUpward,
+                        contentDescription = "Send message",
+                        tint = if (canSend) Color(0xFF11111A) else TextSecondary.copy(alpha = 0.55f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         }
+    }
+    if (showHistory) {
+        Row(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.64f)),
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(288.dp)
+                    .fillMaxHeight()
+                    .background(Color(0xFF11111F))
+                    .border(0.5.dp, Color.White.copy(alpha = 0.10f))
+                    .padding(top = 18.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                ) {
+                    Text("LYO", color = TextPrimary,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f))
+                    IconButton(onClick = { showHistory = false }) {
+                        Icon(Icons.Default.Close, contentDescription = "Close conversation history",
+                            tint = TextSecondary)
+                    }
+                }
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(LyoPurple.copy(alpha = 0.35f),
+                                    Color(0xFF9C4ADA).copy(alpha = 0.20f)),
+                            ),
+                        )
+                        .border(1.dp, LyoPurple.copy(alpha = 0.32f), RoundedCornerShape(14.dp))
+                        .clickable(enabled = !isStreaming) { newChat() }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("+  New Chat", color = TextPrimary, fontWeight = FontWeight.Medium)
+                }
+                historyError?.let {
+                    Text(it, color = Color(0xFFFF9A9A),
+                        modifier = Modifier.padding(16.dp))
+                }
+                if (conversations.isEmpty() && historyError == null) {
+                    Text(
+                        "No conversations yet. Start chatting!",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(20.dp),
+                    )
+                }
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(conversations, key = { it.id }) { conversation ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (conversation.id == activeConversationId)
+                                        LyoPurple.copy(alpha = 0.22f)
+                                    else Color.Transparent,
+                                )
+                                .clickable(enabled = !isStreaming) {
+                                    scope.launch {
+                                        runCatching { ApiClient.api.aiConversation(conversation.id) }
+                                            .onSuccess { detail ->
+                                                activeConversationId = detail.id
+                                                messages.clear()
+                                                messages.addAll(detail.messages.map { it.toChatMsg() })
+                                                pendingAttachments.clear()
+                                                input = ""
+                                                showHistory = false
+                                            }
+                                            .onFailure {
+                                                historyError = "Could not open this conversation."
+                                            }
+                                    }
+                                }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                        ) {
+                            Icon(Icons.Default.ChatBubbleOutline, contentDescription = null,
+                                tint = if (conversation.id == activeConversationId)
+                                    LyoPurple else TextSecondary,
+                                modifier = Modifier.size(18.dp))
+                            Text(
+                                conversation.title.ifBlank {
+                                    conversation.lastMessagePreview ?: "New Chat"
+                                },
+                                color = if (conversation.id == activeConversationId)
+                                    TextPrimary else TextSecondary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(start = 10.dp),
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "Powered by LYO · All chats private",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary.copy(alpha = 0.6f),
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    textAlign = TextAlign.Center,
+                )
+            }
+            Box(
+                modifier = Modifier.weight(1f).fillMaxHeight()
+                    .clickable { showHistory = false },
+            )
+        }
+    }
     }
     }
 }
