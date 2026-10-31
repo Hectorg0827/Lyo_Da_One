@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.net.URI
 
 plugins {
     id("com.android.application")
@@ -39,13 +40,13 @@ val stagingApiUrl = setting("LYO_STAGING_API_BASE_URL")?.let { apiBaseUrl("LYO_S
 // Only the dedicated Railway staging service is accepted for this experimental APK.
 val voiceLabUrl = setting("LYO_VOICE_LAB_BASE_URL")?.let { raw ->
     val url = apiBaseUrl("LYO_VOICE_LAB_BASE_URL", raw)
-    require(url.startsWith("https://") && java.net.URI(url).host == "lyovoicelabbackend-staging.up.railway.app") {
+    require(url.startsWith("https://") && URI(url).host == "lyovoicelabbackend-staging.up.railway.app") {
         "LYO_VOICE_LAB_BASE_URL must point to the dedicated staging Voice Lab"
     }
     url
 }
 val approvedStagingApi = stagingApiUrl?.let {
-    it.startsWith("https://") && java.net.URI(it).host?.endsWith("-staging.up.railway.app") == true
+    it.startsWith("https://") && URI(it).host?.endsWith("-staging.up.railway.app") == true
 } == true
 val trialUiEnabled = approvedStagingApi && voiceLabUrl != null &&
     setting("LYO_GPT_LIVE_TRIAL_UI")?.equals("true", ignoreCase = true) == true
