@@ -55,4 +55,26 @@ class VoiceTurnSafetyTest {
         assertEquals(0L, VoiceTurnSafety.pauseAfterSegmentMs("and then"))
         assertEquals(0L, VoiceTurnSafety.pauseAfterSegmentMs(" "))
     }
+
+    @Test fun recognitionDoesNotRestartDuringReplyOrWhileSuspended() {
+        fun allowed(
+            active: Boolean = true,
+            listeningEnabled: Boolean = true,
+            generating: Boolean = false,
+            assistantSpeaking: Boolean = false,
+            pendingUtterances: Int = 0,
+            recognizerInFlight: Boolean = false,
+        ) = VoiceTurnSafety.canStartRecognizer(
+            active, listeningEnabled, generating, assistantSpeaking,
+            pendingUtterances, recognizerInFlight,
+        )
+        assertTrue(allowed())
+        assertFalse(allowed(active = false))
+        assertFalse(allowed(listeningEnabled = false))
+        assertFalse(allowed(generating = true))
+        assertFalse(allowed(assistantSpeaking = true))
+        assertFalse(allowed(pendingUtterances = 1))
+        assertFalse(allowed(recognizerInFlight = true))
+    }
+
 }
