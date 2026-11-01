@@ -857,7 +857,12 @@ class LyoAIViewModel: ObservableObject {
         // so onSpeechFinished re-arms the mic only after the spoken reply completes.
         voiceLoopActive = shouldResumeListening
 
-        if isVoiceActive {
+        if isVoiceActive && !isLiveMode {
+            // Ordinary dictate-and-send still releases the recorder before
+            // playback. In Live the microphone stays armed through generation
+            // and playback, allowing actual hands-free barge-in. AVAudioSession
+            // uses voiceChat echo cancellation and the transcript callback
+            // filters Lyo's own spoken output to avoid self-interruption.
             sttService.stopRecording()
             isVoiceActive = false
             stopSpeaking()
