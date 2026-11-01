@@ -1181,6 +1181,30 @@ fun ChatScreen(nav: NavHostController) {
             },
             onTestSpeaker = ::testVoiceSpeaker,
             onInterrupt = ::interruptVoiceAnswer,
+            onSendText = { typed ->
+                // Keep typed turns in the canonical conversation. If Lyo is
+                // talking, interrupt its old response before submitting text.
+                if (isStreaming || speakingMessageId != null || pendingVoiceUtterances > 0) {
+                    interruptVoiceAnswer()
+                }
+                voiceListeningArmed = false
+                dictating = false
+                recognizerInFlight = false
+                runCatching { continuousRecognizer?.cancel() }
+                liveVoiceTranscript = ""
+                send(typed)
+            },
+            onTypingChanged = { focused ->
+                voiceListeningArmed = !focused
+                if (focused) {
+                    dictating = false
+                    recognizerInFlight = false
+                    runCatching { continuousRecognizer?.cancel() }
+                    liveVoiceTranscript = ""
+                } else if (voiceConversation) {
+                    voiceListenNonce += 1
+                }
+            },
             onTryHumanVoice = {
                 stopVoiceConversation()
                 context.startActivity(Intent(context, GptLiveTrialActivity::class.java))
