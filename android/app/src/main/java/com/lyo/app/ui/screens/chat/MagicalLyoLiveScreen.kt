@@ -442,6 +442,7 @@ internal fun MagicalLyoLiveScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    val micEnabled = speaking || thinking || listening
                     Box(
                         modifier = Modifier.size(53.dp).clip(CircleShape)
                             .border(
@@ -481,7 +482,7 @@ internal fun MagicalLyoLiveScreen(
                     OutlinedTextField(
                     value = draftText,
                     onValueChange = { draftText = it.take(4000) },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                         .onFocusChanged { state ->
                             if (typing != state.isFocused) {
                                 typing = state.isFocused
