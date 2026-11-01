@@ -116,7 +116,7 @@ struct VoiceSessionBottomSheet: View {
         }
         .onChange(of: inputFocused) { _, focused in
             if focused {
-                viewModel.pauseLiveMicrophone()
+                viewModel.pauseLiveMicrophone(userInitiated: false)
             } else if !pausedByUser && !isSending {
                 viewModel.resumeLiveMicrophone()
             }
@@ -287,7 +287,7 @@ struct VoiceSessionBottomSheet: View {
                     viewModel.resumeLiveMicrophone()
                 } else {
                     pausedByUser = true
-                    viewModel.pauseLiveMicrophone()
+                    viewModel.pauseLiveMicrophone(userInitiated: true)
                 }
             } label: {
                 Image(systemName: pausedByUser ? "mic.slash.fill" : "mic.fill")
