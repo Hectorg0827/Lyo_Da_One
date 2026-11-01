@@ -293,6 +293,18 @@ internal fun MagicalLyoLiveScreen(
                         }
                     }
                 }
+            } else if (typing) {
+                Box(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        if (spanish) "Pregunta a Lyo…" else "Ask Lyo anything…",
+                        color = LiveWhite,
+                        fontSize = 23.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             } else {
                 Column(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -304,10 +316,21 @@ internal fun MagicalLyoLiveScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         LiveRibbon(modifier = Modifier.fillMaxWidth().height(heroHeight), drift = drift, speaking = speaking, thinking = thinking)
+                        val haloGradient = if (speaking) Brush.sweepGradient(
+                            listOf(LiveOrange, Color(0xFFFFC66F), LivePink, Color(0xFFE879F9), LiveOrange),
+                        ) else Brush.sweepGradient(
+                            listOf(LiveMint.copy(alpha = 0.38f), LiveBlue, LiveLavender, LiveMint),
+                        )
                         Box(
                             modifier = Modifier.size(characterSize + 34.dp)
-                                .border(2.dp, Brush.sweepGradient(listOf(LiveMint.copy(alpha = 0.2f), LiveBlue, LiveLavender, Color(0xFFFFA66B), LiveMint.copy(alpha = 0.2f))), CircleShape)
-                                .background(Brush.radialGradient(listOf(LiveLavender.copy(alpha = 0.17f), Color.Transparent)), CircleShape),
+                                .scale(if (speaking) breathing else 1f)
+                                .border(2.dp, haloGradient, CircleShape)
+                                .background(
+                                    Brush.radialGradient(
+                                        listOf(if (speaking) LiveOrange.copy(alpha = 0.16f)
+                                            else LiveBlue.copy(alpha = 0.1f), Color.Transparent),
+                                    ), CircleShape,
+                                ),
                         )
                         Text("✦", color = LiveMint, fontSize = 26.sp, modifier = Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = 48.dp))
                         Text("✧", color = Color(0xFFFFC873), fontSize = 26.sp, modifier = Modifier.align(Alignment.TopEnd).padding(end = 20.dp, top = 36.dp))
@@ -316,19 +339,37 @@ internal fun MagicalLyoLiveScreen(
                         Image(
                             painter = painterResource(mascot),
                             contentDescription = status,
-                            modifier = Modifier.size(characterSize).scale(breathing),
+                            modifier = Modifier.size(characterSize).scale(breathing * touchScale.value)
+                                .clickable {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    touchCount += 1
+                                },
                             contentScale = ContentScale.Fit,
                         )
+                        if (showTouchSpark) {
+                            Text(
+                                "✦",
+                                color = LiveOrange,
+                                fontSize = 30.sp,
+                                modifier = Modifier.align(Alignment.TopEnd).padding(end = 45.dp, top = 68.dp),
+                            )
+                        }
                     }
                     Row(
                         modifier = Modifier.clip(RoundedCornerShape(40.dp))
-                            .border(1.dp, LiveMint.copy(alpha = 0.48f), RoundedCornerShape(40.dp))
-                            .background(Brush.horizontalGradient(listOf(Color(0x60316775), Color(0x60482F81))))
+                            .border(1.dp, if (speaking) LiveOrange else LiveMint.copy(alpha = 0.48f), RoundedCornerShape(40.dp))
+                            .background(
+                                Brush.horizontalGradient(
+                                    if (speaking) listOf(Color(0xAB673016), Color(0x99491C35))
+                                    else listOf(Color(0x60316775), Color(0x60482F81)),
+                                ),
+                            )
                             .padding(horizontal = 21.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Icon(Icons.Default.GraphicEq, contentDescription = null, tint = LiveMint, modifier = Modifier.size(21.dp))
+                        Icon(Icons.Default.GraphicEq, contentDescription = null,
+                            tint = if (speaking) LiveOrange else LiveMint, modifier = Modifier.size(21.dp))
                         Text(status, color = LiveWhite, fontWeight = FontWeight.Medium, fontSize = 15.sp)
                     }
                     Text(
