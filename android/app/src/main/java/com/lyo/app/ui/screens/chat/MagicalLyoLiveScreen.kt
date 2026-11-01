@@ -2,6 +2,7 @@ package com.lyo.app.ui.screens.chat
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -101,6 +102,8 @@ internal fun MagicalLyoLiveScreen(
     listening: Boolean,
     thinking: Boolean,
     speaking: Boolean,
+    microphoneLevel: Float,
+    playbackLevel: Float,
     userCaption: String,
     assistantCaption: String,
     thinkingNudge: String,
@@ -194,6 +197,15 @@ internal fun MagicalLyoLiveScreen(
         animationSpec = infiniteRepeatable(tween(if (speaking) 1550 else 4800), RepeatMode.Restart),
         label = "voiceWave",
     )
+    val waveLevel by animateFloatAsState(
+        targetValue = when {
+            speaking -> playbackLevel.coerceIn(0f, 1f)
+            listening -> microphoneLevel.coerceIn(0f, 1f)
+            else -> 0f
+        },
+        animationSpec = tween(durationMillis = 120),
+        label = "liveAudioEnergy",
+    )
     val breathing by stageTransition.animateFloat(
         initialValue = 0.98f, targetValue = 1.025f,
         animationSpec = infiniteRepeatable(tween(if (speaking) 650 else 2250), RepeatMode.Reverse),
@@ -207,9 +219,9 @@ internal fun MagicalLyoLiveScreen(
             ),
         ),
     ) {
-        val compact = maxHeight < 700.dp
-        val characterSize = if (compact) 184.dp else 234.dp
-        val heroHeight = if (compact) 245.dp else 320.dp
+        val compact = maxHeight < 740.dp
+        val characterSize = if (compact) 178.dp else 216.dp
+        val heroHeight = if (compact) 215.dp else 280.dp
         Column(
             modifier = Modifier.fillMaxSize().imePadding().padding(horizontal = 18.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -225,18 +237,18 @@ internal fun MagicalLyoLiveScreen(
                         Spacer(Modifier.width(12.dp))
                         Text(
                             if (spanish) "En vivo con Lyo" else "Live with Lyo",
-                            fontSize = if (compact) 25.sp else 29.sp,
-                            lineHeight = 34.sp,
+                            fontSize = if (compact) 24.sp else 28.sp,
+                            lineHeight = 32.sp,
                             fontWeight = FontWeight.Bold,
                             color = LiveWhite,
                         )
                     }
                     Text(
                         if (spanish) "TU COMPAÑERO DE APRENDIZAJE" else "YOUR PERSONAL LEARNING COMPANION",
-                        modifier = Modifier.padding(start = 21.dp, top = 3.dp),
-                        color = Color(0xFFC6B7EF),
+                        modifier = Modifier.padding(start = 21.dp, top = 7.dp),
+                        color = Color(0xFFAAB2C0),
                         fontSize = 10.sp,
-                        letterSpacing = 1.7.sp,
+                        letterSpacing = 0.65.sp,
                     )
                 }
                 Box(
@@ -332,10 +344,6 @@ internal fun MagicalLyoLiveScreen(
                                     ), CircleShape,
                                 ),
                         )
-                        Text("✦", color = LiveMint, fontSize = 26.sp, modifier = Modifier.align(Alignment.TopStart).padding(start = 20.dp, top = 48.dp))
-                        Text("✧", color = Color(0xFFFFC873), fontSize = 26.sp, modifier = Modifier.align(Alignment.TopEnd).padding(end = 20.dp, top = 36.dp))
-                        Text("∑", color = Color(0xFFB69CFF), fontSize = 18.sp, modifier = Modifier.align(Alignment.BottomStart).padding(start = 23.dp, bottom = 50.dp))
-                        Text("✦", color = LiveLavender, fontSize = 18.sp, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 24.dp, bottom = 55.dp))
                         Image(
                             painter = painterResource(mascot),
                             contentDescription = status,
@@ -374,29 +382,31 @@ internal fun MagicalLyoLiveScreen(
                     }
                     Text(
                         headline,
-                        modifier = Modifier.fillMaxWidth().padding(top = if (compact) 16.dp else 22.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = if (compact) 11.dp else 17.dp),
                         color = LiveWhite,
                         fontWeight = FontWeight.Bold,
-                        fontSize = if (compact) 29.sp else 34.sp,
+                        fontSize = if (compact) 28.sp else 32.sp,
                         lineHeight = if (compact) 34.sp else 40.sp,
                         textAlign = TextAlign.Center,
                     )
-                    Box(
-                        modifier = Modifier.padding(top = 9.dp).size(width = 145.dp, height = 3.dp)
-                            .background(Brush.horizontalGradient(listOf(LiveLavender, LiveBlue, LiveMint)), RoundedCornerShape(10.dp)),
+                    // The underline is a real voice meter: user microphone
+                    // RMS while listening and TTS PCM energy when available.
+                    LiveVoiceWave(
+                        modifier = Modifier.fillMaxWidth().height(if (compact) 48.dp else 60.dp),
+                        level = waveLevel,
+                        drift = drift,
+                        speaking = speaking,
+                        thinking = thinking,
+                        listening = listening,
                     )
                     Text(
                         caption,
-                        modifier = Modifier.fillMaxWidth().padding(top = 17.dp)
-                            .clip(RoundedCornerShape(24.dp))
-                            .border(1.dp, Color.White.copy(alpha = 0.22f), RoundedCornerShape(24.dp))
-                            .background(Color.White.copy(alpha = 0.08f))
-                            .padding(horizontal = 19.dp, vertical = if (compact) 13.dp else 18.dp)
-                            .heightIn(min = 26.dp),
-                        color = LiveWhite.copy(alpha = 0.96f),
-                        fontSize = if (compact) 15.sp else 17.sp,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp)
+                            .heightIn(min = 23.dp),
+                        color = LiveWhite.copy(alpha = 0.78f),
+                        fontSize = if (compact) 14.sp else 15.sp,
                         lineHeight = 23.sp,
-                        maxLines = if (compact) 2 else 3,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
                     )
