@@ -578,6 +578,20 @@ class LyoAIViewModel: ObservableObject {
 
     /// Suspend speech recognition only while the user uses the text island,
     /// without closing Live or submitting an incomplete STT fragment.
+    /// Same-conversation manual interruption for the Live mic and text island.
+    /// Cancel the in-flight generation and playback without closing voice or
+    /// creating a second chat. The following turn carries the interruption flag.
+    func interruptLiveAnswer() {
+        guard isLiveMode else { return }
+        voiceInterruptedPreviousTurn = true
+        shouldAutoSpeakCurrentResponse = false
+        voiceTurnDebounceTask?.cancel()
+        voiceTurnDebounceTask = nil
+        unifiedChat.interruptCurrentResponse()
+        stopSpeaking()
+        isAIThinking = false
+    }
+
     func pauseLiveMicrophone() {
         guard isLiveMode else { return }
         voiceTurnDebounceTask?.cancel()
