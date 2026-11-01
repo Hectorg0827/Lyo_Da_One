@@ -419,8 +419,8 @@ internal fun MagicalLyoLiveScreen(
             Row(
                 modifier = Modifier.fillMaxWidth().padding(top = 7.dp)
                     .clip(RoundedCornerShape(42.dp))
-                    .border(1.dp, Color(0xFF9A86FF).copy(alpha = 0.65f), RoundedCornerShape(42.dp))
-                    .background(Brush.horizontalGradient(listOf(Color(0xAA434A83), Color(0xB044287E))))
+                    .border(1.dp, Color(0xFF7198AB).copy(alpha = 0.48f), RoundedCornerShape(42.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xC91E2935), Color(0xD1121A27))))
                     .padding(horizontal = 17.dp, vertical = 13.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -444,7 +444,33 @@ internal fun MagicalLyoLiveScreen(
                         tint = LiveWhite, modifier = Modifier.size(28.dp),
                     )
                 }
-                Icon(Icons.Default.GraphicEq, contentDescription = null, tint = LiveMint, modifier = Modifier.size(50.dp))
+                Box(
+                    modifier = Modifier.size(62.dp).scale(if (speaking) breathing else 1f)
+                        .clip(CircleShape)
+                        .border(
+                            2.dp,
+                            if (speaking) Brush.sweepGradient(listOf(LiveOrange, LivePink, LiveOrange))
+                            else Brush.sweepGradient(listOf(LiveMint, LiveBlue, LiveMint)),
+                            CircleShape,
+                        )
+                        .background(
+                            Brush.linearGradient(
+                                if (speaking) listOf(Color(0xC75A2914), Color(0xCA992B55))
+                                else listOf(Color(0xAD084F55), Color(0xB1123648)),
+                            ),
+                        )
+                        .clickable(enabled = speaking || thinking || !listening) {
+                            if (speaking || thinking) onInterrupt() else onListen()
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.Mic,
+                        contentDescription = if (spanish) "Micrófono de Lyo" else "Lyo voice microphone",
+                        tint = if (speaking) Color(0xFFFFC276) else LiveMint,
+                        modifier = Modifier.size(31.dp),
+                    )
+                }
                 Box(
                     modifier = Modifier.size(58.dp).clip(CircleShape)
                         .background(Brush.linearGradient(listOf(LiveCoral, Color(0xFFE33A72))))
@@ -455,6 +481,42 @@ internal fun MagicalLyoLiveScreen(
                         modifier = Modifier.size(29.dp))
                 }
             }
+            OutlinedTextField(
+                value = draftText,
+                onValueChange = { draftText = it.take(4000) },
+                modifier = Modifier.fillMaxWidth()
+                    .padding(top = 9.dp)
+                    .onFocusChanged { state ->
+                        if (typing != state.isFocused) {
+                            typing = state.isFocused
+                            onTypingChanged(state.isFocused)
+                        }
+                    },
+                placeholder = {
+                    Text(if (spanish) "Pregunta a Lyo…" else "Ask Lyo…",
+                        color = Color.White.copy(alpha = 0.55f))
+                },
+                trailingIcon = {
+                    IconButton(onClick = ::sendTyped, enabled = draftText.isNotBlank()) {
+                        Icon(Icons.Default.Send,
+                            contentDescription = if (spanish) "Enviar mensaje" else "Send typed message",
+                            tint = if (draftText.isNotBlank()) LiveMint else Color.Gray)
+                    }
+                },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                keyboardActions = KeyboardActions(onSend = { sendTyped() }),
+                singleLine = true,
+                shape = RoundedCornerShape(34.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Color.White,
+                    unfocusedTextColor = Color.White,
+                    focusedContainerColor = Color(0xFF202935),
+                    unfocusedContainerColor = Color(0xFF1A202B),
+                    focusedBorderColor = LiveMint,
+                    unfocusedBorderColor = Color.White.copy(alpha = 0.23f),
+                    cursorColor = LiveMint,
+                ),
+            )
             if (speaking || thinking) {
                 // A fallback remains visible even when hands-free interruption is unavailable.
                 TextButton(onClick = onInterrupt) {
