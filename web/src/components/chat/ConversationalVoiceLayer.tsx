@@ -121,6 +121,9 @@ export default function ConversationalVoiceLayer() {
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recognitionRestartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [phase, setPhase] = useState<VoicePhase>('idle');
+  const [micPaused, setMicPaused] = useState(false);
+  const micPausedRef = useRef(false);
+  const liveViewportRef = useRef<HTMLDivElement | null>(null);
   const [waveEnergy, setWaveEnergy] = useState(0);
   const waveOwnerRef = useRef(0);
   const [liveTranscript, setLiveTranscript] = useState('');
@@ -481,7 +484,7 @@ export default function ConversationalVoiceLayer() {
   }, [sendVoiceTurn]);
 
   const startRecognition = useCallback((allowWhileSpeaking = false) => {
-    if (!activeRef.current || typingRef.current) return;
+    if (!activeRef.current || typingRef.current || micPausedRef.current) return;
     if (phaseRef.current === 'speaking' && (!allowWhileSpeaking || tapOnlyRef.current
       || micMonitorStateRef.current !== 'ready')) return;
     stopRecognition();
@@ -1110,6 +1113,8 @@ export default function ConversationalVoiceLayer() {
   useEffect(() => {
     if (!active) return;
     activeRef.current = true;
+    micPausedRef.current = false;
+    setMicPaused(false);
     heardAnythingRef.current = false;
     setMicSilent(false);
     setErrorDetail('');
@@ -1337,6 +1342,51 @@ export default function ConversationalVoiceLayer() {
     }
   };
 
+  // The microphone in the one-row Live island is an actual control, not a
+  // decorative second mic. Pausing never ends the canonical chat session.
+  const toggleLiveMicrophone = () => {
+    if (phaseRef.current === 'speaking' || phaseRef.current === 'thinking') {
+      interruptPlayback();
+      return;
+    }
+    if (micPausedRef.current || phaseRef.current === 'error' || phaseRef.current === 'idle') {
+      micPausedRef.current = false;
+      setMicPaused(false);
+      setErrorDetail('');
+      changePhase('listening');
+      startRecognition();
+      return;
+    }
+    micPausedRef.current = true;
+    setMicPaused(true);
+    cancelPendingTurn();
+    stopRecognition();
+    setLiveTranscript('');
+    changePhase('idle');
+  };
+
+  // Mobile Safari's on-screen keyboard can obscure fixed 100dvh layers.
+  // Follow the visual viewport so the inline composer stays above the IME.
+  useEffect(() => {
+    if (!active) return;
+    const viewport = window.visualViewport;
+    const element = liveViewportRef.current;
+    if (!element || !viewport) return;
+    const update = () => {
+      element.style.setProperty('--lyo-live-visual-height', `${viewport.height}px`);
+      element.style.setProperty('--lyo-live-visual-top', `${viewport.offsetTop}px`);
+    };
+    update();
+    viewport.addEventListener('resize', update);
+    viewport.addEventListener('scroll', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      viewport.removeEventListener('scroll', update);
+      element.style.removeProperty('--lyo-live-visual-height');
+      element.style.removeProperty('--lyo-live-visual-top');
+    };
+  }, [active]);
+
   const submitTypedMessage = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = typedMessage.trim();
@@ -1363,12 +1413,12 @@ export default function ConversationalVoiceLayer() {
   const liveAssistantCaption = spokenText
     && spokenText.messageId === responseMessageIdRef.current
     ? spokenText.text : '';
-  const status = phase === 'listening'
+  const status = micPaused ? 'Microphone paused' : phase === 'listening'
     ? (micSilent ? 'Check your microphone permission' : 'Listening')
     : phase === 'thinking' ? 'Lyo is thinking'
       : phase === 'speaking' ? 'Lyo is responding'
         : phase === 'error' ? 'Voice needs attention' : 'Connecting';
-  const caption = phase === 'listening'
+  const caption = micPaused ? 'Tap the microphone to continue.' : phase === 'listening'
     ? (liveTranscript || 'Go ahead. I’m listening.')
     : phase === 'speaking'
       ? (liveAssistantCaption || 'Speaking…')
@@ -1389,6 +1439,7 @@ export default function ConversationalVoiceLayer() {
 
   return (
     <div
+      ref={liveViewportRef}
       role="dialog"
       aria-modal="true"
       aria-label="LYO live voice conversation"
@@ -1549,12 +1600,10 @@ export default function ConversationalVoiceLayer() {
         <div className="lyo-live-magic__control-stack">
           <div className="lyo-live-magic__dock">
             <button type="button" className="lyo-live-magic__mic"
-              disabled={!isBusy && phase !== 'error'}
-              onClick={isBusy ? interruptPlayback : () => {
-                setErrorDetail(''); changePhase('listening'); startRecognition();
-              }}
-              aria-label={isBusy ? 'Interrupt Lyo to speak' : phase === 'error' ? 'Try microphone again' : 'Listening'}>
-              {phase === 'error' ? <MicOff size={27} /> : <Mic size={27} />}
+              onClick={toggleLiveMicrophone}
+              aria-pressed={micPaused}
+              aria-label={isBusy ? 'Interrupt Lyo to speak' : micPaused ? 'Resume microphone' : phase === 'error' ? 'Try microphone again' : 'Pause microphone'}>
+              {micPaused || phase === 'error' ? <MicOff size={23} /> : <Mic size={23} />}
             </button>
           </div>
           <form className="lyo-live-magic__composer" onSubmit={submitTypedMessage}>
