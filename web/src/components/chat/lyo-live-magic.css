@@ -410,3 +410,75 @@
   .lyo-live-magic__state { padding: 6px 13px; }
   .lyo-live-magic__composer input { padding-block: 5px; }
 }
+
+/* November Live polish: one dock, less visual noise, voice-energy waveform. */
+.lyo-live-magic__brand p { letter-spacing: .02em; margin-top: 8px; color: #aeb9c9; }
+.lyo-live-magic__learning { display: none; }
+.lyo-live-magic__voice-wave {
+  height: clamp(45px, 7dvh, 68px);
+  width: min(84%, 510px);
+  margin: 2px auto 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
+.lyo-live-magic__voice-wave svg {
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
+  transition: transform 130ms ease-out;
+  filter: drop-shadow(0 0 6px rgba(88,193,226,.35));
+}
+.lyo-live-magic--speaking .lyo-live-magic__voice-wave svg {
+  filter: drop-shadow(0 0 9px rgba(255,132,75,.5));
+}
+.lyo-live-magic__caption {
+  margin-top: 2px;
+  max-height: 3.5rem;
+  min-height: 20px;
+  background: none;
+  border: 0;
+  padding: 0 12px;
+  box-shadow: none;
+  color: rgba(241,244,252,.78);
+  font-size: .95rem;
+}
+.lyo-live-magic__footer { gap: 8px; }
+.lyo-live-magic__control-stack {
+  width: min(100%, 550px);
+  border-radius: 28px;
+  padding: 12px;
+  background: #141b25;
+  border: 1px solid rgba(134,164,186,.43);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lyo-live-magic__dock {
+  width: 100%;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.lyo-live-magic__mic, .lyo-live-magic__hangup { width: 52px; height: 52px; }
+.lyo-live-magic__composer {
+  width: 100%;
+  margin: 0;
+  background: #10151d;
+  border: 1px solid rgba(210,222,238,.18);
+}
+.lyo-live-magic__hero {
+  height: clamp(174px, 30dvh, 298px);
+}
+.lyo-live-magic__headline {
+  font-size: clamp(2rem, 7.5vw, 3.45rem);
+  margin-top: clamp(10px, 2.1dvh, 20px);
+}
+@media (max-height: 740px) {
+  .lyo-live-magic__hero { height: clamp(144px, 26dvh, 230px); }
+  .lyo-live-magic__caption { max-height: 2.8rem; }
+  .lyo-live-magic__composer input { padding-block: 5px; }
+  .lyo-live-magic__control-stack { padding: 8px 10px; }
+}
