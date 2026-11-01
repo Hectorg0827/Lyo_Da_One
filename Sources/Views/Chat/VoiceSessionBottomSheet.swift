@@ -278,7 +278,10 @@ struct VoiceSessionBottomSheet: View {
     private var inputIsland: some View {
         HStack(spacing: 8) {
             Button {
-                if pausedByUser || !viewModel.isVoiceActive {
+                if speaking || thinking {
+                    viewModel.interruptLiveAnswer()
+                    if !pausedByUser && !inputFocused { viewModel.resumeLiveMicrophone() }
+                } else if pausedByUser || !viewModel.isVoiceActive {
                     pausedByUser = false
                     inputFocused = false
                     viewModel.resumeLiveMicrophone()
@@ -293,7 +296,8 @@ struct VoiceSessionBottomSheet: View {
                     .frame(width: 42, height: 42)
                     .overlay(Circle().stroke(palette[0].opacity(0.65), lineWidth: 1.5))
             }
-            .accessibilityLabel(pausedByUser ? "Resume microphone" : "Pause microphone")
+            .accessibilityLabel(speaking || thinking ? "Interrupt Lyo to speak" :
+                                pausedByUser ? "Resume microphone" : "Pause microphone")
 
             HStack(spacing: 5) {
                 Menu {
@@ -372,6 +376,9 @@ struct VoiceSessionBottomSheet: View {
 
         Task { @MainActor in
             do {
+                if viewModel.isAISpeaking || viewModel.isLoading {
+                    viewModel.interruptLiveAnswer()
+                }
                 for media in pending {
                     let attachment = try await mediaPicker.uploadMedia(media)
                     viewModel.addAttachment(attachment)
