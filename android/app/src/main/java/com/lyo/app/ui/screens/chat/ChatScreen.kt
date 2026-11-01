@@ -224,7 +224,7 @@ private val Suggestions = listOf(
 )
 
 @Composable
-fun ChatScreen(nav: NavHostController) {
+fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val messages = remember { mutableStateListOf<ChatMsg>() }
@@ -253,6 +253,8 @@ fun ChatScreen(nav: NavHostController) {
     var voiceListeningArmed by remember { mutableStateOf(true) }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
     var voiceConversation by remember { mutableStateOf(false) }
+    LaunchedEffect(voiceConversation) { onLiveModeChanged(voiceConversation) }
+    DisposableEffect(Unit) { onDispose { onLiveModeChanged(false) } }
     var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
     var liveVoiceTranscript by remember { mutableStateOf("") }
     var voiceLanguageTag by remember { mutableStateOf(Locale.getDefault().toLanguageTag()) }
