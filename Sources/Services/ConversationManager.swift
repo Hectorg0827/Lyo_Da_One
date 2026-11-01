@@ -139,10 +139,10 @@ class ConversationManager: ObservableObject {
         // Set as current but DO NOT add to saved list yet
         currentConversation = newConv
         
-        // Sync with UnifiedChatService for session isolation
-        Task { @MainActor in
-            UnifiedChatService.shared.startNewChat(withId: newConv.id)
-        }
+        // Both services are @MainActor. Initialize the canonical Chat thread
+        // synchronously: a deferred Task could otherwise reset a first Live
+        // voice turn after it had already started streaming.
+        UnifiedChatService.shared.startNewChat(withId: newConv.id)
         
         return newConv
     }
