@@ -1380,7 +1380,7 @@ export default function ConversationalVoiceLayer() {
               <div className="lyo-live-magic__learning lyo-live-magic__learning--two" aria-hidden="true">∑</div>
               <div className="lyo-live-magic__learning lyo-live-magic__learning--three" aria-hidden="true">✧</div>
               <div className="lyo-live-magic__learning lyo-live-magic__learning--four" aria-hidden="true">Aa</div>
-              <div className="lyo-live-magic__mascot" key={mascotTaps}>
+              <div className={cn('lyo-live-magic__mascot', mascotTaps > 0 && 'lyo-live-magic__mascot--touched')} key={mascotTaps}>
                 <MascotAvatar thinking={phase === 'thinking'}
                   speaking={phase === 'speaking'}
                   idle={phase === 'listening' || phase === 'idle'}
@@ -1444,7 +1444,7 @@ export default function ConversationalVoiceLayer() {
             onFocus={() => { typingRef.current = true; cancelPendingTurn(); stopRecognition(); }}
             onBlur={() => {
               typingRef.current = false;
-              if (phaseRef.current === 'listening' && !typedMessage.trim()) startRecognition();
+              if (phaseRef.current === 'listening') startRecognition();
             }} />
           <button type="submit" disabled={!typedMessage.trim()} aria-label="Send typed message to Lyo">Send</button>
         </form>
