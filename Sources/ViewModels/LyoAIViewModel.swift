@@ -44,6 +44,7 @@ class LyoAIViewModel: ObservableObject {
 
     // MARK: - True Live Mode State
     @Published var isLiveMode: Bool = false
+    @Published private(set) var liveMicrophoneMutedByUser = false
     @Published var userLiveAudioLevel: Float = 0
     @Published var aiLiveAudioLevel: Float = 0
     @Published var isAIThinking: Bool = false
@@ -549,6 +550,7 @@ class LyoAIViewModel: ObservableObject {
         // "Live" is now continuous I/O around the exact same Unified Chat
         // contract, memory, tools, multimodal context and teaching policy.
         isLiveMode = true
+        liveMicrophoneMutedByUser = false
         isAudioOutputEnabled = true
         voiceLoopActive = true
         startListening()
@@ -559,6 +561,7 @@ class LyoAIViewModel: ObservableObject {
         // Do not call stopListening() here: that legacy action sends any
         // partial transcript and can create a phantom message after closing.
         isLiveMode = false
+        liveMicrophoneMutedByUser = false
         isAudioOutputEnabled = false
         voiceLoopActive = false
         voiceTurnDebounceTask?.cancel()
@@ -592,8 +595,9 @@ class LyoAIViewModel: ObservableObject {
         isAIThinking = false
     }
 
-    func pauseLiveMicrophone() {
+    func pauseLiveMicrophone(userInitiated: Bool = true) {
         guard isLiveMode else { return }
+        if userInitiated { liveMicrophoneMutedByUser = true }
         voiceTurnDebounceTask?.cancel()
         voiceTurnDebounceTask = nil
         voiceLoopActive = false
@@ -604,9 +608,12 @@ class LyoAIViewModel: ObservableObject {
     }
 
     func resumeLiveMicrophone() {
-        guard isLiveMode && !sttService.isRecording && !isLoading
-                && !isAISpeaking else { return }
+        guard isLiveMode else { return }
+        liveMicrophoneMutedByUser = false
+        // The voice loop remains armed even while the model or TTS is busy.
+        // Recognition starts after the current reply, not over Lyo's speech.
         voiceLoopActive = true
+        guard !sttService.isRecording && !isLoading && !isAISpeaking else { return }
         startListening()
     }
 
@@ -855,7 +862,8 @@ class LyoAIViewModel: ObservableObject {
         attachments = []
 
         // Capture voice state
-        let shouldResumeListening = voiceLoopActive || isLiveMode || isVoiceActive
+        let shouldResumeListening = !liveMicrophoneMutedByUser
+            && (voiceLoopActive || isLiveMode || isVoiceActive)
         let shouldSpeak = shouldResumeListening || isAudioOutputEnabled
         let interruptedPreviousTurn = voiceInterruptedPreviousTurn
         let voiceTurnId = UUID().uuidString
