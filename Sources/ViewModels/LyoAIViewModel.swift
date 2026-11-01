@@ -555,18 +555,45 @@ class LyoAIViewModel: ObservableObject {
     }
 
     func stopLiveMode() {
+        // Exiting Live returns to the exact same canonical Chat conversation.
+        // Do not call stopListening() here: that legacy action sends any
+        // partial transcript and can create a phantom message after closing.
         isLiveMode = false
         isAudioOutputEnabled = false
+        voiceLoopActive = false
         voiceTurnDebounceTask?.cancel()
         voiceTurnDebounceTask = nil
+        sttService.stopRecording()
+        isVoiceActive = false
+        stopSpeaking()
         inputText = ""
-        stopListening()
         lastLiveTranscript = ""
         userLiveAudioLevel = 0
         aiLiveAudioLevel = 0
         isAIThinking = false
+        shouldAutoSpeakCurrentResponse = false
         streamedVoiceSegmentKeys.removeAll()
         voiceSegmentStreamOpen = false
+    }
+
+    /// Suspend speech recognition only while the user uses the text island,
+    /// without closing Live or submitting an incomplete STT fragment.
+    func pauseLiveMicrophone() {
+        guard isLiveMode else { return }
+        voiceTurnDebounceTask?.cancel()
+        voiceTurnDebounceTask = nil
+        voiceLoopActive = false
+        sttService.stopRecording()
+        isVoiceActive = false
+        lastLiveTranscript = ""
+        inputText = ""
+    }
+
+    func resumeLiveMicrophone() {
+        guard isLiveMode && !sttService.isRecording && !isLoading
+                && !isAISpeaking else { return }
+        voiceLoopActive = true
+        startListening()
     }
 
     func startListening() {
