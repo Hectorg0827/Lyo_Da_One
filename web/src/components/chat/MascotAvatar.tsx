@@ -23,12 +23,14 @@ export default function MascotAvatar({
   thinking = false,
   idle = false,
   speaking = false,
+  liveHero = false,
   size = 32,
   alt,
 }: {
   thinking?: boolean;
   idle?: boolean;
   speaking?: boolean;
+  liveHero?: boolean;
   size?: number;
   /** Overrides the default alt text (e.g. a specific lyoState like "Lyo is confused"). */
   alt?: string;
@@ -68,6 +70,26 @@ export default function MascotAvatar({
       if (glanceTimeout.current) clearTimeout(glanceTimeout.current);
     };
   }, [idle]);
+
+  // Full-screen Live uses the canonical front-facing Lyo artwork, unchanged
+  // across listening, thinking and speaking. Animate position only, not face.
+  if (liveHero) {
+    return (
+      <motion.img
+        src="/mascot/lyo_live_front.png"
+        alt={alt ?? 'Lyo'}
+        width={size}
+        height={size}
+        className="shrink-0 object-contain select-none"
+        animate={speaking
+          ? { y: [0, -4, 0], scale: [1, 1.035, 1] }
+          : thinking
+            ? { y: [0, -3, 0], scale: [1, 1.015, 1] }
+            : { y: [0, -5, 0], scale: [1, 1.018, 1] }}
+        transition={{ duration: speaking ? 0.9 : 3.6, repeat: Infinity, ease: 'easeInOut' }}
+      />
+    );
+  }
 
   if (thinking) {
     return (
