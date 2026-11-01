@@ -60,6 +60,7 @@ export default function ChatInputBar() {
     reviseActiveCourse,
     voiceSessionActive,
     setVoiceSessionActive,
+    createConversation,
   } = useChatStore();
   const isCourseAdjustable = isGenerating && generationActivity === 'course';
   const [value, setValue] = useState('');
@@ -179,8 +180,17 @@ export default function ChatInputBar() {
    * retries. Stopping first keeps the handover ordered.
    */
   const toggleVoiceSession = () => {
-    if (!voiceSessionActive) stopDictation();
-    setVoiceSessionActive(!voiceSessionActive);
+    if (voiceSessionActive) {
+      setVoiceSessionActive(false);
+      return;
+    }
+    // A new Live session is a fresh canonical Chat thread, not a parallel
+    // voice-only transcript. The first accepted voice or typed turn promotes
+    // this local thread to the ordinary persisted server conversation.
+    if (isGenerating || uploading) return;
+    stopDictation();
+    createConversation();
+    setVoiceSessionActive(true);
   };
 
   // Backstop for a live conversation started anywhere but the control above.
