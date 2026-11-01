@@ -1,0 +1,29 @@
+name: LYO Live iOS source validation (staging-only)
+
+on:
+  pull_request:
+    paths:
+      - "Sources/Views/Chat/VoiceSessionBottomSheet.swift"
+      - "Sources/Views/Main/Hybrid/LyoOverlayView.swift"
+      - "Sources/ViewModels/LyoAIViewModel.swift"
+      - "Sources/Services/ConversationManager.swift"
+      - ".github/workflows/lyo-live-ios-syntax.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  parse-swift:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Swift compiler availability
+        run: swiftc --version
+      - name: Parse iOS Live and canonical Chat integration without deploying
+        run: |
+          swiftc -frontend -parse \
+            Sources/Views/Chat/VoiceSessionBottomSheet.swift \
+            Sources/Views/Main/Hybrid/LyoOverlayView.swift \
+            Sources/ViewModels/LyoAIViewModel.swift \
+            Sources/Services/ConversationManager.swift
