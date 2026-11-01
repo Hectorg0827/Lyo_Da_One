@@ -179,6 +179,8 @@ export default function ChatInputBar() {
    * retries. Stopping first keeps the handover ordered.
    */
   const toggleVoiceSession = () => {
+    // Release dictation before rendering Live's own recognizer, not in an effect.
+    if (!voiceSessionActive) stopDictation();
     if (voiceSessionActive) {
       setVoiceSessionActive(false);
       return;
