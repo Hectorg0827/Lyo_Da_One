@@ -412,3 +412,19 @@ test('Live composer exposes photo/document input alongside one microphone and no
   assert.ok(stage.querySelector('input#lyo-live-typed-input'));
   assert.ok(stage.querySelector('button[aria-label="End live voice and return to chat"]'));
 });
+
+test('one inline Live mic actually pauses and resumes recording without ending the chat', async (t) => {
+  const h = await harness(t);
+  const mic = document.querySelector('button.lyo-live-magic__mic');
+  assert.ok(mic);
+  assert.equal(h.recognizers.at(-1).running, true);
+  await flush(() => mic.click());
+  assert.match(h.text(), /Microphone paused/);
+  assert.equal(mic.getAttribute('aria-pressed'), 'true');
+  assert.equal(h.recognizers.at(-1).running, false);
+  await flush(() => mic.click());
+  assert.match(h.text(), /Listening/);
+  assert.equal(mic.getAttribute('aria-pressed'), 'false');
+  assert.equal(h.recognizers.at(-1).running, true);
+  assert.equal(h.submissions.length, 0, 'mic pausing must not save an incomplete turn');
+});
