@@ -1486,37 +1486,34 @@ export default function ConversationalVoiceLayer() {
           className="lyo-live-magic__transcript-toggle">
           <MessageSquareText size={17} /> {showTranscript ? 'Hide transcript' : 'Transcript'}
         </button>
-        <div className="lyo-live-magic__dock">
-          <button type="button" className="lyo-live-magic__mic"
-            disabled={!isBusy && phase !== 'error'}
-            onClick={isBusy ? interruptPlayback : () => {
-              setErrorDetail(''); changePhase('listening'); startRecognition();
-            }}
-            aria-label={isBusy ? 'Interrupt Lyo to speak' : phase === 'error' ? 'Try microphone again' : 'Listening'}>
-            {phase === 'error' ? <MicOff size={29} /> : <Mic size={29} />}
-          </button>
-          <div className="lyo-live-magic__equalizer" aria-hidden="true">
-            {[12, 24, 37, 20, 47, 58, 35, 23, 14].map((height, index) => (
-              <span key={index} style={{ height }} />
-            ))}
+        <div className="lyo-live-magic__control-stack">
+          <div className="lyo-live-magic__dock">
+            <button type="button" className="lyo-live-magic__mic"
+              disabled={!isBusy && phase !== 'error'}
+              onClick={isBusy ? interruptPlayback : () => {
+                setErrorDetail(''); changePhase('listening'); startRecognition();
+              }}
+              aria-label={isBusy ? 'Interrupt Lyo to speak' : phase === 'error' ? 'Try microphone again' : 'Listening'}>
+              {phase === 'error' ? <MicOff size={27} /> : <Mic size={27} />}
+            </button>
+            <button type="button" className="lyo-live-magic__hangup" onClick={endSession}
+              aria-label="End live voice and return to chat">
+              <span aria-hidden="true">☎</span>
+            </button>
           </div>
-          <button type="button" className="lyo-live-magic__hangup" onClick={endSession}
-            aria-label="End live voice and return to chat">
-            <span aria-hidden="true">☎</span>
-          </button>
+          <form className="lyo-live-magic__composer" onSubmit={submitTypedMessage}>
+            <label className="sr-only" htmlFor="lyo-live-typed-input">Ask Lyo by typing</label>
+            <input id="lyo-live-typed-input" type="text" autoComplete="off"
+              maxLength={4000} placeholder="Ask Lyo…" value={typedMessage}
+              onChange={(event) => setTypedMessage(event.target.value)}
+              onFocus={() => { typingRef.current = true; cancelPendingTurn(); stopRecognition(); }}
+              onBlur={() => {
+                typingRef.current = false;
+                if (phaseRef.current === 'listening') startRecognition();
+              }} />
+            <button type="submit" disabled={!typedMessage.trim()} aria-label="Send typed message to Lyo">Send</button>
+          </form>
         </div>
-        <form className="lyo-live-magic__composer" onSubmit={submitTypedMessage}>
-          <label className="sr-only" htmlFor="lyo-live-typed-input">Ask Lyo by typing</label>
-          <input id="lyo-live-typed-input" type="text" autoComplete="off"
-            maxLength={4000} placeholder="Ask Lyo…" value={typedMessage}
-            onChange={(event) => setTypedMessage(event.target.value)}
-            onFocus={() => { typingRef.current = true; cancelPendingTurn(); stopRecognition(); }}
-            onBlur={() => {
-              typingRef.current = false;
-              if (phaseRef.current === 'listening') startRecognition();
-            }} />
-          <button type="submit" disabled={!typedMessage.trim()} aria-label="Send typed message to Lyo">Send</button>
-        </form>
         {debugEnabled && <pre className="lyo-live-magic__debug">
           {debugLog.length ? debugLog.join('\n') : 'waiting for speech engine…'}
         </pre>}
