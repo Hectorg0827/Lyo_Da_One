@@ -435,14 +435,13 @@ internal fun MagicalLyoLiveScreen(
                     .clip(RoundedCornerShape(28.dp))
                     .border(1.dp, Color(0xFF718597).copy(alpha = 0.48f), RoundedCornerShape(28.dp))
                     .background(Color(0xFF141B25))
-                    .padding(horizontal = 12.dp, vertical = 11.dp),
+                    .padding(horizontal = 10.dp, vertical = 9.dp),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    val micEnabled = speaking || thinking || listening
                     Box(
                         modifier = Modifier.size(53.dp).clip(CircleShape)
                             .border(
@@ -477,25 +476,12 @@ internal fun MagicalLyoLiveScreen(
                             modifier = Modifier.size(26.dp),
                         )
                     }
-                    Spacer(Modifier.width(14.dp))
-                    Box(
-                        modifier = Modifier.size(53.dp).clip(CircleShape)
-                            .background(Brush.linearGradient(listOf(LiveCoral, Color(0xFFE33A72))))
-                            .clickable(onClick = onEnd),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Default.CallEnd,
-                            contentDescription = if (spanish) "Finalizar conversación" else "End Live conversation",
-                            tint = Color.White, modifier = Modifier.size(25.dp),
-                        )
-                    }
-                }
-                OutlinedTextField(
+                    Box(modifier = Modifier.weight(1f)) {
+
+                    OutlinedTextField(
                     value = draftText,
                     onValueChange = { draftText = it.take(4000) },
-                    modifier = Modifier.fillMaxWidth()
-                        .padding(top = 8.dp)
+                    modifier = Modifier.weight(1f)
                         .onFocusChanged { state ->
                             if (typing != state.isFocused) {
                                 typing = state.isFocused
@@ -531,6 +517,19 @@ internal fun MagicalLyoLiveScreen(
                         cursorColor = LiveMint,
                     ),
                 )
+                    }
+                    Box(
+                        modifier = Modifier.size(53.dp).clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(LiveCoral, Color(0xFFE33A72))))
+                            .clickable(onClick = onEnd),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.CallEnd,
+                            contentDescription = if (spanish) "Finalizar conversación" else "End Live conversation",
+                            tint = Color.White, modifier = Modifier.size(25.dp),
+                        )
+                    }                }
             }
             if (error != null && !speaking && !thinking) {
                 TextButton(onClick = onTestSpeaker) {
