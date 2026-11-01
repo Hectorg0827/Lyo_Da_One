@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Subject
@@ -117,6 +118,9 @@ internal fun MagicalLyoLiveScreen(
     onTryHumanVoice: () -> Unit,
     onSendText: (String) -> Unit,
     onTypingChanged: (Boolean) -> Unit,
+    onAttach: () -> Unit,
+    attachmentCount: Int,
+    attachmentsUploading: Boolean,
 ) {
     val spanish = remember { Locale.getDefault().language == "es" }
     val focusManager = LocalFocusManager.current
@@ -130,7 +134,8 @@ internal fun MagicalLyoLiveScreen(
 
     fun sendTyped() {
         val message = draftText.trim()
-        if (message.isBlank()) return
+        if (message.isBlank() && attachmentCount == 0) return
+        if (attachmentsUploading) return
         onSendText(message)
         draftText = ""
         keyboardController?.hide()
@@ -444,7 +449,7 @@ internal fun MagicalLyoLiveScreen(
                 ) {
                     val micEnabled = speaking || thinking || listening
                     Box(
-                        modifier = Modifier.size(53.dp).clip(CircleShape)
+                        modifier = Modifier.size(43.dp).clip(CircleShape)
                             .border(
                                 2.dp,
                                 if (speaking) Brush.sweepGradient(listOf(LiveOrange, LivePink, LiveOrange))
@@ -478,7 +483,6 @@ internal fun MagicalLyoLiveScreen(
                         )
                     }
                     Box(modifier = Modifier.weight(1f)) {
-
                     OutlinedTextField(
                     value = draftText,
                     onValueChange = { draftText = it.take(4000) },
@@ -491,16 +495,28 @@ internal fun MagicalLyoLiveScreen(
                         },
                     placeholder = {
                         Text(
-                            if (spanish) "Pregunta a Lyo…" else "Ask Lyo…",
+                            if (attachmentCount > 0) {
+                                if (spanish) "$attachmentCount archivo(s) listo(s)" else "$attachmentCount attachment(s) ready"
+                            } else if (spanish) "Pregunta a Lyo…" else "Ask Lyo…",
                             color = Color.White.copy(alpha = 0.52f),
                         )
                     },
+                    leadingIcon = {
+                        IconButton(onClick = onAttach, enabled = !attachmentsUploading && attachmentCount < 4) {
+                            Icon(
+                                Icons.Default.Add,
+                                contentDescription = if (spanish) "Adjuntar archivo o foto" else "Attach photo or document",
+                                tint = LiveWhite,
+                            )
+                        }
+                    },
                     trailingIcon = {
-                        IconButton(onClick = ::sendTyped, enabled = draftText.isNotBlank()) {
+                        IconButton(onClick = ::sendTyped,
+                            enabled = !attachmentsUploading && (draftText.isNotBlank() || attachmentCount > 0)) {
                             Icon(
                                 Icons.Default.Send,
                                 contentDescription = if (spanish) "Enviar mensaje" else "Send typed message",
-                                tint = if (draftText.isNotBlank()) LiveMint else Color.Gray,
+                                tint = if (!attachmentsUploading && (draftText.isNotBlank() || attachmentCount > 0)) LiveMint else Color.Gray,
                             )
                         }
                     },
@@ -519,18 +535,7 @@ internal fun MagicalLyoLiveScreen(
                     ),
                 )
                     }
-                    Box(
-                        modifier = Modifier.size(53.dp).clip(CircleShape)
-                            .background(Brush.linearGradient(listOf(LiveCoral, Color(0xFFE33A72))))
-                            .clickable(onClick = onEnd),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            Icons.Default.CallEnd,
-                            contentDescription = if (spanish) "Finalizar conversación" else "End Live conversation",
-                            tint = Color.White, modifier = Modifier.size(25.dp),
-                        )
-                    }                }
+                }
             }
             if (error != null && !speaking && !thinking) {
                 TextButton(onClick = onTestSpeaker) {
