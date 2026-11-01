@@ -482,3 +482,26 @@
   .lyo-live-magic__composer input { padding-block: 5px; }
   .lyo-live-magic__control-stack { padding: 8px 10px; }
 }
+
+/* Approved single-row floating text island. */
+.lyo-live-magic__control-stack {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 40px;
+  background: rgba(18,25,34,.94);
+}
+.lyo-live-magic__dock { display: contents; }
+.lyo-live-magic__mic { order: 0; flex: none; }
+.lyo-live-magic__composer {
+  order: 1; flex: 1; min-width: 0; width: auto;
+  padding: 4px 5px 4px 12px; border-radius: 32px;
+}
+.lyo-live-magic__composer button { padding: 8px; font-size: .8rem; }
+.lyo-live-magic__hangup { order: 2; flex: none; }
+@media (max-width: 400px) {
+  .lyo-live-magic__control-stack { gap: 7px; padding: 7px; }
+  .lyo-live-magic__mic, .lyo-live-magic__hangup { width: 47px; height: 47px; }
+  .lyo-live-magic__composer input { font-size: .88rem; }
+}
