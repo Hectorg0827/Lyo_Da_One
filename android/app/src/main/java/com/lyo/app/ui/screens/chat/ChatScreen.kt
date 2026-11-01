@@ -84,6 +84,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -257,6 +258,8 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
     DisposableEffect(Unit) { onDispose { onLiveModeChanged(false) } }
     var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
     var liveVoiceTranscript by remember { mutableStateOf("") }
+    var voiceMicLevel by remember { mutableFloatStateOf(0f) }
+    var voiceSpeechLevel by remember { mutableFloatStateOf(0f) }
     var voiceLanguageTag by remember { mutableStateOf(Locale.getDefault().toLanguageTag()) }
     var enableAutomaticLanguageSwitch by remember { mutableStateOf(Build.VERSION.SDK_INT >= 34) }
     var spokenVoiceCaption by remember { mutableStateOf("") }
@@ -310,10 +313,42 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
             }
         }
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            // PCM energy is available only on voice engines that expose it;
+            // do not record, transmit or persist raw audio.
+            private var lastMeterAt = 0L
+
+            override fun onAudioAvailable(utteranceId: String?, audio: ByteArray?) {
+                if (audio == null || audio.size < 32 || utteranceId == null ||
+                    utteranceId.startsWith("voice-pause:")) return
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - lastMeterAt < 65L) return
+                lastMeterAt = now
+                var total = 0.0
+                var samples = 0
+                // Audio provided by Android TTS is 16-bit signed PCM.
+                for (index in 0 until audio.size - 1 step 32) {
+                    val low = audio[index].toInt() and 0xff
+                    val high = audio[index + 1].toInt()
+                    val pcm = ((high shl 8) or low).toShort().toInt()
+                    val sample = pcm.toDouble() / 32768.0
+                    total += sample * sample
+                    samples++
+                }
+                val rms = kotlin.math.sqrt(total / samples.coerceAtLeast(1))
+                val level = (rms * 7.5).toFloat().coerceIn(0f, 1f)
+                mainHandler.post {
+                    if (voiceConversation && (speakingMessageId != null || pendingVoiceUtterances > 0)) {
+                        voiceSpeechLevel = level
+                    }
+                }
+            }
             override fun onStart(utteranceId: String?) {
                 mainHandler.post {
                     if (voiceConversation && utteranceId != null) {
-                        if (!utteranceId.startsWith("voice-pause:")) ttsOutputProblem = null
+                        if (!utteranceId.startsWith("voice-pause:")) {
+                            ttsOutputProblem = null
+                            voiceSpeechLevel = 0.12f
+                        }
                         spokenRanges[utteranceId]?.let { (prefix, _) -> spokenVoiceCaption = prefix }
                     }
                 }
@@ -338,6 +373,7 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
                         pendingVoiceUtterances = (pendingVoiceUtterances - 1).coerceAtLeast(0)
                     }
                     if (speakingMessageId == utteranceId) speakingMessageId = null
+                    if (pendingVoiceUtterances == 0) voiceSpeechLevel = 0f
                     if (
                         voiceConversation &&
                         !voiceSegmentStreamOpen &&
@@ -717,6 +753,8 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
         dictating = false
         recognizerInFlight = false
         liveVoiceTranscript = ""
+        voiceMicLevel = 0f
+        voiceSpeechLevel = 0f
         voiceThinkingNudge = ""
         spokenRanges.clear()
         bargeInCandidate = ""
@@ -847,7 +885,13 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
                     bargeInConfirmations = 0
                 }
 
-                override fun onRmsChanged(rmsdB: Float) = Unit
+                override fun onRmsChanged(rmsdB: Float) {
+                    if (voiceConversation && dictating && voiceListeningArmed) {
+                        // Reuse SpeechRecognizer's microphone amplitude rather
+                        // than opening a competing audio capture.
+                        voiceMicLevel = ((rmsdB + 2f) / 14f).coerceIn(0f, 1f)
+                    }
+                }
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
                 override fun onEndOfSpeech() { dictating = false }
 
@@ -1171,6 +1215,8 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
             thinking = isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0,
             speaking = speakingMessageId != null || pendingVoiceUtterances > 0,
             userCaption = liveVoiceTranscript,
+            microphoneLevel = voiceMicLevel,
+            playbackLevel = voiceSpeechLevel,
             assistantCaption = spokenVoiceCaption,
             thinkingNudge = voiceThinkingNudge,
             messages = messages,
