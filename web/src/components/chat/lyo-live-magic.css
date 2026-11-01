@@ -505,3 +505,39 @@
   .lyo-live-magic__mic, .lyo-live-magic__hangup { width: 47px; height: 47px; }
   .lyo-live-magic__composer input { font-size: .88rem; }
 }
+
+/* Canonical Live Chat input: a single inline microphone, attachment chooser,
+   and send field. The X in the header is the only close control. */
+.lyo-live-magic__control-stack { gap: 8px; }
+.lyo-live-magic__mic {
+  width: 43px;
+  height: 43px;
+  min-width: 43px;
+  max-height: 43px;
+}
+.lyo-live-magic__composer {
+  gap: 5px;
+  padding: 4px 6px 4px 7px;
+  min-height: 48px;
+}
+.lyo-live-magic__attach {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  padding: 0 !important;
+  border-radius: 50%;
+  color: #e3e7f1 !important;
+  background: rgba(255,255,255,.075) !important;
+}
+.lyo-live-magic__attach:disabled { opacity: .45; }
+.lyo-live-magic__composer input {
+  padding-block: 7px;
+  min-width: 0;
+}
+@media (max-width: 390px) {
+  .lyo-live-magic__control-stack { padding: 7px; gap: 5px; }
+  .lyo-live-magic__composer { gap: 3px; }
+  .lyo-live-magic__mic { width: 41px; height: 41px; min-width: 41px; }
+}
