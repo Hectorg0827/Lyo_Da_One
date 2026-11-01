@@ -67,6 +67,41 @@ const DUCKED_VOLUME = 0.22;
  */
 const RESUMED_SPEECH_GRACE_MS = 1500;
 
+/**
+ * Decode synthesized audio locally to obtain a real (not invented) waveform.
+ * This never reroutes output or captures an extra microphone. Some browsers
+ * cannot decode a particular voice format; those simply render an idle wave.
+ */
+async function audioEnergyEnvelope(blob: Blob): Promise<number[] | null> {
+  if (typeof window === 'undefined' || !window.AudioContext) return null;
+  const context = new window.AudioContext();
+  try {
+    if (typeof context.decodeAudioData !== 'function') return null;
+    const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+    const samples = buffer.getChannelData(0);
+    if (!samples.length) return null;
+    const buckets = 80;
+    const levels: number[] = [];
+    for (let i = 0; i < buckets; i++) {
+      const first = Math.floor(i * samples.length / buckets);
+      const last = Math.max(first + 1, Math.floor((i + 1) * samples.length / buckets));
+      let sum = 0;
+      let count = 0;
+      for (let frame = first; frame < last; frame += 16) {
+        const sample = samples[frame] || 0;
+        sum += sample * sample;
+        count += 1;
+      }
+      levels.push(Math.min(1, Math.sqrt(sum / Math.max(count, 1)) * 6));
+    }
+    return levels;
+  } catch {
+    return null;
+  } finally {
+    void context.close().catch(() => undefined);
+  }
+}
+
 export default function ConversationalVoiceLayer() {
   const active = useChatStore((state) => state.voiceSessionActive);
   const isGenerating = useChatStore((state) => state.isGenerating);
@@ -84,6 +119,8 @@ export default function ConversationalVoiceLayer() {
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recognitionRestartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [phase, setPhase] = useState<VoicePhase>('idle');
+  const [waveEnergy, setWaveEnergy] = useState(0);
+  const waveOwnerRef = useRef(0);
   const [liveTranscript, setLiveTranscript] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
   const [mascotTaps, setMascotTaps] = useState(0);
@@ -270,6 +307,7 @@ export default function ConversationalVoiceLayer() {
     const previous = phaseRef.current;
     phaseRef.current = next;
     setPhase(next);
+    if (next !== 'speaking' && next !== 'listening') setWaveEnergy(0);
     if (next === 'speaking') {
       if (previous !== 'speaking') void acquireMicMonitor();
     } else if (previous === 'speaking') {
@@ -486,6 +524,7 @@ export default function ConversationalVoiceLayer() {
         firstAudioReportedRef.current = false;
         setActiveVoiceQualityContext(qualityContext());
       }
+      if (phaseRef.current === 'listening') setWaveEnergy(0.42);
       micSpeechStartedAtRef.current = now;
       lastRecognitionActivityAtRef.current = now;
       const floorGap = lastAssistantAudioEndedAtRef.current > 0
@@ -505,6 +544,9 @@ export default function ConversationalVoiceLayer() {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
       const state = transcriptRef.current.push(event);
       const combined = tidyTranscript(state.combined);
+      if (phaseRef.current === 'listening' && combined) {
+        setWaveEnergy(Math.min(1, 0.18 + Math.min(combined.length, 120) / 220));
+      }
       note(`result n=${event.results?.length ?? 0} "${combined.slice(0, 40)}"`);
       if (!combined) return;
       heardAnythingRef.current = true;
@@ -692,16 +734,30 @@ export default function ConversationalVoiceLayer() {
     });
   }, [qualityContext]);
 
-  const playBlob = useCallback((blob: Blob, signal: AbortSignal, onProgress?: (fraction: number) => void) =>
-    playVoiceBlob(blob, {
+  const playBlob = useCallback((blob: Blob, signal: AbortSignal, onProgress?: (fraction: number) => void) => {
+    const owner = ++waveOwnerRef.current;
+    let envelope: number[] | null = null;
+    void audioEnergyEnvelope(blob).then((levels) => {
+      if (!signal.aborted && waveOwnerRef.current === owner) envelope = levels;
+    });
+    return playVoiceBlob(blob, {
       signal,
       volume: duckedRef.current ? DUCKED_VOLUME : 1,
-      onAudio: (audio, owner) => {
-        if (audio || audioRef.current === owner) audioRef.current = audio;
+      onAudio: (audio, audioOwner) => {
+        if (audio || audioRef.current === audioOwner) audioRef.current = audio;
       },
       onStart: () => markFirstAudio('server_tts'),
-      onProgress,
-    }), [markFirstAudio]);
+      onProgress: (fraction) => {
+        if (!signal.aborted && waveOwnerRef.current === owner) {
+          const index = Math.min(79, Math.max(0, Math.floor(fraction * 80)));
+          setWaveEnergy(envelope?.[index] ?? 0);
+        }
+        onProgress?.(fraction);
+      },
+    }).finally(() => {
+      if (waveOwnerRef.current === owner) setWaveEnergy(0);
+    });
+  }, [markFirstAudio]);
 
   const browserSpeechFallback = useCallback((text: string, signal: AbortSignal) =>
     speakVoiceFallback(text, {
@@ -1395,7 +1451,20 @@ export default function ConversationalVoiceLayer() {
               {status}
             </div>
             <h2 className="lyo-live-magic__headline">{heroHeadline}</h2>
-            <div className="lyo-live-magic__understroke" aria-hidden="true" />
+            <div className="lyo-live-magic__voice-wave" aria-hidden="true">
+              <svg viewBox="0 0 500 66" preserveAspectRatio="none"
+                style={{ transform: `scaleY(${Math.max(.12, waveEnergy * 1.85)})` }}>
+                <defs>
+                  <linearGradient id="lyoHeadlineWave" x1="0" x2="1" y1="0" y2="0">
+                    <stop offset="0%" stopColor={phase === 'speaking' ? '#ffc778' : '#81eecb'} />
+                    <stop offset="50%" stopColor={phase === 'speaking' ? '#ff8744' : '#64b8ff'} />
+                    <stop offset="100%" stopColor={phase === 'speaking' ? '#ff6e91' : '#b78dff'} />
+                  </linearGradient>
+                </defs>
+                <path d="M0 33 C45 33 55 3 95 33 S165 63 205 33 S270 3 310 33 S380 63 420 33 S470 33 500 33"
+                  stroke="url(#lyoHeadlineWave)" strokeWidth="5" fill="none" strokeLinecap="round" />
+              </svg>
+            </div>
             <div className="lyo-live-magic__caption" aria-live="polite" aria-atomic="false">
               {caption}
             </div>
