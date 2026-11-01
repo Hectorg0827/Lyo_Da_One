@@ -1272,6 +1272,13 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
                 liveVoiceTranscript = ""
                 send(typed)
             },
+            onAttach = {
+                if (!uploadingAttachment && !isStreaming && pendingAttachments.size < MAX_CHAT_ATTACHMENTS) {
+                    attachmentPicker.launch(arrayOf("*/*"))
+                }
+            },
+            attachmentCount = pendingAttachments.size,
+            attachmentsUploading = uploadingAttachment,
             onTypingChanged = { focused ->
                 voiceListeningArmed = !focused
                 if (focused) {
