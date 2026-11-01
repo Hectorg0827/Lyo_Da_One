@@ -86,6 +86,9 @@ export default function ConversationalVoiceLayer() {
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [liveTranscript, setLiveTranscript] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
+  const [mascotTaps, setMascotTaps] = useState(0);
+  const [typedMessage, setTypedMessage] = useState('');
+  const typingRef = useRef(false);
   const [preferredSpeechLanguage, setPreferredSpeechLanguage] = useState<'device' | 'en-US' | 'es-ES'>('device');
   const preferredSpeechLanguageRef = useRef<'device' | 'en-US' | 'es-ES'>('device');
   const speechLocale = useCallback(() => preferredSpeechLanguageRef.current === 'device'
@@ -435,7 +438,7 @@ export default function ConversationalVoiceLayer() {
   }, [sendVoiceTurn]);
 
   const startRecognition = useCallback((allowWhileSpeaking = false) => {
-    if (!activeRef.current) return;
+    if (!activeRef.current || typingRef.current) return;
     if (phaseRef.current === 'speaking' && (!allowWhileSpeaking || tapOnlyRef.current
       || micMonitorStateRef.current !== 'ready')) return;
     stopRecognition();
@@ -1220,6 +1223,21 @@ export default function ConversationalVoiceLayer() {
     }
   };
 
+  const submitTypedMessage = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = typedMessage.trim();
+    if (!text) return;
+    setTypedMessage('');
+    typingRef.current = false;
+    if (phaseRef.current === 'speaking' || phaseRef.current === 'thinking') {
+      interruptPlayback();
+    } else if (phaseRef.current === 'error') {
+      changePhase('listening');
+    }
+    // Typed text takes the same canonical voice turn path as spoken text.
+    void sendVoiceTurn(text);
+  };
+
   const endSession = () => setVoiceSessionActive(false);
 
   if (!active) return null;
@@ -1232,7 +1250,7 @@ export default function ConversationalVoiceLayer() {
   const status = phase === 'listening'
     ? (micSilent ? 'Check your microphone permission' : 'Listening')
     : phase === 'thinking' ? 'Lyo is thinking'
-      : phase === 'speaking' ? 'Lyo is speaking'
+      : phase === 'speaking' ? 'Lyo is responding'
         : phase === 'error' ? 'Voice needs attention' : 'Connecting';
   const caption = phase === 'listening'
     ? (liveTranscript || 'Go ahead. I’m listening.')
@@ -1249,7 +1267,7 @@ export default function ConversationalVoiceLayer() {
   const isTapFallback = interruptionMode === 'tap'
     && (phase === 'thinking' || phase === 'speaking');
   const isBusy = phase === 'thinking' || phase === 'speaking';
-  const heroHeadline = phase === 'speaking' ? 'Let’s learn together.'
+  const heroHeadline = phase === 'speaking' ? 'Here’s what I think…'
     : phase === 'thinking' ? 'One thought at a time.'
       : 'Go on, I’m all ears.';
 
@@ -1321,13 +1339,18 @@ export default function ConversationalVoiceLayer() {
           <div className="lyo-live-magic__stage">
             <div
               className={cn('lyo-live-magic__hero', isTapFallback && 'lyo-live-magic__hero--tap')}
-              role={isTapFallback ? 'button' : undefined}
-              tabIndex={isTapFallback ? 0 : undefined}
-              aria-label={isTapFallback ? 'Tap the mascot to speak' : undefined}
-              onClick={isTapFallback ? interruptPlayback : undefined}
+              role="button"
+              tabIndex={0}
+              aria-label={isTapFallback ? 'Tap the mascot to speak' : 'Touch Lyo for a reaction'}
+              onClick={() => {
+                setMascotTaps((count) => count + 1);
+                if (isTapFallback) interruptPlayback();
+              }}
               onKeyDown={(event) => {
-                if (isTapFallback && (event.key === 'Enter' || event.key === ' ')) {
-                  event.preventDefault(); interruptPlayback();
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setMascotTaps((count) => count + 1);
+                  if (isTapFallback) interruptPlayback();
                 }
               }}
             >
@@ -1357,12 +1380,15 @@ export default function ConversationalVoiceLayer() {
               <div className="lyo-live-magic__learning lyo-live-magic__learning--two" aria-hidden="true">∑</div>
               <div className="lyo-live-magic__learning lyo-live-magic__learning--three" aria-hidden="true">✧</div>
               <div className="lyo-live-magic__learning lyo-live-magic__learning--four" aria-hidden="true">Aa</div>
-              <div className="lyo-live-magic__mascot">
+              <div className="lyo-live-magic__mascot" key={mascotTaps}>
                 <MascotAvatar thinking={phase === 'thinking'}
                   speaking={phase === 'speaking'}
                   idle={phase === 'listening' || phase === 'idle'}
                   size={320} alt={status} />
               </div>
+              {mascotTaps > 0 && (
+                <span className="lyo-live-magic__touch-ripple" key={'ripple-' + mascotTaps} aria-hidden="true">✦</span>
+              )}
             </div>
             <div className="lyo-live-magic__state" role="status" aria-live="polite">
               {phase === 'error' ? <MicOff size={18} /> : <AudioLines size={19} />}
@@ -1410,6 +1436,18 @@ export default function ConversationalVoiceLayer() {
             <span aria-hidden="true">☎</span>
           </button>
         </div>
+        <form className="lyo-live-magic__composer" onSubmit={submitTypedMessage}>
+          <label className="sr-only" htmlFor="lyo-live-typed-input">Ask Lyo by typing</label>
+          <input id="lyo-live-typed-input" type="text" autoComplete="off"
+            maxLength={4000} placeholder="Ask Lyo…" value={typedMessage}
+            onChange={(event) => setTypedMessage(event.target.value)}
+            onFocus={() => { typingRef.current = true; cancelPendingTurn(); stopRecognition(); }}
+            onBlur={() => {
+              typingRef.current = false;
+              if (phaseRef.current === 'listening' && !typedMessage.trim()) startRecognition();
+            }} />
+          <button type="submit" disabled={!typedMessage.trim()} aria-label="Send typed message to Lyo">Send</button>
+        </form>
         {debugEnabled && <pre className="lyo-live-magic__debug">
           {debugLog.length ? debugLog.join('\n') : 'waiting for speech engine…'}
         </pre>}
