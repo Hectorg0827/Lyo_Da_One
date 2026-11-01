@@ -243,6 +243,7 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
     var input by remember { mutableStateOf("") }
     var isStreaming by remember { mutableStateOf(false) }
     var activeConversationId by remember { mutableStateOf<String?>(null) }
+    var chatScreenGeneration by remember { mutableIntStateOf(0) }
     val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
     var dictating by remember { mutableStateOf(false) }
@@ -441,14 +442,30 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
         }
     }
 
+    fun beginFreshLiveChat() {
+        // Each Live activation begins a new ordinary conversation, so after
+        // pressing X the spoken and typed turns are already in regular Chat.
+        // As with normal New Chat, an empty session is not stored remotely.
+        if (isStreaming || uploadingAttachment) return
+        chatScreenGeneration += 1
+        activeConversationId = null
+        messages.clear()
+        pendingAttachments.clear()
+        input = ""
+        liveVoiceTranscript = ""
+        spokenVoiceCaption = ""
+        voiceThinkingNudge = ""
+        inputError = null
+        voiceConversation = true
+        voiceListeningArmed = true
+        voiceListenNonce += 1
+    }
+
     val voicePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
-            voiceConversation = true
-            voiceListeningArmed = true
-            voiceListenNonce += 1
-            inputError = null
+            beginFreshLiveChat()
         } else {
             voiceConversation = false
             inputError = "Microphone permission is required for live voice."
@@ -1171,12 +1188,17 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
             messages.clear()
             send(seededPrompt)
         } else {
+            val openingGeneration = chatScreenGeneration
             runCatching {
                 val latest = ApiClient.api.aiConversations().conversations.firstOrNull() ?: return@runCatching
                 val detail = ApiClient.api.aiConversation(latest.id)
-                activeConversationId = detail.id
-                messages.clear()
-                messages.addAll(detail.messages.map { it.toChatMsg() })
+                // Do not overwrite a newly opened Live session with an older
+                // history response arriving after navigation has changed.
+                if (chatScreenGeneration == openingGeneration && !voiceConversation) {
+                    activeConversationId = detail.id
+                    messages.clear()
+                    messages.addAll(detail.messages.map { it.toChatMsg() })
+                }
             }
         }
     }
@@ -1198,6 +1220,7 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
     }
 
     fun newChat() {
+        chatScreenGeneration += 1
         textToSpeech?.stop()
         speakingMessageId = null
         streamJob?.cancel()
@@ -1543,9 +1566,7 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
                                 ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                                 android.content.pm.PackageManager.PERMISSION_GRANTED
                             ) {
-                                voiceConversation = true
-                                voiceListeningArmed = true
-                                voiceListenNonce += 1
+                                beginFreshLiveChat()
                             } else {
                                 voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             }
