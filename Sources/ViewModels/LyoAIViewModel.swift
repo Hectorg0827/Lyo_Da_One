@@ -44,6 +44,7 @@ class LyoAIViewModel: ObservableObject {
 
     // MARK: - True Live Mode State
     @Published var isLiveMode: Bool = false
+    @Published private(set) var liveMicrophoneMutedByUser = false
     @Published var userLiveAudioLevel: Float = 0
     @Published var aiLiveAudioLevel: Float = 0
     @Published var isAIThinking: Bool = false
@@ -549,24 +550,71 @@ class LyoAIViewModel: ObservableObject {
         // "Live" is now continuous I/O around the exact same Unified Chat
         // contract, memory, tools, multimodal context and teaching policy.
         isLiveMode = true
+        liveMicrophoneMutedByUser = false
         isAudioOutputEnabled = true
         voiceLoopActive = true
         startListening()
     }
 
     func stopLiveMode() {
+        // Exiting Live returns to the exact same canonical Chat conversation.
+        // Do not call stopListening() here: that legacy action sends any
+        // partial transcript and can create a phantom message after closing.
         isLiveMode = false
+        liveMicrophoneMutedByUser = false
         isAudioOutputEnabled = false
+        voiceLoopActive = false
         voiceTurnDebounceTask?.cancel()
         voiceTurnDebounceTask = nil
+        sttService.stopRecording()
+        isVoiceActive = false
+        stopSpeaking()
         inputText = ""
-        stopListening()
         lastLiveTranscript = ""
         userLiveAudioLevel = 0
         aiLiveAudioLevel = 0
         isAIThinking = false
+        shouldAutoSpeakCurrentResponse = false
         streamedVoiceSegmentKeys.removeAll()
         voiceSegmentStreamOpen = false
+    }
+
+    /// Suspend speech recognition only while the user uses the text island,
+    /// without closing Live or submitting an incomplete STT fragment.
+    /// Same-conversation manual interruption for the Live mic and text island.
+    /// Cancel the in-flight generation and playback without closing voice or
+    /// creating a second chat. The following turn carries the interruption flag.
+    func interruptLiveAnswer() {
+        guard isLiveMode else { return }
+        voiceInterruptedPreviousTurn = true
+        shouldAutoSpeakCurrentResponse = false
+        voiceTurnDebounceTask?.cancel()
+        voiceTurnDebounceTask = nil
+        unifiedChat.interruptCurrentResponse()
+        stopSpeaking()
+        isAIThinking = false
+    }
+
+    func pauseLiveMicrophone(userInitiated: Bool = true) {
+        guard isLiveMode else { return }
+        if userInitiated { liveMicrophoneMutedByUser = true }
+        voiceTurnDebounceTask?.cancel()
+        voiceTurnDebounceTask = nil
+        voiceLoopActive = false
+        sttService.stopRecording()
+        isVoiceActive = false
+        lastLiveTranscript = ""
+        inputText = ""
+    }
+
+    func resumeLiveMicrophone() {
+        guard isLiveMode else { return }
+        liveMicrophoneMutedByUser = false
+        // The voice loop remains armed even while the model or TTS is busy.
+        // Recognition starts after the current reply, not over Lyo's speech.
+        voiceLoopActive = true
+        guard !sttService.isRecording && !isLoading && !isAISpeaking else { return }
+        startListening()
     }
 
     func startListening() {
@@ -814,7 +862,8 @@ class LyoAIViewModel: ObservableObject {
         attachments = []
 
         // Capture voice state
-        let shouldResumeListening = voiceLoopActive || isLiveMode || isVoiceActive
+        let shouldResumeListening = !liveMicrophoneMutedByUser
+            && (voiceLoopActive || isLiveMode || isVoiceActive)
         let shouldSpeak = shouldResumeListening || isAudioOutputEnabled
         let interruptedPreviousTurn = voiceInterruptedPreviousTurn
         let voiceTurnId = UUID().uuidString
@@ -830,7 +879,12 @@ class LyoAIViewModel: ObservableObject {
         // so onSpeechFinished re-arms the mic only after the spoken reply completes.
         voiceLoopActive = shouldResumeListening
 
-        if isVoiceActive {
+        if isVoiceActive && !isLiveMode {
+            // Ordinary dictate-and-send still releases the recorder before
+            // playback. In Live the microphone stays armed through generation
+            // and playback, allowing actual hands-free barge-in. AVAudioSession
+            // uses voiceChat echo cancellation and the transcript callback
+            // filters Lyo's own spoken output to avoid self-interruption.
             sttService.stopRecording()
             isVoiceActive = false
             stopSpeaking()

@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AudioLines, MessageSquareText, Mic, MicOff, Volume2, X } from 'lucide-react';
+import { AudioLines, MessageSquareText, Mic, MicOff, Volume2, X, Plus } from 'lucide-react';
+import toast from 'react-hot-toast';
+import type { ChatAttachment } from '@/types';
 import MascotAvatar from './MascotAvatar';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -67,6 +69,41 @@ const DUCKED_VOLUME = 0.22;
  */
 const RESUMED_SPEECH_GRACE_MS = 1500;
 
+/**
+ * Decode synthesized audio locally to obtain a real (not invented) waveform.
+ * This never reroutes output or captures an extra microphone. Some browsers
+ * cannot decode a particular voice format; those simply render an idle wave.
+ */
+async function audioEnergyEnvelope(blob: Blob): Promise<number[] | null> {
+  if (typeof window === 'undefined' || !window.AudioContext) return null;
+  const context = new window.AudioContext();
+  try {
+    if (typeof context.decodeAudioData !== 'function') return null;
+    const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+    const samples = buffer.getChannelData(0);
+    if (!samples.length) return null;
+    const buckets = 80;
+    const levels: number[] = [];
+    for (let i = 0; i < buckets; i++) {
+      const first = Math.floor(i * samples.length / buckets);
+      const last = Math.max(first + 1, Math.floor((i + 1) * samples.length / buckets));
+      let sum = 0;
+      let count = 0;
+      for (let frame = first; frame < last; frame += 16) {
+        const sample = samples[frame] || 0;
+        sum += sample * sample;
+        count += 1;
+      }
+      levels.push(Math.min(1, Math.sqrt(sum / Math.max(count, 1)) * 6));
+    }
+    return levels;
+  } catch {
+    return null;
+  } finally {
+    void context.close().catch(() => undefined);
+  }
+}
+
 export default function ConversationalVoiceLayer() {
   const active = useChatStore((state) => state.voiceSessionActive);
   const isGenerating = useChatStore((state) => state.isGenerating);
@@ -84,8 +121,19 @@ export default function ConversationalVoiceLayer() {
   const monitorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recognitionRestartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [phase, setPhase] = useState<VoicePhase>('idle');
+  const [micPaused, setMicPaused] = useState(false);
+  const micPausedRef = useRef(false);
+  const liveViewportRef = useRef<HTMLDivElement | null>(null);
+  const [waveEnergy, setWaveEnergy] = useState(0);
+  const waveOwnerRef = useRef(0);
   const [liveTranscript, setLiveTranscript] = useState('');
   const [showTranscript, setShowTranscript] = useState(false);
+  const [mascotTaps, setMascotTaps] = useState(0);
+  const [typedMessage, setTypedMessage] = useState('');
+  const [liveAttachments, setLiveAttachments] = useState<ChatAttachment[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const attachmentFileRef = useRef<HTMLInputElement | null>(null);
+  const typingRef = useRef(false);
   const [preferredSpeechLanguage, setPreferredSpeechLanguage] = useState<'device' | 'en-US' | 'es-ES'>('device');
   const preferredSpeechLanguageRef = useRef<'device' | 'en-US' | 'es-ES'>('device');
   const speechLocale = useCallback(() => preferredSpeechLanguageRef.current === 'device'
@@ -267,6 +315,7 @@ export default function ConversationalVoiceLayer() {
     const previous = phaseRef.current;
     phaseRef.current = next;
     setPhase(next);
+    if (next !== 'speaking' && next !== 'listening') setWaveEnergy(0);
     if (next === 'speaking') {
       if (previous !== 'speaking') void acquireMicMonitor();
     } else if (previous === 'speaking') {
@@ -337,11 +386,11 @@ export default function ConversationalVoiceLayer() {
     duckedRef.current = false;
   }, []);
 
-  const sendVoiceTurn = useCallback(async (raw: string) => {
+  const sendVoiceTurn = useCallback(async (raw: string, attachments: ChatAttachment[] = []) => {
     const transcript = raw.trim();
     transcriptRef.current.reset();
     setLiveTranscript('');
-    if (!transcript || !activeRef.current || phaseRef.current !== 'listening') return;
+    if ((!transcript && !attachments.length) || !activeRef.current || phaseRef.current !== 'listening') return;
 
     const now = voiceQualityNow();
     const turnId = currentTurnIdRef.current || crypto.randomUUID();
@@ -403,7 +452,7 @@ export default function ConversationalVoiceLayer() {
     note(`sending "${transcript.slice(0, 40)}"`);
     changePhase('thinking');
     interruptedPreviousTurnRef.current = false;
-    await sendMessage(transcript, [], {
+    await sendMessage(transcript, attachments, {
       voiceSession: true,
       voiceInterruptedPreviousTurn: interruptedPreviousTurn,
       voiceTurnId: turnId,
@@ -435,7 +484,7 @@ export default function ConversationalVoiceLayer() {
   }, [sendVoiceTurn]);
 
   const startRecognition = useCallback((allowWhileSpeaking = false) => {
-    if (!activeRef.current) return;
+    if (!activeRef.current || typingRef.current || micPausedRef.current) return;
     if (phaseRef.current === 'speaking' && (!allowWhileSpeaking || tapOnlyRef.current
       || micMonitorStateRef.current !== 'ready')) return;
     stopRecognition();
@@ -483,6 +532,7 @@ export default function ConversationalVoiceLayer() {
         firstAudioReportedRef.current = false;
         setActiveVoiceQualityContext(qualityContext());
       }
+      if (phaseRef.current === 'listening') setWaveEnergy(0.42);
       micSpeechStartedAtRef.current = now;
       lastRecognitionActivityAtRef.current = now;
       const floorGap = lastAssistantAudioEndedAtRef.current > 0
@@ -502,6 +552,9 @@ export default function ConversationalVoiceLayer() {
       if (recognitionRef.current !== recognition || !activeRef.current) return;
       const state = transcriptRef.current.push(event);
       const combined = tidyTranscript(state.combined);
+      if (phaseRef.current === 'listening' && combined) {
+        setWaveEnergy(Math.min(1, 0.18 + Math.min(combined.length, 120) / 220));
+      }
       note(`result n=${event.results?.length ?? 0} "${combined.slice(0, 40)}"`);
       if (!combined) return;
       heardAnythingRef.current = true;
@@ -689,16 +742,30 @@ export default function ConversationalVoiceLayer() {
     });
   }, [qualityContext]);
 
-  const playBlob = useCallback((blob: Blob, signal: AbortSignal, onProgress?: (fraction: number) => void) =>
-    playVoiceBlob(blob, {
+  const playBlob = useCallback((blob: Blob, signal: AbortSignal, onProgress?: (fraction: number) => void) => {
+    const owner = ++waveOwnerRef.current;
+    let envelope: number[] | null = null;
+    void audioEnergyEnvelope(blob).then((levels) => {
+      if (!signal.aborted && waveOwnerRef.current === owner) envelope = levels;
+    });
+    return playVoiceBlob(blob, {
       signal,
       volume: duckedRef.current ? DUCKED_VOLUME : 1,
-      onAudio: (audio, owner) => {
-        if (audio || audioRef.current === owner) audioRef.current = audio;
+      onAudio: (audio, audioOwner) => {
+        if (audio || audioRef.current === audioOwner) audioRef.current = audio;
       },
       onStart: () => markFirstAudio('server_tts'),
-      onProgress,
-    }), [markFirstAudio]);
+      onProgress: (fraction) => {
+        if (!signal.aborted && waveOwnerRef.current === owner) {
+          const index = Math.min(79, Math.max(0, Math.floor(fraction * 80)));
+          setWaveEnergy(envelope?.[index] ?? 0);
+        }
+        onProgress?.(fraction);
+      },
+    }).finally(() => {
+      if (waveOwnerRef.current === owner) setWaveEnergy(0);
+    });
+  }, [markFirstAudio]);
 
   const browserSpeechFallback = useCallback((text: string, signal: AbortSignal) =>
     speakVoiceFallback(text, {
@@ -1046,6 +1113,8 @@ export default function ConversationalVoiceLayer() {
   useEffect(() => {
     if (!active) return;
     activeRef.current = true;
+    micPausedRef.current = false;
+    setMicPaused(false);
     heardAnythingRef.current = false;
     setMicSilent(false);
     setErrorDetail('');
@@ -1220,6 +1289,121 @@ export default function ConversationalVoiceLayer() {
     }
   };
 
+  const pickLiveAttachments = async (files: FileList | null) => {
+    const selected = Array.from(files || []);
+    if (!selected.length || uploadingAttachment || !activeRef.current) return;
+    const capacity = Math.max(0, 4 - liveAttachments.length);
+    if (selected.length > capacity) toast.error(`Only ${capacity} more file(s) can be attached`);
+    if (capacity === 0) return;
+
+    const acceptedTypes: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+      webp: 'image/webp', heic: 'image/heic', pdf: 'application/pdf',
+      txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', json: 'application/json',
+    };
+    const allow = new Set(Object.values(acceptedTypes));
+    let total = liveAttachments.reduce((sum, item) => sum + item.size, 0);
+    const uploaded: ChatAttachment[] = [];
+    setUploadingAttachment(true);
+    try {
+      for (const file of selected.slice(0, capacity)) {
+        if (!activeRef.current) break;
+        const extension = file.name.split('.').pop()?.toLowerCase() || '';
+        const mimeType = allow.has(file.type.toLowerCase())
+          ? file.type.toLowerCase() : acceptedTypes[extension];
+        if (!mimeType) {
+          toast.error(`${file.name} is not a supported image or document`);
+          continue;
+        }
+        if (file.size > 10 * 1024 * 1024 || total + file.size > 20 * 1024 * 1024) {
+          toast.error(`${file.name} exceeds the 10MB per-file or 20MB total limit`);
+          continue;
+        }
+        try {
+          const normalized = file.type === mimeType ? file : new File([file], file.name, { type: mimeType });
+          const result = await api.media.upload(normalized, 'chat');
+          if (!activeRef.current) break;
+          uploaded.push({
+            name: file.name,
+            url: result.url,
+            mimeType: result.contentType || mimeType,
+            size: result.size || file.size,
+            kind: mimeType.startsWith('image/') ? 'image' : 'document',
+          });
+          total += file.size;
+        } catch (error) {
+          toast.error(`${file.name}: ${error instanceof Error ? error.message : 'Upload failed'}`);
+        }
+      }
+      if (uploaded.length) setLiveAttachments((existing) => [...existing, ...uploaded].slice(0, 4));
+    } finally {
+      setUploadingAttachment(false);
+      if (attachmentFileRef.current) attachmentFileRef.current.value = '';
+    }
+  };
+
+  // The microphone in the one-row Live island is an actual control, not a
+  // decorative second mic. Pausing never ends the canonical chat session.
+  const toggleLiveMicrophone = () => {
+    if (phaseRef.current === 'speaking' || phaseRef.current === 'thinking') {
+      interruptPlayback();
+      return;
+    }
+    if (micPausedRef.current || phaseRef.current === 'error' || phaseRef.current === 'idle') {
+      micPausedRef.current = false;
+      setMicPaused(false);
+      setErrorDetail('');
+      changePhase('listening');
+      startRecognition();
+      return;
+    }
+    micPausedRef.current = true;
+    setMicPaused(true);
+    cancelPendingTurn();
+    stopRecognition();
+    setLiveTranscript('');
+    changePhase('idle');
+  };
+
+  // Mobile Safari's on-screen keyboard can obscure fixed 100dvh layers.
+  // Follow the visual viewport so the inline composer stays above the IME.
+  useEffect(() => {
+    if (!active) return;
+    const viewport = window.visualViewport;
+    const element = liveViewportRef.current;
+    if (!element || !viewport) return;
+    const update = () => {
+      element.style.setProperty('--lyo-live-visual-height', `${viewport.height}px`);
+      element.style.setProperty('--lyo-live-visual-top', `${viewport.offsetTop}px`);
+    };
+    update();
+    viewport.addEventListener('resize', update);
+    viewport.addEventListener('scroll', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      viewport.removeEventListener('scroll', update);
+      element.style.removeProperty('--lyo-live-visual-height');
+      element.style.removeProperty('--lyo-live-visual-top');
+    };
+  }, [active]);
+
+  const submitTypedMessage = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const text = typedMessage.trim();
+    const selectedAttachments = liveAttachments;
+    if ((!text && !selectedAttachments.length) || uploadingAttachment) return;
+    setTypedMessage('');
+    setLiveAttachments([]);
+    typingRef.current = false;
+    if (phaseRef.current === 'speaking' || phaseRef.current === 'thinking') {
+      interruptPlayback();
+    } else if (phaseRef.current === 'error') {
+      changePhase('listening');
+    }
+    // Typed text takes the same canonical voice turn path as spoken text.
+    void sendVoiceTurn(text, selectedAttachments);
+  };
+
   const endSession = () => setVoiceSessionActive(false);
 
   if (!active) return null;
@@ -1229,12 +1413,12 @@ export default function ConversationalVoiceLayer() {
   const liveAssistantCaption = spokenText
     && spokenText.messageId === responseMessageIdRef.current
     ? spokenText.text : '';
-  const status = phase === 'listening'
+  const status = micPaused ? 'Microphone paused' : phase === 'listening'
     ? (micSilent ? 'Check your microphone permission' : 'Listening')
     : phase === 'thinking' ? 'Lyo is thinking'
-      : phase === 'speaking' ? 'Lyo is speaking'
+      : phase === 'speaking' ? 'Lyo is responding'
         : phase === 'error' ? 'Voice needs attention' : 'Connecting';
-  const caption = phase === 'listening'
+  const caption = micPaused ? 'Tap the microphone to continue.' : phase === 'listening'
     ? (liveTranscript || 'Go ahead. I’m listening.')
     : phase === 'speaking'
       ? (liveAssistantCaption || 'Speaking…')
@@ -1246,139 +1430,211 @@ export default function ConversationalVoiceLayer() {
   const transcriptMessages = (conversation?.messages ?? [])
     .filter((message) => message.role === 'assistant' || message.role === 'user');
 
+  const isTapFallback = interruptionMode === 'tap'
+    && (phase === 'thinking' || phase === 'speaking');
+  const isBusy = phase === 'thinking' || phase === 'speaking';
+  const heroHeadline = phase === 'speaking' ? 'Here’s what I think…'
+    : phase === 'thinking' ? 'One thought at a time.'
+      : 'Go on, I’m all ears.';
+
   return (
     <div
+      ref={liveViewportRef}
       role="dialog"
       aria-modal="true"
       aria-label="LYO live voice conversation"
-      className="fixed inset-0 z-[100] overflow-hidden bg-[#090817] text-white"
+      className={cn('lyo-live-magic', 'lyo-live-magic--' + phase)}
     >
-      <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_38%,rgba(132,80,231,0.24),transparent_54%),radial-gradient(circle_at_80%_100%,rgba(249,115,22,0.13),transparent_44%)]" />
-      <div className="relative flex h-full flex-col mx-auto w-full max-w-3xl px-5 pt-[max(env(safe-area-inset-top),1.25rem)] pb-[max(env(safe-area-inset-bottom),1.25rem)]">
-        <header className="flex items-center justify-between gap-3">
+      <header className="lyo-live-magic__header">
+        <div className="lyo-live-magic__brand">
+          <span className="lyo-live-magic__live-dot" aria-hidden="true" />
           <div>
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <h2 className="text-lg font-semibold tracking-tight">Live with Lyo</h2>
-            </div>
-            <p className="text-xs text-white/55 mt-1">A real conversation, in English or Spanish</p>
+            <h1>Live with <span>Lyo</span></h1>
+            <p>Your personal learning companion</p>
           </div>
+        </div>
+        <div className="lyo-live-magic__header-actions">
           <label className="sr-only" htmlFor="lyo-voice-language">Voice language</label>
           <select id="lyo-voice-language" aria-label="Voice language"
             value={preferredSpeechLanguage}
             onChange={(event) => changeVoiceLanguage(event.target.value as 'device' | 'en-US' | 'es-ES')}
-            disabled={phase === 'thinking' || phase === 'speaking'}
-            className="max-w-[9rem] rounded-full border border-white/20 bg-[#211837] px-3 py-2 text-xs text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:opacity-50"
+            disabled={isBusy}
           >
             <option value="device">Device language</option>
             <option value="en-US">English</option>
             <option value="es-ES">Español</option>
           </select>
-          <button type="button" onClick={endSession}
-            className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
-            aria-label="End live voice and return to chat">
-            <X className="h-4 w-4" /> End
-          </button>
-        </header>
+          <button type="button" onClick={endSession} className="lyo-live-magic__close"
+            aria-label="End live voice and return to chat"><X size={22} /><span className="sr-only">End</span></button>
+        </div>
+      </header>
 
-        <main className="flex-1 min-h-0 flex flex-col items-center justify-center gap-5 sm:gap-7">
-          <div
-            className={cn('relative flex items-center justify-center rounded-full transition-transform duration-300',
-              phase === 'speaking' && 'scale-[1.035]',
-              phase === 'listening' && liveTranscript && 'scale-105')}
-            onClick={interruptionMode === 'tap' && (phase === 'speaking' || phase === 'thinking') ? interruptPlayback : undefined}
-            role={interruptionMode === 'tap' && (phase === 'speaking' || phase === 'thinking') ? 'button' : undefined}
-            tabIndex={interruptionMode === 'tap' && (phase === 'speaking' || phase === 'thinking') ? 0 : undefined}
-            onKeyDown={(event) => {
-              if (interruptionMode === 'tap' && (event.key === 'Enter' || event.key === ' ')
-                && (phase === 'speaking' || phase === 'thinking')) interruptPlayback();
-            }}
-            aria-label={interruptionMode === 'tap' ? 'Tap the mascot to speak' : undefined}
-          >
-            <div className={cn('absolute w-56 h-56 sm:w-72 sm:h-72 rounded-full blur-3xl opacity-50',
-              phase === 'speaking' ? 'bg-orange-500/45 animate-pulse'
-                : phase === 'listening' ? 'bg-emerald-500/30 animate-pulse' : 'bg-violet-500/40')} />
-            <div className={cn('absolute w-[240px] h-[240px] sm:w-[300px] sm:h-[300px] rounded-full border-2',
-              phase === 'speaking' ? 'border-orange-400/45 animate-ping'
-                : phase === 'listening' ? 'border-emerald-400/40 animate-pulse' : 'border-violet-400/25')} />
-            <div className="relative w-48 h-48 sm:w-60 sm:h-60 flex items-center justify-center">
-              <MascotAvatar thinking={phase === 'thinking'} speaking={phase === 'speaking'}
-                idle={phase === 'listening' || phase === 'idle'} size={240} alt={status} />
+      <main className="lyo-live-magic__main">
+        {showTranscript ? (
+          <section className="lyo-live-magic__transcript"
+            aria-label="Live transcript" id="lyo-voice-transcript">
+            <h2>Conversation transcript</h2>
+            {transcriptMessages.length === 0 && !liveAssistantCaption && !liveTranscript && (
+              <p className="lyo-live-magic__muted">Your conversation will appear here as you speak.</p>
+            )}
+            {transcriptMessages.map((message) => {
+              const assistantCurrentlySpeaking = phase === 'speaking'
+                && message.role === 'assistant' && message.id === spokenText?.messageId;
+              const text = assistantCurrentlySpeaking ? liveAssistantCaption : message.content;
+              if (!text.trim()) return null;
+              return (
+                <div key={message.id}
+                  className={cn('lyo-live-magic__message', message.role === 'user' && 'lyo-live-magic__message--user')}>
+                  <strong>{message.role === 'user' ? 'You' : 'Lyo'}</strong>
+                  <p>{text}</p>
+                </div>
+              );
+            })}
+            {phase === 'speaking' && liveAssistantCaption
+              && !transcriptMessages.some((message) => message.id === spokenText?.messageId) && (
+              <div className="lyo-live-magic__message" aria-live="polite">
+                <strong>Lyo · live</strong><p>{liveAssistantCaption}</p>
+              </div>
+            )}
+            {phase === 'listening' && liveTranscript && (
+              <div className="lyo-live-magic__message lyo-live-magic__message--user">
+                <strong>You · live</strong><p>{liveTranscript}</p>
+              </div>
+            )}
+          </section>
+        ) : (
+          <div className="lyo-live-magic__stage">
+            <div
+              className={cn('lyo-live-magic__hero', isTapFallback && 'lyo-live-magic__hero--tap')}
+              role="button"
+              tabIndex={0}
+              aria-label={isTapFallback ? 'Tap the mascot to speak' : 'Touch Lyo for a reaction'}
+              onClick={() => {
+                setMascotTaps((count) => count + 1);
+                if (isTapFallback) interruptPlayback();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setMascotTaps((count) => count + 1);
+                  if (isTapFallback) interruptPlayback();
+                }
+              }}
+            >
+              <svg className="lyo-live-magic__ribbon" viewBox="0 0 900 260"
+                preserveAspectRatio="none" aria-hidden="true" focusable="false">
+                <defs>
+                  <linearGradient id="lyoRibbonA" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#68ffd0" />
+                    <stop offset="55%" stopColor="#65b9ff" />
+                    <stop offset="100%" stopColor="#ad73ff" />
+                  </linearGradient>
+                  <linearGradient id="lyoRibbonB" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#73a6ff" />
+                    <stop offset="55%" stopColor="#cd8bff" />
+                    <stop offset="100%" stopColor="#ffab8c" />
+                  </linearGradient>
+                </defs>
+                <path className="lyo-live-magic__ribbon-a"
+                  d="M-30 126 C120 -18 230 245 410 124 S710 -10 940 114" stroke="url(#lyoRibbonA)" />
+                <path className="lyo-live-magic__ribbon-b"
+                  d="M-30 175 C160 22 260 235 440 150 S730 50 940 168" stroke="url(#lyoRibbonB)" />
+                <path className="lyo-live-magic__ribbon-c"
+                  d="M-30 100 C130 30 270 190 445 111 S760 5 940 95" stroke="url(#lyoRibbonA)" />
+              </svg>
+              <div className="lyo-live-magic__halo" aria-hidden="true" />
+              <div className="lyo-live-magic__learning lyo-live-magic__learning--one" aria-hidden="true">✦</div>
+              <div className="lyo-live-magic__learning lyo-live-magic__learning--two" aria-hidden="true">∑</div>
+              <div className="lyo-live-magic__learning lyo-live-magic__learning--three" aria-hidden="true">✧</div>
+              <div className="lyo-live-magic__learning lyo-live-magic__learning--four" aria-hidden="true">Aa</div>
+              <div className={cn('lyo-live-magic__mascot', mascotTaps > 0 && 'lyo-live-magic__mascot--touched')} key={mascotTaps}>
+                <MascotAvatar liveHero thinking={phase === 'thinking'}
+                  speaking={phase === 'speaking'}
+                  idle={phase === 'listening' || phase === 'idle'}
+                  size={320} alt={status} />
+              </div>
+              {mascotTaps > 0 && (
+                <span className="lyo-live-magic__touch-ripple" key={'ripple-' + mascotTaps} aria-hidden="true">✦</span>
+              )}
             </div>
-          </div>
-          <div className="flex flex-col items-center max-w-xl w-full gap-3 text-center">
-            <div className="flex items-center gap-2 text-sm font-medium text-violet-200" role="status" aria-live="polite">
-              {phase === 'speaking' ? <Volume2 className="h-4 w-4" />
-                : phase === 'error' ? <MicOff className="h-4 w-4" />
-                  : <Mic className="h-4 w-4" />}
+            <div className="lyo-live-magic__state" role="status" aria-live="polite">
+              {phase === 'error' ? <MicOff size={18} /> : <AudioLines size={19} />}
               {status}
             </div>
-            <p className="text-xl sm:text-2xl leading-relaxed font-medium min-h-[4.5rem] max-h-36 overflow-y-auto px-2"
-              aria-live="polite" aria-atomic="false">{caption}</p>
-            <p className="text-xs text-white/45">
-              {phase === 'listening' ? 'Speak naturally — Lyo will answer when you finish.'
-                : phase === 'speaking' && interruptionMode === 'speech' ? 'Just start talking to interrupt.'
-                  : (phase === 'speaking' || phase === 'thinking') && interruptionMode === 'tap'
-                    ? 'Hands-free interruption is unavailable in this browser. Tap Lyo to speak.'
-                    : phase === 'thinking' ? 'Your conversation is being saved.' : ' '}
-            </p>
-          </div>
-        </main>
-
-        {showTranscript && (
-          <section className="shrink-0 max-h-[38vh] overflow-y-auto rounded-2xl border border-white/15 bg-black/35 p-4 mb-4"
-            aria-label="Live transcript" id="lyo-voice-transcript">
-            <h3 className="font-semibold text-sm text-white/75 mb-3">Conversation transcript</h3>
-            <div className="flex flex-col gap-3">
-              {transcriptMessages.length === 0 && !liveAssistantCaption && !liveTranscript && <p className="text-sm text-white/50">Your conversation will appear here as you speak.</p>}
-              {transcriptMessages.map((message) => {
-                const assistantCurrentlySpeaking = phase === 'speaking'
-                  && message.role === 'assistant' && message.id === spokenText?.messageId;
-                const text = assistantCurrentlySpeaking
-                  ? liveAssistantCaption : message.content;
-                if (!text.trim()) return null;
-                return (
-                  <div key={message.id} className={cn('text-sm leading-relaxed rounded-xl p-3',
-                    message.role === 'user' ? 'bg-violet-500/20 ml-6' : 'bg-white/10 mr-6')}>
-                    <span className="block text-[11px] font-semibold text-white/45 mb-1">
-                      {message.role === 'user' ? 'You' : 'Lyo'}
-                    </span>
-                    <p className="whitespace-pre-wrap">{text}</p>
-                  </div>
-                );
-              })}
-              {phase === 'speaking' && liveAssistantCaption
-                && !transcriptMessages.some((message) => message.id === spokenText?.messageId) && (
-                <div className="rounded-xl bg-white/10 mr-6 p-3 text-sm" aria-live="polite">
-                  <span className="block text-[11px] text-white/45 mb-1">Lyo · live</span>
-                  <p className="whitespace-pre-wrap">{liveAssistantCaption}</p>
-                </div>
-              )}
-              {phase === 'listening' && liveTranscript && (
-                <div className="rounded-xl bg-violet-500/20 ml-6 p-3 text-sm">
-                  <span className="block text-[11px] text-white/45 mb-1">You · live</span>
-                  {liveTranscript}
-                </div>
-              )}
+            <h2 className="lyo-live-magic__headline">{heroHeadline}</h2>
+            <div className="lyo-live-magic__voice-wave" aria-hidden="true">
+              <svg viewBox="0 0 500 66" preserveAspectRatio="none"
+                style={{ transform: `scaleY(${Math.max(.12, waveEnergy * 1.85)})` }}>
+                <defs>
+                  <linearGradient id="lyoHeadlineWave" x1="0" x2="1" y1="0" y2="0">
+                    <stop offset="0%" stopColor={phase === 'speaking' ? '#ffc778' : '#81eecb'} />
+                    <stop offset="50%" stopColor={phase === 'speaking' ? '#ff8744' : '#64b8ff'} />
+                    <stop offset="100%" stopColor={phase === 'speaking' ? '#ff6e91' : '#b78dff'} />
+                  </linearGradient>
+                </defs>
+                <path d="M0 33 C45 33 55 3 95 33 S165 63 205 33 S270 3 310 33 S380 63 420 33 S470 33 500 33"
+                  stroke="url(#lyoHeadlineWave)" strokeWidth="5" fill="none" strokeLinecap="round" />
+              </svg>
             </div>
-          </section>
+            <div className="lyo-live-magic__caption" aria-live="polite" aria-atomic="false">
+              {caption}
+            </div>
+            {isTapFallback && (
+              <p className="lyo-live-magic__hint">
+                Hands-free interruption isn’t available in this browser. Tap Lyo to speak, or use the microphone button.
+              </p>
+            )}
+            {phase === 'speaking' && interruptionMode === 'speech' && (
+              <p className="lyo-live-magic__hint">Just start talking to interrupt.</p>
+            )}
+          </div>
         )}
-        <footer className="flex items-center justify-center gap-3">
-          <button type="button" onClick={() => setShowTranscript((shown) => !shown)}
-            aria-expanded={showTranscript} aria-controls="lyo-voice-transcript"
-            className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-medium hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
-            <MessageSquareText className="h-4 w-4" />
-            {showTranscript ? 'Hide transcript' : 'Transcript'}
-          </button>
-          {phase === 'error' && (
-            <button type="button" onClick={() => { setErrorDetail(''); changePhase('listening'); startRecognition(); }}
-              className="rounded-full bg-violet-500 px-5 py-3 text-sm font-medium">Try microphone again</button>
-          )}
-        </footer>
-        {debugEnabled && <pre className="mt-3 max-h-24 overflow-auto whitespace-pre-wrap font-mono text-[10px] text-white/50">
+      </main>
+
+      <footer className="lyo-live-magic__footer">
+        <button type="button" onClick={() => setShowTranscript((shown) => !shown)}
+          aria-expanded={showTranscript} aria-controls="lyo-voice-transcript"
+          className="lyo-live-magic__transcript-toggle">
+          <MessageSquareText size={17} /> {showTranscript ? 'Hide transcript' : 'Transcript'}
+        </button>
+        <div className="lyo-live-magic__control-stack">
+          <div className="lyo-live-magic__dock">
+            <button type="button" className="lyo-live-magic__mic"
+              onClick={toggleLiveMicrophone}
+              aria-pressed={micPaused}
+              aria-label={isBusy ? 'Interrupt Lyo to speak' : micPaused ? 'Resume microphone' : phase === 'error' ? 'Try microphone again' : 'Pause microphone'}>
+              {micPaused || phase === 'error' ? <MicOff size={23} /> : <Mic size={23} />}
+            </button>
+          </div>
+          <form className="lyo-live-magic__composer" onSubmit={submitTypedMessage}>
+            <input ref={attachmentFileRef} type="file" className="sr-only"
+              accept="image/jpeg,image/png,image/webp,image/heic,.pdf,.txt,.md,.csv,.json"
+              multiple aria-label="Choose photos or documents for Live chat"
+              onChange={(event) => { void pickLiveAttachments(event.target.files); }} />
+            <button type="button" className="lyo-live-magic__attach"
+              aria-label="Attach a photo or document" title="Attach a photo or document"
+              disabled={uploadingAttachment || liveAttachments.length >= 4}
+              onClick={() => attachmentFileRef.current?.click()}><Plus size={18} /></button>
+            <label className="sr-only" htmlFor="lyo-live-typed-input">Ask Lyo by typing</label>
+            <input id="lyo-live-typed-input" type="text" autoComplete="off"
+              maxLength={4000}
+              placeholder={liveAttachments.length ? `${liveAttachments.length} attachment(s) ready…` : 'Ask Lyo…'}
+              value={typedMessage}
+              onChange={(event) => setTypedMessage(event.target.value)}
+              onFocus={() => { typingRef.current = true; cancelPendingTurn(); stopRecognition(); }}
+              onBlur={() => {
+                typingRef.current = false;
+                if (phaseRef.current === 'listening') startRecognition();
+              }} />
+            <button type="submit"
+              disabled={uploadingAttachment || (!typedMessage.trim() && !liveAttachments.length)}
+              aria-label="Send typed message and attachments to Lyo">Send</button>
+          </form>
+        </div>
+        {debugEnabled && <pre className="lyo-live-magic__debug">
           {debugLog.length ? debugLog.join('\n') : 'waiting for speech engine…'}
         </pre>}
-      </div>
+      </footer>
     </div>
   );
 }

@@ -381,3 +381,50 @@ test('web voice can explicitly switch English and Spanish recognition and spoken
   await h.emit({ type: 'voice_text_segment', text: 'La gravedad atrae la materia.', sequence: 0 });
   assert.equal(h.requests[0].options.language, 'es-ES');
 });
+
+test('touching Lyo animates without ending a listening turn', async (t) => {
+  const h = await harness(t);
+  const lyo = document.querySelector('[aria-label="Touch Lyo for a reaction"]');
+  assert.ok(lyo, 'the mascot has an accessible touch action');
+  await flush(() => lyo.click());
+  assert.ok(document.querySelector('.lyo-live-magic__touch-ripple'), 'touch creates a visible sparkle');
+  assert.equal(h.submissions.length, 0, 'touching the avatar must not send a chat turn');
+  assert.equal(h.recognizers.at(-1).running, true, 'touching Lyo must not stop listening');
+});
+
+test('Live conversation offers a typed message composer', async (t) => {
+  await harness(t);
+  const input = document.querySelector('input[aria-label="Ask Lyo by typing"]')
+    ?? document.querySelector('input#lyo-live-typed-input');
+  assert.ok(input, 'typing is available inside Live mode');
+  assert.ok(input.closest('form')?.querySelector('button[type="submit"]'),
+    'typed message has an explicit send action');
+});
+
+test('Live composer exposes photo/document input alongside one microphone and no redundant hangup', async (t) => {
+  await harness(t);
+  const stage = document.querySelector('[aria-label="LYO live voice conversation"]');
+  assert.ok(stage);
+  assert.equal(stage.querySelectorAll('.lyo-live-magic__mic').length, 1);
+  assert.equal(stage.querySelectorAll('.lyo-live-magic__hangup').length, 0);
+  assert.ok(stage.querySelector('button[aria-label="Attach a photo or document"]'));
+  assert.ok(stage.querySelector('input[type="file"][multiple]'));
+  assert.ok(stage.querySelector('input#lyo-live-typed-input'));
+  assert.ok(stage.querySelector('button[aria-label="End live voice and return to chat"]'));
+});
+
+test('one inline Live mic actually pauses and resumes recording without ending the chat', async (t) => {
+  const h = await harness(t);
+  const mic = document.querySelector('button.lyo-live-magic__mic');
+  assert.ok(mic);
+  assert.equal(h.recognizers.at(-1).running, true);
+  await flush(() => mic.click());
+  assert.match(h.text(), /Microphone paused/);
+  assert.equal(mic.getAttribute('aria-pressed'), 'true');
+  assert.equal(h.recognizers.at(-1).running, false);
+  await flush(() => mic.click());
+  assert.match(h.text(), /Listening/);
+  assert.equal(mic.getAttribute('aria-pressed'), 'false');
+  assert.equal(h.recognizers.at(-1).running, true);
+  assert.equal(h.submissions.length, 0, 'mic pausing must not save an incomplete turn');
+});

@@ -232,10 +232,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   voiceSessionActive: false,
   voiceSpokenText: null,
 
-  setVoiceSessionActive: (active) => set({
-    voiceSessionActive: active,
-    ...(active ? {} : { voiceSpokenText: null }),
-  }),
+  setVoiceSessionActive: (active) => {
+    if (active && !get().voiceSessionActive) {
+      // Every Live activation starts a *new regular chat*; audio, text and
+      // attachments then share the canonical store and server history.
+      // A local draft only becomes server-persisted after its first turn,
+      // matching normal New Chat behavior (no empty historical threads).
+      if (get().isGenerating) return;
+      get().createConversation();
+    }
+    set({
+      voiceSessionActive: active,
+      ...(active ? {} : { voiceSpokenText: null }),
+    });
+  },
   setVoiceSpokenText: (value) => set({ voiceSpokenText: value }),
   interruptGeneration: () => {
     activeStreamToken += 1;
@@ -311,6 +321,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // new chat, so a turn sent before that lands in a conversation that is
     // then discarded.
     if (hydrationInFlight) return hydrationInFlight;
+    const hydrationStartGeneration = newChatScreenGeneration;
     hydrationInFlight = (async () => {
       set({ isHydrating: true });
       try {
@@ -337,6 +348,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           return;
         }
         hasHydratedThisSession = true;
+        if (newChatScreenGeneration !== hydrationStartGeneration) {
+          // A learner entered Live (or another new chat) while the first
+          // history request was in flight. Keep that conversation selected;
+          // a stale hydration response must never erase its transcript.
+          const activeConversation = get().conversations.find(
+            (item) => item.id === get().activeConversationId,
+          );
+          set({
+            conversations: activeConversation?.id.startsWith('local-')
+              ? [activeConversation, ...conversations] : conversations,
+            isHydrating: false,
+          });
+          return;
+        }
 
         // The first hydrate since the app was actually opened (a fresh page
         // load — reopening a closed tab/PWA re-runs this module from

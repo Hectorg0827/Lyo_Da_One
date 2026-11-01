@@ -1,0 +1,43 @@
+name: LYO Magical Live — staging Android test APK
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  staging-apk:
+    if: github.head_ref == 'feat/lyo-live-magical-ui-20261031' && github.event.pull_request.head.repo.full_name == github.repository
+    name: Build locked staging Android APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app/
+      LYO_GPT_LIVE_TRIAL_UI: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build staging-targeted debug APK and Android unit tests
+        working-directory: android
+        run: gradle assembleDebug testDebugUnitTest --no-daemon
+      - name: Upload staging-only APK for Samsung validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-magical-live-staging-android-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7

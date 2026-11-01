@@ -19,6 +19,7 @@ struct LioChatSheet: View {
     @State private var errorMessage: String?
     @State private var scrollProxy: ScrollViewProxy?
     @State private var showMasteryProfile = false
+    @State private var showLiveSheet = false
     
     // Voice Animation State
     @State private var waveformPhase: CGFloat = 0
@@ -104,6 +105,13 @@ struct LioChatSheet: View {
             .navigationBarHidden(true)
             .sheet(isPresented: $showMasteryProfile) {
                 MasteryProfileView()
+            }
+            .fullScreenCover(isPresented: $showLiveSheet, onDismiss: {
+                if viewModel.isLiveMode { viewModel.stopLiveMode() }
+            }) {
+                VoiceSessionBottomSheet(viewModel: viewModel, onExit: {
+                    showLiveSheet = false
+                })
             }
             .alert("Error", isPresented: Binding(
                 get: { errorMessage != nil },
@@ -424,7 +432,14 @@ struct LioChatSheet: View {
             if viewModel.inputText.isEmpty {
                 Button(action: {
                     HapticManager.shared.medium()
-                    viewModel.toggleVoiceMode()
+                    if !viewModel.isLiveMode {
+                        let session = ConversationManager.shared.createNewConversation()
+                        _ = session.id
+                        viewModel.messages.removeAll()
+                        viewModel.inputText = ""
+                        viewModel.startLiveMode()
+                        showLiveSheet = true
+                    }
                 }) {
                     Image(systemName: "mic.fill")
                         .font(.system(size: 20, weight: .medium))

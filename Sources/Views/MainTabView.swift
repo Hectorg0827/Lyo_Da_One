@@ -487,12 +487,15 @@ extension MainTabView {
                     isLyoOverlayPresented = true
                 }
                 guard notification.userInfo?["mode"] as? String == "voice" else { return }
-                // Deferred until the overlay has mounted: it starts its voice
-                // sheet from an .onChange of the view model, which cannot fire
-                // for a value that changed before the view existed.
+                // Route all Speak entry points through the overlay's canonical
+                // new-chat initialization. Starting voice directly on the view
+                // model bypasses the new conversation and loses transcript parity.
                 Task { @MainActor in
                     try? await Task.sleep(for: .milliseconds(350))
-                    if !aiViewModel.isVoiceActive { aiViewModel.toggleVoiceMode() }
+                    NotificationCenter.default.post(
+                        name: Notification.Name("LyoOpenLiveSession"),
+                        object: nil
+                    )
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TriggerCourseCreation"))) { notification in

@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast';
 import AuthProvider from '@/components/providers/AuthProvider';
 import InstallPWAPrompt from '@/components/providers/InstallPWAPrompt';
 import './globals.css';
+import '@/components/chat/lyo-live-magic.css';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://www.lyoai.app'),

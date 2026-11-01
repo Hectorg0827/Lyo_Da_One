@@ -179,8 +179,18 @@ export default function ChatInputBar() {
    * retries. Stopping first keeps the handover ordered.
    */
   const toggleVoiceSession = () => {
+    // Release dictation before rendering Live's own recognizer, not in an effect.
     if (!voiceSessionActive) stopDictation();
-    setVoiceSessionActive(!voiceSessionActive);
+    if (voiceSessionActive) {
+      setVoiceSessionActive(false);
+      return;
+    }
+    // A new Live session is a fresh canonical Chat thread, not a parallel
+    // voice-only transcript. The first accepted voice or typed turn promotes
+    // this local thread to the ordinary persisted server conversation.
+    if (isGenerating || uploading) return;
+    stopDictation();
+    setVoiceSessionActive(true);
   };
 
   // Backstop for a live conversation started anywhere but the control above.

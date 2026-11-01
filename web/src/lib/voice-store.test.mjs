@@ -77,3 +77,32 @@ test('sidebar loading a different chat ends voice and cancels the old stream', a
   h.recovery.resolve({ ...h.detail, id: 'other-chat' });
   await load;
 });
+
+test('each Live activation opens one ordinary chat and ending preserves its history', async () => {
+  const h = harness();
+  const first = h.store.getState().activeConversationId;
+  h.store.getState().setVoiceSessionActive(false);
+  assert.equal(h.store.getState().activeConversationId, first);
+  h.store.getState().setVoiceSessionActive(true);
+  const draftId = h.store.getState().activeConversationId;
+  assert.ok(draftId.startsWith('local-'), 'Live starts with a fresh normal chat draft');
+  assert.notEqual(draftId, first);
+  assert.ok(h.store.getState().conversations.find(c => c.id === first), 'prior history survives');
+  h.store.getState().setVoiceSessionActive(true);
+  assert.equal(h.store.getState().activeConversationId, draftId, 'repeated activation must not duplicate chat');
+  const pending = h.send('What is the moon?');
+  h.creation.resolve({ id: 'persisted-live-chat', title: 'What is the moon?', created_at: '', updated_at: '' });
+  await pending;
+  assert.equal(h.store.getState().activeConversationId, 'persisted-live-chat');
+  assert.ok(h.store.getState().getActiveConversation().messages.some(m => m.role === 'user' && m.content === 'What is the moon?'));
+  h.store.getState().setVoiceSessionActive(false);
+  assert.equal(h.store.getState().activeConversationId, 'persisted-live-chat', 'closing Live returns to the same saved normal chat');
+  assert.equal(h.store.getState().voiceSessionActive, false);
+  h.store.getState().setVoiceSessionActive(true);
+  assert.equal(h.store.getState().activeConversationId, 'persisted-live-chat',
+    'new session must not cut off an unfinished assistant response');
+  h.store.getState().interruptGeneration();
+  h.store.getState().setVoiceSessionActive(true);
+  assert.notEqual(h.store.getState().activeConversationId, 'persisted-live-chat',
+    'next Live session is a separate normal chat after the old stream ends');
+});

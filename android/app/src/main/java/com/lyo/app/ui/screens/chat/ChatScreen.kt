@@ -84,6 +84,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -224,7 +226,7 @@ private val Suggestions = listOf(
 )
 
 @Composable
-fun ChatScreen(nav: NavHostController) {
+fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val messages = remember { mutableStateListOf<ChatMsg>() }
@@ -242,6 +244,7 @@ fun ChatScreen(nav: NavHostController) {
     var input by remember { mutableStateOf("") }
     var isStreaming by remember { mutableStateOf(false) }
     var activeConversationId by remember { mutableStateOf<String?>(null) }
+    var chatScreenGeneration by remember { mutableIntStateOf(0) }
     val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
     var dictating by remember { mutableStateOf(false) }
@@ -253,8 +256,12 @@ fun ChatScreen(nav: NavHostController) {
     var voiceListeningArmed by remember { mutableStateOf(true) }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
     var voiceConversation by remember { mutableStateOf(false) }
+    LaunchedEffect(voiceConversation) { onLiveModeChanged(voiceConversation) }
+    DisposableEffect(Unit) { onDispose { onLiveModeChanged(false) } }
     var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
     var liveVoiceTranscript by remember { mutableStateOf("") }
+    var voiceMicLevel by remember { mutableFloatStateOf(0f) }
+    var voiceSpeechLevel by remember { mutableFloatStateOf(0f) }
     var voiceLanguageTag by remember { mutableStateOf(Locale.getDefault().toLanguageTag()) }
     var enableAutomaticLanguageSwitch by remember { mutableStateOf(Build.VERSION.SDK_INT >= 34) }
     var spokenVoiceCaption by remember { mutableStateOf("") }
@@ -308,10 +315,42 @@ fun ChatScreen(nav: NavHostController) {
             }
         }
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            // PCM energy is available only on voice engines that expose it;
+            // do not record, transmit or persist raw audio.
+            private var lastMeterAt = 0L
+
+            override fun onAudioAvailable(utteranceId: String?, audio: ByteArray?) {
+                if (audio == null || audio.size < 32 || utteranceId == null ||
+                    utteranceId.startsWith("voice-pause:")) return
+                val now = android.os.SystemClock.uptimeMillis()
+                if (now - lastMeterAt < 65L) return
+                lastMeterAt = now
+                var total = 0.0
+                var samples = 0
+                // Audio provided by Android TTS is 16-bit signed PCM.
+                for (index in 0 until audio.size - 1 step 32) {
+                    val low = audio[index].toInt() and 0xff
+                    val high = audio[index + 1].toInt()
+                    val pcm = ((high shl 8) or low).toShort().toInt()
+                    val sample = pcm.toDouble() / 32768.0
+                    total += sample * sample
+                    samples++
+                }
+                val rms = kotlin.math.sqrt(total / samples.coerceAtLeast(1))
+                val level = (rms * 7.5).toFloat().coerceIn(0f, 1f)
+                mainHandler.post {
+                    if (voiceConversation && (speakingMessageId != null || pendingVoiceUtterances > 0)) {
+                        voiceSpeechLevel = level
+                    }
+                }
+            }
             override fun onStart(utteranceId: String?) {
                 mainHandler.post {
                     if (voiceConversation && utteranceId != null) {
-                        if (!utteranceId.startsWith("voice-pause:")) ttsOutputProblem = null
+                        if (!utteranceId.startsWith("voice-pause:")) {
+                            ttsOutputProblem = null
+                            voiceSpeechLevel = 0.12f
+                        }
                         spokenRanges[utteranceId]?.let { (prefix, _) -> spokenVoiceCaption = prefix }
                     }
                 }
@@ -336,6 +375,7 @@ fun ChatScreen(nav: NavHostController) {
                         pendingVoiceUtterances = (pendingVoiceUtterances - 1).coerceAtLeast(0)
                     }
                     if (speakingMessageId == utteranceId) speakingMessageId = null
+                    if (pendingVoiceUtterances == 0) voiceSpeechLevel = 0f
                     if (
                         voiceConversation &&
                         !voiceSegmentStreamOpen &&
@@ -403,14 +443,30 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
+    fun beginFreshLiveChat() {
+        // Each Live activation begins a new ordinary conversation, so after
+        // pressing X the spoken and typed turns are already in regular Chat.
+        // As with normal New Chat, an empty session is not stored remotely.
+        if (isStreaming || uploadingAttachment) return
+        chatScreenGeneration += 1
+        activeConversationId = null
+        messages.clear()
+        pendingAttachments.clear()
+        input = ""
+        liveVoiceTranscript = ""
+        spokenVoiceCaption = ""
+        voiceThinkingNudge = ""
+        inputError = null
+        voiceConversation = true
+        voiceListeningArmed = true
+        voiceListenNonce += 1
+    }
+
     val voicePermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
-            voiceConversation = true
-            voiceListeningArmed = true
-            voiceListenNonce += 1
-            inputError = null
+            beginFreshLiveChat()
         } else {
             voiceConversation = false
             inputError = "Microphone permission is required for live voice."
@@ -715,6 +771,8 @@ fun ChatScreen(nav: NavHostController) {
         dictating = false
         recognizerInFlight = false
         liveVoiceTranscript = ""
+        voiceMicLevel = 0f
+        voiceSpeechLevel = 0f
         voiceThinkingNudge = ""
         spokenRanges.clear()
         bargeInCandidate = ""
@@ -845,7 +903,13 @@ fun ChatScreen(nav: NavHostController) {
                     bargeInConfirmations = 0
                 }
 
-                override fun onRmsChanged(rmsdB: Float) = Unit
+                override fun onRmsChanged(rmsdB: Float) {
+                    if (voiceConversation && dictating && voiceListeningArmed) {
+                        // Reuse SpeechRecognizer's microphone amplitude rather
+                        // than opening a competing audio capture.
+                        voiceMicLevel = ((rmsdB + 2f) / 14f).coerceIn(0f, 1f)
+                    }
+                }
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
                 override fun onEndOfSpeech() { dictating = false }
 
@@ -1125,12 +1189,17 @@ fun ChatScreen(nav: NavHostController) {
             messages.clear()
             send(seededPrompt)
         } else {
+            val openingGeneration = chatScreenGeneration
             runCatching {
                 val latest = ApiClient.api.aiConversations().conversations.firstOrNull() ?: return@runCatching
                 val detail = ApiClient.api.aiConversation(latest.id)
-                activeConversationId = detail.id
-                messages.clear()
-                messages.addAll(detail.messages.map { it.toChatMsg() })
+                // Do not overwrite a newly opened Live session with an older
+                // history response arriving after navigation has changed.
+                if (chatScreenGeneration == openingGeneration && !voiceConversation) {
+                    activeConversationId = detail.id
+                    messages.clear()
+                    messages.addAll(detail.messages.map { it.toChatMsg() })
+                }
             }
         }
     }
@@ -1152,6 +1221,7 @@ fun ChatScreen(nav: NavHostController) {
     }
 
     fun newChat() {
+        chatScreenGeneration += 1
         textToSpeech?.stop()
         speakingMessageId = null
         streamJob?.cancel()
@@ -1164,11 +1234,13 @@ fun ChatScreen(nav: NavHostController) {
     }
 
     if (voiceConversation) {
-        LiveVoiceConversationScreen(
+        MagicalLyoLiveScreen(
             listening = dictating && !isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0,
             thinking = isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0,
             speaking = speakingMessageId != null || pendingVoiceUtterances > 0,
             userCaption = liveVoiceTranscript,
+            microphoneLevel = voiceMicLevel,
+            playbackLevel = voiceSpeechLevel,
             assistantCaption = spokenVoiceCaption,
             thinkingNudge = voiceThinkingNudge,
             messages = messages,
@@ -1179,8 +1251,46 @@ fun ChatScreen(nav: NavHostController) {
                 inputError = null
                 voiceListenNonce += 1
             },
+            onPause = {
+                voiceListeningArmed = false
+                dictating = false
+                recognizerInFlight = false
+                voiceMicLevel = 0f
+                runCatching { continuousRecognizer?.cancel() }
+            },
             onTestSpeaker = ::testVoiceSpeaker,
             onInterrupt = ::interruptVoiceAnswer,
+            onSendText = { typed ->
+                // Keep typed turns in the canonical conversation. If Lyo is
+                // talking, interrupt its old response before submitting text.
+                if (isStreaming || speakingMessageId != null || pendingVoiceUtterances > 0) {
+                    interruptVoiceAnswer()
+                }
+                voiceListeningArmed = false
+                dictating = false
+                recognizerInFlight = false
+                runCatching { continuousRecognizer?.cancel() }
+                liveVoiceTranscript = ""
+                send(typed)
+            },
+            onAttach = {
+                if (!uploadingAttachment && !isStreaming && pendingAttachments.size < MAX_CHAT_ATTACHMENTS) {
+                    attachmentPicker.launch(arrayOf("*/*"))
+                }
+            },
+            attachmentCount = pendingAttachments.size,
+            attachmentsUploading = uploadingAttachment,
+            onTypingChanged = { focused ->
+                voiceListeningArmed = !focused
+                if (focused) {
+                    dictating = false
+                    recognizerInFlight = false
+                    runCatching { continuousRecognizer?.cancel() }
+                    liveVoiceTranscript = ""
+                } else if (voiceConversation) {
+                    voiceListenNonce += 1
+                }
+            },
             onTryHumanVoice = {
                 stopVoiceConversation()
                 context.startActivity(Intent(context, GptLiveTrialActivity::class.java))
@@ -1464,9 +1574,7 @@ fun ChatScreen(nav: NavHostController) {
                                 ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                                 android.content.pm.PackageManager.PERMISSION_GRANTED
                             ) {
-                                voiceConversation = true
-                                voiceListeningArmed = true
-                                voiceListenNonce += 1
+                                beginFreshLiveChat()
                             } else {
                                 voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                             }
