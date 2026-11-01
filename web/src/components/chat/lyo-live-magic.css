@@ -145,7 +145,7 @@
   display: grid; place-items: center;
   filter: drop-shadow(0 14px 20px rgba(22, 8, 42, .36));
 }
-.lyo-live-magic__mascot:not(:first-child) { animation: lyo-live-mascot-tap 480ms cubic-bezier(.15,.65,.2,1.2) both; }
+.lyo-live-magic__mascot--touched { animation: lyo-live-mascot-tap 480ms cubic-bezier(.15,.65,.2,1.2) both; }
 .lyo-live-magic__mascot img { width: 100%; height: auto; max-height: 100%; object-fit: contain; }
 .lyo-live-magic__touch-ripple {
   position: absolute;
