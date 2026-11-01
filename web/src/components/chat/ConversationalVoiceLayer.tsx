@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AudioLines, MessageSquareText, Mic, MicOff, Volume2, X } from 'lucide-react';
+import { AudioLines, MessageSquareText, Mic, MicOff, Volume2, X, Plus } from 'lucide-react';
+import toast from 'react-hot-toast';
+import type { ChatAttachment } from '@/types';
 import MascotAvatar from './MascotAvatar';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -125,6 +127,9 @@ export default function ConversationalVoiceLayer() {
   const [showTranscript, setShowTranscript] = useState(false);
   const [mascotTaps, setMascotTaps] = useState(0);
   const [typedMessage, setTypedMessage] = useState('');
+  const [liveAttachments, setLiveAttachments] = useState<ChatAttachment[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const attachmentFileRef = useRef<HTMLInputElement | null>(null);
   const typingRef = useRef(false);
   const [preferredSpeechLanguage, setPreferredSpeechLanguage] = useState<'device' | 'en-US' | 'es-ES'>('device');
   const preferredSpeechLanguageRef = useRef<'device' | 'en-US' | 'es-ES'>('device');
@@ -378,11 +383,11 @@ export default function ConversationalVoiceLayer() {
     duckedRef.current = false;
   }, []);
 
-  const sendVoiceTurn = useCallback(async (raw: string) => {
+  const sendVoiceTurn = useCallback(async (raw: string, attachments: ChatAttachment[] = []) => {
     const transcript = raw.trim();
     transcriptRef.current.reset();
     setLiveTranscript('');
-    if (!transcript || !activeRef.current || phaseRef.current !== 'listening') return;
+    if ((!transcript && !attachments.length) || !activeRef.current || phaseRef.current !== 'listening') return;
 
     const now = voiceQualityNow();
     const turnId = currentTurnIdRef.current || crypto.randomUUID();
@@ -444,7 +449,7 @@ export default function ConversationalVoiceLayer() {
     note(`sending "${transcript.slice(0, 40)}"`);
     changePhase('thinking');
     interruptedPreviousTurnRef.current = false;
-    await sendMessage(transcript, [], {
+    await sendMessage(transcript, attachments, {
       voiceSession: true,
       voiceInterruptedPreviousTurn: interruptedPreviousTurn,
       voiceTurnId: turnId,
@@ -1279,11 +1284,66 @@ export default function ConversationalVoiceLayer() {
     }
   };
 
+  const pickLiveAttachments = async (files: FileList | null) => {
+    const selected = Array.from(files || []);
+    if (!selected.length || uploadingAttachment || !activeRef.current) return;
+    const capacity = Math.max(0, 4 - liveAttachments.length);
+    if (selected.length > capacity) toast.error(`Only ${capacity} more file(s) can be attached`);
+    if (capacity === 0) return;
+
+    const acceptedTypes: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
+      webp: 'image/webp', heic: 'image/heic', pdf: 'application/pdf',
+      txt: 'text/plain', md: 'text/markdown', csv: 'text/csv', json: 'application/json',
+    };
+    const allow = new Set(Object.values(acceptedTypes));
+    let total = liveAttachments.reduce((sum, item) => sum + item.size, 0);
+    const uploaded: ChatAttachment[] = [];
+    setUploadingAttachment(true);
+    try {
+      for (const file of selected.slice(0, capacity)) {
+        if (!activeRef.current) break;
+        const extension = file.name.split('.').pop()?.toLowerCase() || '';
+        const mimeType = allow.has(file.type.toLowerCase())
+          ? file.type.toLowerCase() : acceptedTypes[extension];
+        if (!mimeType) {
+          toast.error(`${file.name} is not a supported image or document`);
+          continue;
+        }
+        if (file.size > 10 * 1024 * 1024 || total + file.size > 20 * 1024 * 1024) {
+          toast.error(`${file.name} exceeds the 10MB per-file or 20MB total limit`);
+          continue;
+        }
+        try {
+          const normalized = file.type === mimeType ? file : new File([file], file.name, { type: mimeType });
+          const result = await api.media.upload(normalized, 'chat');
+          if (!activeRef.current) break;
+          uploaded.push({
+            name: file.name,
+            url: result.url,
+            mimeType: result.contentType || mimeType,
+            size: result.size || file.size,
+            kind: mimeType.startsWith('image/') ? 'image' : 'document',
+          });
+          total += file.size;
+        } catch (error) {
+          toast.error(`${file.name}: ${error instanceof Error ? error.message : 'Upload failed'}`);
+        }
+      }
+      if (uploaded.length) setLiveAttachments((existing) => [...existing, ...uploaded].slice(0, 4));
+    } finally {
+      setUploadingAttachment(false);
+      if (attachmentFileRef.current) attachmentFileRef.current.value = '';
+    }
+  };
+
   const submitTypedMessage = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const text = typedMessage.trim();
-    if (!text) return;
+    const selectedAttachments = liveAttachments;
+    if ((!text && !selectedAttachments.length) || uploadingAttachment) return;
     setTypedMessage('');
+    setLiveAttachments([]);
     typingRef.current = false;
     if (phaseRef.current === 'speaking' || phaseRef.current === 'thinking') {
       interruptPlayback();
@@ -1291,7 +1351,7 @@ export default function ConversationalVoiceLayer() {
       changePhase('listening');
     }
     // Typed text takes the same canonical voice turn path as spoken text.
-    void sendVoiceTurn(text);
+    void sendVoiceTurn(text, selectedAttachments);
   };
 
   const endSession = () => setVoiceSessionActive(false);
@@ -1496,22 +1556,30 @@ export default function ConversationalVoiceLayer() {
               aria-label={isBusy ? 'Interrupt Lyo to speak' : phase === 'error' ? 'Try microphone again' : 'Listening'}>
               {phase === 'error' ? <MicOff size={27} /> : <Mic size={27} />}
             </button>
-            <button type="button" className="lyo-live-magic__hangup" onClick={endSession}
-              aria-label="End live voice and return to chat">
-              <span aria-hidden="true">☎</span>
-            </button>
           </div>
           <form className="lyo-live-magic__composer" onSubmit={submitTypedMessage}>
+            <input ref={attachmentFileRef} type="file" className="sr-only"
+              accept="image/jpeg,image/png,image/webp,image/heic,.pdf,.txt,.md,.csv,.json"
+              multiple aria-label="Choose photos or documents for Live chat"
+              onChange={(event) => { void pickLiveAttachments(event.target.files); }} />
+            <button type="button" className="lyo-live-magic__attach"
+              aria-label="Attach a photo or document" title="Attach a photo or document"
+              disabled={uploadingAttachment || liveAttachments.length >= 4}
+              onClick={() => attachmentFileRef.current?.click()}><Plus size={18} /></button>
             <label className="sr-only" htmlFor="lyo-live-typed-input">Ask Lyo by typing</label>
             <input id="lyo-live-typed-input" type="text" autoComplete="off"
-              maxLength={4000} placeholder="Ask Lyo…" value={typedMessage}
+              maxLength={4000}
+              placeholder={liveAttachments.length ? `${liveAttachments.length} attachment(s) ready…` : 'Ask Lyo…'}
+              value={typedMessage}
               onChange={(event) => setTypedMessage(event.target.value)}
               onFocus={() => { typingRef.current = true; cancelPendingTurn(); stopRecognition(); }}
               onBlur={() => {
                 typingRef.current = false;
                 if (phaseRef.current === 'listening') startRecognition();
               }} />
-            <button type="submit" disabled={!typedMessage.trim()} aria-label="Send typed message to Lyo">Send</button>
+            <button type="submit"
+              disabled={uploadingAttachment || (!typedMessage.trim() && !liveAttachments.length)}
+              aria-label="Send typed message and attachments to Lyo">Send</button>
           </form>
         </div>
         {debugEnabled && <pre className="lyo-live-magic__debug">
