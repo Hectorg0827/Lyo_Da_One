@@ -108,11 +108,17 @@ struct LyoOverlayView: View {
                 onNewChat: { createNewChat() }
             )
         }
-        .sheet(isPresented: $showVoiceSheet) {
-            VoiceSessionBottomSheet(viewModel: viewModel)
+        .fullScreenCover(isPresented: $showVoiceSheet, onDismiss: {
+            if viewModel.isLiveMode { viewModel.stopLiveMode() }
+            withAnimation(.easeOut(duration: 0.2)) { animationState = .chatting }
+        }) {
+            VoiceSessionBottomSheet(viewModel: viewModel, onExit: {
+                showVoiceSheet = false
+                withAnimation(.easeOut(duration: 0.2)) { animationState = .chatting }
+            })
         }
-        .onChange(of: viewModel.isVoiceActive) { _, newValue in
-            if newValue { showVoiceSheet = true }
+        .onChange(of: viewModel.isLiveMode) { _, live in
+            if live { showVoiceSheet = true }
         }
         .sheet(isPresented: $showNotesSheet) {
             ChatNotesSheetView(
@@ -309,7 +315,8 @@ struct LyoOverlayView: View {
                     ),
                     selectedMode: $selectedMode,
                     isThinking: isThinking,
-                    onSubmit: { submitText() }
+                    onSubmit: { submitText() },
+                    onLiveMode: { beginLiveSession() }
                 )
                 .padding(.bottom, 0)
                 .transition(.move(edge: .bottom))
@@ -441,6 +448,28 @@ struct LyoOverlayView: View {
         }
     }
     
+    private func beginLiveSession() {
+        guard !viewModel.isLiveMode else {
+            viewModel.stopLiveMode()
+            showVoiceSheet = false
+            return
+        }
+
+        // Each Live activation begins a canonical Chat conversation. The
+        // microphone, text and attachments all share that same session ID,
+        // and pressing X returns to its normal message history.
+        let conversation = conversationManager.createNewConversation()
+        notebookStore.activateConversation(conversation.id)
+        viewModel.messages.removeAll()
+        viewModel.inputText = ""
+        withAnimation(.easeOut(duration: 0.2)) {
+            showGreeting = false
+            animationState = .chatting
+        }
+        viewModel.startLiveMode()
+        showVoiceSheet = true
+    }
+
     private func createNewChat() {
         let conversation = conversationManager.createNewConversation()
         notebookStore.activateConversation(conversation.id)
@@ -702,7 +731,8 @@ struct HybridInputBar: View {
     @Binding var selectedMode: ChatMode
     var isThinking: Bool // Passed from parent
     var onSubmit: () -> Void
-    
+    var onLiveMode: () -> Void
+
     @EnvironmentObject var viewModel: LyoAIViewModel
     @StateObject var audioService = AudioPlaybackService.shared
     @StateObject private var mediaService = MediaPickerService.shared
@@ -840,7 +870,7 @@ struct HybridInputBar: View {
                             }
                             
                             // Live Mode
-                            Button(action: { viewModel.toggleLiveMode() }) {
+                            Button(action: onLiveMode) {
                                 Image(systemName: viewModel.isLiveMode ? "waveform" : "video")
                                     .font(.system(size: 18))
                                     .foregroundColor(viewModel.isLiveMode ? Color(hex: "FF8C00") : .white.opacity(0.9))
