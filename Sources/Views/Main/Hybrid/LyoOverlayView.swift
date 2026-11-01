@@ -141,6 +141,9 @@ struct LyoOverlayView: View {
         .onReceive(NotificationCenter.default.publisher(for: .dismissLyoOverlay)) { _ in
             self.close()
         }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("LyoOpenLiveSession"))) { _ in
+            if !viewModel.isLiveMode { beginLiveSession() }
+        }
     }
 
     private var overlayBackground: some View {
