@@ -174,7 +174,7 @@ internal fun MagicalLyoLiveScreen(
         1 -> R.drawable.mascot_reading_2
         2 -> R.drawable.mascot_reading_3
         else -> R.drawable.mascot_reading_4
-    } else R.drawable.mascot_standing
+    } else R.drawable.lyo_live_front
 
     val status = when {
         speaking -> if (spanish) "Lyo está respondiendo" else "Lyo is responding"
