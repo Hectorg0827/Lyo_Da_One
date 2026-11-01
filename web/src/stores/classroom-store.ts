@@ -19,6 +19,7 @@ import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
 import { parseBoardDocument, presentationRoleFor, type BoardDocument, type PresentationRole } from '@/lib/board-presentation.mjs';
 import { resolveCommonsImage } from '@/lib/commons-image.mjs';
+import { classroomSpeaker } from '@/lib/classroom-cast.mjs';
 import type {
   ClassroomContractConnection,
   ClassroomMode,
@@ -497,8 +498,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   const sfx = (sound: AmbientSound) => { if (get().soundOn) playSound(sound); };
 
-  function speechCacheKey(text: string, language: string, rate: number) {
-    return `${language}|${rate.toFixed(2)}|${text}`;
+  function speechCacheKey(speaker: string, text: string, language: string, rate: number) {
+    return `${speaker}|${language}|${rate.toFixed(2)}|${text}`;
   }
 
   async function requestSpeechResponse(
@@ -506,10 +507,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     language: string,
     rate: number,
     signal?: AbortSignal,
+    speaker = 'Teacher',
   ): Promise<Response | null> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
     if (API_KEY) headers['X-API-Key'] = API_KEY;
+    const character = classroomSpeaker(speaker, get().topic);
     const response = await fetch(
       `${API_URL.replace(/\/$/, '')}/api/v1/tts/synthesize/stream`,
       {
@@ -518,7 +521,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         signal,
         body: JSON.stringify({
           text,
-          voice: 'nova',
+          voice: character?.voice ?? 'nova',
+          speaker_id: character?.id,
           format: 'mp3',
           speed: rate,
           content_type: 'explanation',
@@ -530,12 +534,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     return response;
   }
 
-  function prefetchSpeechLine(text: string) {
+  function prefetchSpeechLine(speaker: string, text: string) {
     if (!get().voiceOn || typeof window === 'undefined' || !text.trim()) return;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
-    const key = speechCacheKey(text, language, rate);
-    prefetchedSpeech.prepare(key, (signal) => requestSpeechResponse(text, language, rate, signal));
+    const key = speechCacheKey(speaker, text, language, rate);
+    prefetchedSpeech.prepare(key, (signal) => requestSpeechResponse(text, language, rate, signal, speaker));
   }
 
   function recordResponseLatency(phase: 'content' | 'audio') {
@@ -592,7 +596,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
   }
 
-  function speakLine(_speaker: string, text: string, onDone: () => void) {
+  function speakLine(speaker: string, text: string, onDone: () => void) {
     if (!get().voiceOn || typeof window === 'undefined') {
       playTimer = setTimeout(onDone, speechDelay(text));
       return;
@@ -601,10 +605,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     const generation = ++speechGeneration;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
-    const prepared = prefetchedSpeech.take(speechCacheKey(text, language, rate));
+    const prepared = prefetchedSpeech.take(speechCacheKey(speaker, text, language, rate));
     const controller = prepared?.controller || new AbortController();
     speechAbort = controller;
-    const response = prepared?.response || requestSpeechResponse(text, language, rate, controller.signal);
+    const response = prepared?.response || requestSpeechResponse(text, language, rate, controller.signal, speaker);
     void playSpeechResponse(response, {
       signal: controller.signal,
       onStarted: () => { if (generation === speechGeneration) recordResponseLatency('audio'); },
@@ -880,7 +884,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     turns
       .filter((turn) => (turn.type === 'speech' || turn.type === 'user_prompt') && (turn.text ?? '').trim())
       .slice(0, 3)
-      .forEach((turn) => prefetchSpeechLine((turn.text ?? '').trim()));
+      .forEach((turn) => prefetchSpeechLine(turn.speaker || 'Teacher', (turn.text ?? '').trim()));
     turnQueue.push(...turns);
     waitingSince = null;
     stallNudged = false;

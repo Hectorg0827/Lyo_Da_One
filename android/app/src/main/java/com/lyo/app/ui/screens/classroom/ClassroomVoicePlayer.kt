@@ -9,6 +9,7 @@ import android.util.Base64
 import com.google.gson.JsonParser
 import com.lyo.app.BuildConfig
 import com.lyo.app.data.api.ApiClient
+import com.lyo.app.ui.classroom.ClassroomCast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -69,14 +70,14 @@ class ClassroomVoicePlayer(context: Context) {
         done?.invoke()
     }
 
-    fun play(text: String, language: String, onComplete: (() -> Unit)? = null) {
+    fun play(text: String, language: String, speakerId: String = "teacher_1", onComplete: (() -> Unit)? = null) {
         stop()
         if (!enabled || text.isBlank()) { onComplete?.invoke(); return }
         completion = onComplete
         val requestedGeneration = generation
         playbackJob = scope.launch {
             try {
-                val file = fetchSharedVoice(text, language, requestedGeneration)
+                val file = fetchSharedVoice(text, language, speakerId, requestedGeneration)
                 if (requestedGeneration != generation || !enabled) {
                     file.delete()
                     return@launch
@@ -115,12 +116,15 @@ class ClassroomVoicePlayer(context: Context) {
         scope.cancel()
     }
 
-    private suspend fun fetchSharedVoice(text: String, language: String, requestedGeneration: Int): File =
+    private suspend fun fetchSharedVoice(text: String, language: String, speakerId: String, requestedGeneration: Int): File =
         withContext(Dispatchers.IO) {
+            val character = (ClassroomCast.teachers + ClassroomCast.classmates + ClassroomCast.companion)
+                .firstOrNull { it.id == speakerId } ?: ClassroomCast.teachers.first()
             val body = ApiClient.gson.toJson(
                 mapOf(
                     "text" to text,
-                    "voice" to "nova",
+                    "voice" to character.voice,
+                    "speaker_id" to character.id,
                     "format" to "mp3",
                     "speed" to 0.98,
                     "content_type" to "explanation",

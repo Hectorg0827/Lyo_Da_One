@@ -1,7 +1,5 @@
 package com.lyo.app.ui.classroom
 
-import android.app.Activity
-import android.content.pm.ActivityInfo
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -10,6 +8,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -27,8 +28,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavHostController
 import com.lyo.app.data.StackRepository
 import com.lyo.app.data.a2ui.resolvePointer
@@ -99,27 +98,6 @@ fun ClassroomScreen(
         }
     }
 
-    // Legacy Android classroom policy: landscape full-screen + immersive
-    // system bars. Web does not force orientation, so this is not parity.
-    // Modeled directly on ChatScreen.kt's TextToSpeech
-    // DisposableEffect shape: acquire in the effect body, capture the
-    // ORIGINAL orientation before mutating so onDispose restores it
-    // exactly rather than hardcoding a default (some other screen may
-    // already have set a non-UNSPECIFIED orientation elsewhere in the app).
-    val activity = context as? Activity
-    DisposableEffect(Unit) {
-        val originalOrientation = activity?.requestedOrientation
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-        val window = activity?.window
-        val insetsController = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
-        insetsController?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        insetsController?.hide(WindowInsetsCompat.Type.systemBars())
-        onDispose {
-            insetsController?.show(WindowInsetsCompat.Type.systemBars())
-            activity?.requestedOrientation = originalOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-    }
-
     var settingsOpen by remember { mutableStateOf(false) }
     var notebookOpen by remember { mutableStateOf(false) }
     // ClassroomPreferences.reducedMotion is a plain var (see its doc
@@ -139,6 +117,7 @@ fun ClassroomScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .background(Background),
     ) {
         // Background tap-catcher, drawn BEHIND everything below — Compose's
@@ -198,12 +177,16 @@ fun ClassroomScreen(
                 )
             }
 
-            // One real Lyo mascot beside the explanation, above the teaching tools.
+            // A teacher leads; Lyo remains a separate student companion.
             TeacherBadgeAndCaption(
                 caption = engine.surface.dataModel.resolvePointer("/caption"),
-                mascotState = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
+                topic = topic,
                 lessonRecovery = engine.lessonRecovery,
                 onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
+            )
+            LyoCompanionBadge(
+                state = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
+                spokenClassmates = if (teachingMode == "classroom") engine.transcript.map { it.speaker } else emptyList(),
             )
 
             // Teaching tools scroll independently from the explanation and controls.
