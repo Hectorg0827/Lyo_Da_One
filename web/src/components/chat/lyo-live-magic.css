@@ -541,3 +541,97 @@
   .lyo-live-magic__composer { gap: 3px; }
   .lyo-live-magic__mic { width: 41px; height: 41px; min-width: 41px; }
 }
+
+/* Mobile parity: same full-screen black Lyo stage and one-row island on
+   Safari, Android Chrome, and installed PWAs. Keep the composer above the
+   visual keyboard, not beneath the system navigation or browser toolbar. */
+.lyo-live-magic {
+  top: var(--lyo-live-visual-top, 0px);
+  bottom: auto;
+  height: var(--lyo-live-visual-height, 100dvh);
+  max-height: var(--lyo-live-visual-height, 100dvh);
+  box-sizing: border-box;
+  overscroll-behavior: contain;
+}
+.lyo-live-magic__header { flex-shrink: 0; }
+.lyo-live-magic__main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.lyo-live-magic__stage { min-height: min-content; }
+.lyo-live-magic__footer {
+  flex-shrink: 0;
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+.lyo-live-magic__control-stack {
+  flex-wrap: nowrap;
+  box-sizing: border-box;
+  max-width: 550px;
+  min-width: 0;
+}
+.lyo-live-magic__composer { min-width: 0; }
+.lyo-live-magic__composer input { min-width: 0; }
+.lyo-live-magic__composer button[type="submit"] {
+  padding-inline: 10px;
+  min-height: 36px;
+}
+.lyo-live-magic__mic {
+  flex: 0 0 43px;
+  width: 43px;
+  height: 43px;
+}
+.lyo-live-magic__mic[aria-pressed="true"] {
+  color: #f3f5fb;
+  background: rgba(212,220,234,.09);
+  border-color: rgba(212,220,234,.34);
+  box-shadow: none;
+}
+@media (max-width: 600px) {
+  .lyo-live-magic {
+    padding: calc(env(safe-area-inset-top) + 8px) max(12px, env(safe-area-inset-right))
+             7px max(12px, env(safe-area-inset-left));
+  }
+  .lyo-live-magic__header { gap: 6px; padding-top: 2px; }
+  .lyo-live-magic__brand { gap: 10px; }
+  .lyo-live-magic__brand h1 { font-size: clamp(1.56rem, 6.4vw, 2.15rem); }
+  .lyo-live-magic__brand p { letter-spacing: .075em; font-size: clamp(.55rem, 2.2vw, .72rem); }
+  .lyo-live-magic__header-actions { gap: 5px; }
+  .lyo-live-magic__header select { max-width: 65px; }
+  .lyo-live-magic__close { width: 41px; height: 41px; }
+  .lyo-live-magic__hero { height: clamp(155px, 33dvh, 290px); }
+  .lyo-live-magic__halo { width: min(69%, 270px); }
+  .lyo-live-magic__mascot { width: min(60%, 238px); }
+  .lyo-live-magic__state { font-size: .86rem; padding: 8px 14px; }
+  .lyo-live-magic__headline {
+    font-size: clamp(1.72rem, 7.7vw, 2.95rem);
+    line-height: 1.16;
+    margin-top: clamp(6px, 1.1dvh, 14px);
+  }
+  .lyo-live-magic__voice-wave { height: clamp(32px, 6dvh, 58px); }
+  .lyo-live-magic__caption { min-height: 22px; max-height: 3.2rem; font-size: .88rem; }
+  .lyo-live-magic__footer { gap: 7px; }
+  .lyo-live-magic__transcript-toggle { font-size: .82rem; padding: 8px 13px; }
+  .lyo-live-magic__control-stack { padding: 7px; border-radius: 35px; gap: 7px; }
+  .lyo-live-magic__mic { flex-basis: 41px; width: 41px; height: 41px; }
+  .lyo-live-magic__composer { min-height: 46px; padding: 4px 5px; }
+  .lyo-live-magic__composer input { font-size: 16px; padding-block: 6px; }
+  .lyo-live-magic__attach { width: 32px; height: 32px; min-width: 32px; }
+  .lyo-live-magic__composer button[type="submit"] { padding-inline: 8px; }
+}
+@media (max-width: 365px) {
+  .lyo-live-magic__brand h1 { font-size: 1.45rem; }
+  .lyo-live-magic__brand p { font-size: .53rem; }
+  .lyo-live-magic__control-stack { gap: 5px; padding: 5px; }
+  .lyo-live-magic__composer { gap: 2px; padding: 3px; }
+  .lyo-live-magic__composer button[type="submit"] { font-size: .74rem; padding-inline: 5px; }
+}
+.lyo-live-magic:focus-within .lyo-live-magic__hero {
+  height: clamp(100px, 19dvh, 165px);
+}
+.lyo-live-magic:focus-within .lyo-live-magic__headline {
+  font-size: clamp(1.5rem, 6vw, 2rem);
+}
+.lyo-live-magic:focus-within .lyo-live-magic__caption { max-height: 2rem; }
+.lyo-live-magic:focus-within .lyo-live-magic__voice-wave { height: 28px; }
