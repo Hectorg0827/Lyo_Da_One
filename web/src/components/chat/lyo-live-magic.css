@@ -12,9 +12,8 @@
   color: #faf8ff;
   isolation: isolate;
   background:
-    radial-gradient(ellipse 78% 48% at 49% 43%, rgba(90, 58, 182, .33), transparent 75%),
-    radial-gradient(ellipse 45% 40% at 83% 85%, rgba(157, 43, 198, .18), transparent 80%),
-    linear-gradient(165deg, #0a0e2a 0%, #19113f 49%, #281456 80%, #0e1839 100%);
+    radial-gradient(ellipse 65% 38% at 50% 43%, rgba(21, 57, 78, .18), transparent 78%),
+    linear-gradient(165deg, #030506 0%, #05080b 52%, #020407 100%);
   padding: max(env(safe-area-inset-top), 16px) max(env(safe-area-inset-right), 20px)
            max(env(safe-area-inset-bottom), 14px) max(env(safe-area-inset-left), 20px);
 }
@@ -130,15 +129,36 @@
   border: 1px solid rgba(125,216,255,.42);
   background: radial-gradient(circle at 55% 54%, rgba(95,65,184,.2), transparent 74%);
   box-shadow: 0 0 23px rgba(84, 129, 250, .26), inset 0 0 31px rgba(137, 81, 255, .12);
+  transition: border-color 250ms ease, box-shadow 250ms ease;
 }
-.lyo-live-magic--speaking .lyo-live-magic__halo { box-shadow: 0 0 31px rgba(255,147,95,.32); }
+.lyo-live-magic--speaking .lyo-live-magic__halo {
+  border: 2px solid transparent;
+  background:
+    radial-gradient(circle, rgba(255,106,52,.09), transparent 74%) padding-box,
+    conic-gradient(from 90deg,#ff9b31,#ffc067,#ff578d,#e878ff,#ff943c) border-box;
+  box-shadow: 0 0 38px rgba(255,118,51,.38), inset 0 0 22px rgba(255,119,47,.13);
+  animation: lyo-live-response-halo 2s ease-in-out infinite alternate;
+}
 .lyo-live-magic__mascot {
   position: relative; z-index: 2;
   width: min(59%, 286px);
   display: grid; place-items: center;
   filter: drop-shadow(0 14px 20px rgba(22, 8, 42, .36));
 }
+.lyo-live-magic__mascot:not(:first-child) { animation: lyo-live-mascot-tap 480ms cubic-bezier(.15,.65,.2,1.2) both; }
 .lyo-live-magic__mascot img { width: 100%; height: auto; max-height: 100%; object-fit: contain; }
+.lyo-live-magic__touch-ripple {
+  position: absolute;
+  z-index: 4;
+  top: 26%;
+  right: 29%;
+  border-radius: 50%;
+  color: #ffcf90;
+  font-size: 26px;
+  text-shadow: 0 0 17px #ff9140;
+  pointer-events: none;
+  animation: lyo-live-touch-spark 680ms ease-out both;
+}
 .lyo-live-magic__learning {
   position: absolute; z-index: 3;
   display: grid; place-items: center;
@@ -166,6 +186,12 @@
   font-size: .94rem; font-weight: 650;
 }
 .lyo-live-magic__state svg { color: #77ffd0; }
+.lyo-live-magic--speaking .lyo-live-magic__state {
+  border-color: #ffad68;
+  background: linear-gradient(100deg, rgba(101,42,25,.66),rgba(106,33,82,.54));
+  box-shadow: 0 0 23px rgba(255,108,61,.23);
+}
+.lyo-live-magic--speaking .lyo-live-magic__state svg { color: #ffad60; }
 .lyo-live-magic__headline {
   margin-top: clamp(10px, 2.2dvh, 26px);
   font-size: clamp(2.2rem, 8.3vw, 4rem);
@@ -267,15 +293,46 @@
   max-height: 60px; transform-origin: center;
   background: linear-gradient(180deg,#7effd7 0%,#80b9ff 55%,#b47bff 100%);
   box-shadow: 0 0 11px rgba(111,209,255,.45);
+  transition: background 260ms ease, box-shadow 260ms ease;
   animation: lyo-live-eq 1.6s ease-in-out infinite alternate;
 }
 .lyo-live-magic__equalizer span:nth-child(2n) { animation-delay: -.5s; }
 .lyo-live-magic__equalizer span:nth-child(3n) { animation-delay: -.9s; }
 .lyo-live-magic--thinking .lyo-live-magic__equalizer span { animation-duration: 3.2s; opacity: .7; }
-.lyo-live-magic--speaking .lyo-live-magic__equalizer span { animation-duration: .75s; }
+.lyo-live-magic--speaking .lyo-live-magic__equalizer span {
+  animation-duration: .75s;
+  background: linear-gradient(180deg, #ffe3a0 0%, #ff923c 55%, #ff5784 100%);
+  box-shadow: 0 0 15px rgba(255,127,53,.6);
+}
+.lyo-live-magic--speaking .lyo-live-magic__mic {
+  color: #fff9f2;
+  background: linear-gradient(140deg,rgba(255,154,56,.8),rgba(234,73,94,.75));
+  border: 1px solid #ffc078;
+  box-shadow: 0 0 20px rgba(255,128,51,.44), inset 0 0 10px rgba(255,255,255,.1);
+  animation: lyo-live-response-mic .85s ease-in-out infinite alternate;
+}
 .lyo-live-magic__debug {
   width: 100%; max-height: 70px; overflow: auto;
   font: 10px ui-monospace,monospace; color: #a7a2d4;
+}
+@keyframes lyo-live-response-halo {
+  from { box-shadow: 0 0 21px rgba(255,112,40,.23), inset 0 0 14px rgba(255,119,47,.08); }
+  to { box-shadow: 0 0 43px rgba(255,137,65,.5), inset 0 0 24px rgba(255,119,47,.18); }
+}
+@keyframes lyo-live-response-mic {
+  from { box-shadow: 0 0 12px rgba(255,124,45,.25); transform: scale(.97); }
+  to { box-shadow: 0 0 27px rgba(255,124,45,.52); transform: scale(1.04); }
+}
+@keyframes lyo-live-mascot-tap {
+  0% { transform: scale(1); }
+  40% { transform: translateY(-9px) scale(1.1) rotate(-2deg); }
+  70% { transform: translateY(2px) scale(.97) rotate(1deg); }
+  100% { transform: scale(1); }
+}
+@keyframes lyo-live-touch-spark {
+  from { opacity: 0; transform: translateY(12px) scale(.5); }
+  40% { opacity: 1; transform: translateY(-13px) scale(1.35); }
+  to { opacity: 0; transform: translateY(-22px) scale(1.2); }
 }
 @keyframes lyo-live-wave { from { transform: translateY(-8px) scaleY(.82); } to { transform: translateY(9px) scaleY(1.16); } }
 @keyframes lyo-live-charm { from { transform: translateY(-4px) rotate(-5deg); } to { transform: translateY(5px) rotate(5deg); } }
@@ -304,7 +361,52 @@
   .lyo-live-magic__dock { padding-block: 8px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .lyo-live-magic__halo,
+  .lyo-live-magic__mic,
+  .lyo-live-magic__mascot,
+  .lyo-live-magic__touch-ripple,
   .lyo-live-magic__ribbon path,
   .lyo-live-magic__learning,
   .lyo-live-magic__equalizer span { animation: none !important; }
+}
+
+/* Typed input is part of the same Live conversation, not a second chat thread. */
+.lyo-live-magic__composer {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: min(100%, 550px);
+  margin-bottom: 2px;
+  border-radius: 40px;
+  padding: 6px 7px 6px 17px;
+  background: rgba(255,255,255,.085);
+  border: 1px solid rgba(217,221,240,.32);
+}
+.lyo-live-magic__composer input {
+  min-width: 0; flex: 1;
+  background: transparent;
+  border: 0; outline: 0;
+  color: #fff;
+  font-size: 1rem;
+  padding: 10px 0;
+}
+.lyo-live-magic__composer input::placeholder { color: #9fa5bb; }
+.lyo-live-magic__composer:focus-within {
+  border-color: #78d7ed;
+  box-shadow: 0 0 0 2px rgba(109,199,245,.14);
+}
+.lyo-live-magic__composer button {
+  flex: none;
+  border: 0; border-radius: 30px;
+  padding: 10px 15px;
+  color: #06121b; background: #8debd4;
+  font-size: .89rem; font-weight: 700;
+}
+.lyo-live-magic__composer button:disabled { opacity: .4; cursor: default; }
+@media (max-height: 670px) {
+  .lyo-live-magic__hero { height: clamp(130px, 24dvh, 195px); }
+  .lyo-live-magic__headline { font-size: clamp(1.5rem, 6.5vw, 2.5rem); }
+  .lyo-live-magic__caption { max-height: 3.8rem; }
+  .lyo-live-magic__state { padding: 6px 13px; }
+  .lyo-live-magic__composer input { padding-block: 5px; }
 }
