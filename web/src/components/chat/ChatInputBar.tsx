@@ -60,7 +60,6 @@ export default function ChatInputBar() {
     reviseActiveCourse,
     voiceSessionActive,
     setVoiceSessionActive,
-    createConversation,
   } = useChatStore();
   const isCourseAdjustable = isGenerating && generationActivity === 'course';
   const [value, setValue] = useState('');
@@ -189,7 +188,6 @@ export default function ChatInputBar() {
     // this local thread to the ordinary persisted server conversation.
     if (isGenerating || uploading) return;
     stopDictation();
-    createConversation();
     setVoiceSessionActive(true);
   };
 
