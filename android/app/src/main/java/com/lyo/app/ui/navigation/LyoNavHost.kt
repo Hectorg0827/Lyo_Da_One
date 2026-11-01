@@ -24,6 +24,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -182,6 +185,7 @@ private fun LyoNavHost() {
     val nav: NavHostController = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
+    var liveUiActive by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     LaunchedEffect(Session.isAuthenticated) {
@@ -206,8 +210,8 @@ private fun LyoNavHost() {
     }
 
     // Chat shares the web's persistent tab bar; Create opens as a full-screen studio.
-    val showBottomBar = currentRoute == Routes.CHAT ||
-        (currentRoute != Routes.CREATE && currentRoute in bottomItems.map { it.route })
+    val showBottomBar = !liveUiActive && (currentRoute == Routes.CHAT ||
+        (currentRoute != Routes.CREATE && currentRoute in bottomItems.map { it.route }))
 
     // The web Focus surface uses a near-black, layered backdrop. Keeping
     // the Android scaffold transparent lets each native screen share that
@@ -243,7 +247,7 @@ private fun LyoNavHost() {
             composable(Routes.LOGIN) { LoginScreen(nav) }
             composable(Routes.SIGNUP) { SignupScreen(nav) }
             composable(Routes.HOME) { HomeScreen(nav) }
-            composable(Routes.CHAT) { ChatScreen(nav) }
+            composable(Routes.CHAT) { ChatScreen(nav, onLiveModeChanged = { liveUiActive = it }) }
             composable(Routes.TEST_PREP) { com.lyo.app.ui.screens.testprep.TestPrepScreen(nav) }
             composable(Routes.PREP_CLASSROOM) { entry ->
                 ClassroomScreen(nav, entry.arguments?.getString("sessionId") ?: "",
