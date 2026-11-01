@@ -400,3 +400,15 @@ test('Live conversation offers a typed message composer', async (t) => {
   assert.ok(input.closest('form')?.querySelector('button[type="submit"]'),
     'typed message has an explicit send action');
 });
+
+test('Live composer exposes photo/document input alongside one microphone and no redundant hangup', async (t) => {
+  await harness(t);
+  const stage = document.querySelector('[aria-label="LYO live voice conversation"]');
+  assert.ok(stage);
+  assert.equal(stage.querySelectorAll('.lyo-live-magic__mic').length, 1);
+  assert.equal(stage.querySelectorAll('.lyo-live-magic__hangup').length, 0);
+  assert.ok(stage.querySelector('button[aria-label="Attach a photo or document"]'));
+  assert.ok(stage.querySelector('input[type="file"][multiple]'));
+  assert.ok(stage.querySelector('input#lyo-live-typed-input'));
+  assert.ok(stage.querySelector('button[aria-label="End live voice and return to chat"]'));
+});
