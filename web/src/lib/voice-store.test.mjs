@@ -99,5 +99,10 @@ test('each Live activation opens one ordinary chat and ending preserves its hist
   assert.equal(h.store.getState().activeConversationId, 'persisted-live-chat', 'closing Live returns to the same saved normal chat');
   assert.equal(h.store.getState().voiceSessionActive, false);
   h.store.getState().setVoiceSessionActive(true);
-  assert.notEqual(h.store.getState().activeConversationId, 'persisted-live-chat', 'next Live session is a separate chat');
+  assert.equal(h.store.getState().activeConversationId, 'persisted-live-chat',
+    'new session must not cut off an unfinished assistant response');
+  h.store.getState().interruptGeneration();
+  h.store.getState().setVoiceSessionActive(true);
+  assert.notEqual(h.store.getState().activeConversationId, 'persisted-live-chat',
+    'next Live session is a separate normal chat after the old stream ends');
 });
