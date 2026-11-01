@@ -1,5 +1,6 @@
 package com.lyo.app.ui.screens.chat
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -33,28 +35,41 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Subject
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +87,8 @@ private val LiveMint = Color(0xFF79FFCB)
 private val LiveBlue = Color(0xFF519CFF)
 private val LiveLavender = Color(0xFFA87BFF)
 private val LiveCoral = Color(0xFFFF6D83)
+private val LiveOrange = Color(0xFFFF9C45)
+private val LivePink = Color(0xFFFF678B)
 private val LiveWhite = Color(0xFFF8F6FF)
 
 /**
@@ -94,8 +111,37 @@ internal fun MagicalLyoLiveScreen(
     onTestSpeaker: () -> Unit,
     onInterrupt: () -> Unit,
     onTryHumanVoice: () -> Unit,
+    onSendText: (String) -> Unit,
+    onTypingChanged: (Boolean) -> Unit,
 ) {
     val spanish = remember { Locale.getDefault().language == "es" }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val haptics = LocalHapticFeedback.current
+    var typing by remember { mutableStateOf(false) }
+    var draftText by remember { mutableStateOf("") }
+    var touchCount by remember { mutableIntStateOf(0) }
+    var showTouchSpark by remember { mutableStateOf(false) }
+    val touchScale = remember { Animatable(1f) }
+
+    fun sendTyped() {
+        val message = draftText.trim()
+        if (message.isBlank()) return
+        onSendText(message)
+        draftText = ""
+        keyboardController?.hide()
+        focusManager.clearFocus()
+    }
+
+    LaunchedEffect(touchCount) {
+        if (touchCount == 0) return@LaunchedEffect
+        showTouchSpark = true
+        touchScale.snapTo(1f)
+        touchScale.animateTo(1.12f, tween(130))
+        touchScale.animateTo(0.97f, tween(130))
+        touchScale.animateTo(1f, tween(230))
+        showTouchSpark = false
+    }
     var showTranscript by remember { mutableStateOf(false) }
     var readingFrame by remember { mutableStateOf(0) }
     val transcriptScroll = rememberLazyListState()
@@ -122,13 +168,13 @@ internal fun MagicalLyoLiveScreen(
     } else R.drawable.mascot_standing
 
     val status = when {
-        speaking -> if (spanish) "Lyo está hablando" else "Lyo is speaking"
+        speaking -> if (spanish) "Lyo está respondiendo" else "Lyo is responding"
         thinking -> if (spanish) "Lyo está pensando" else "Lyo is thinking"
         listening -> if (spanish) "Estoy escuchando…" else "I'm listening…"
         else -> if (spanish) "Listo para escuchar" else "Ready to listen"
     }
     val headline = when {
-        speaking -> if (spanish) "Aprendamos juntos." else "Let's learn together."
+        speaking -> if (spanish) "Esto es lo que pienso…" else "Here's what I think…"
         thinking -> if (spanish) "Una idea a la vez." else "One thought at a time."
         else -> if (spanish) "Cuéntame, te escucho." else "Go on, I'm all ears."
     }
@@ -157,7 +203,7 @@ internal fun MagicalLyoLiveScreen(
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize().background(
             Brush.verticalGradient(
-                listOf(Color(0xFF090E28), Color(0xFF20134C), Color(0xFF25124E), Color(0xFF0F1737)),
+                listOf(Color(0xFF030506), Color(0xFF070C10), Color(0xFF080B10), Color(0xFF030506)),
             ),
         ),
     ) {
@@ -165,7 +211,7 @@ internal fun MagicalLyoLiveScreen(
         val characterSize = if (compact) 184.dp else 234.dp
         val heroHeight = if (compact) 245.dp else 320.dp
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 16.dp),
+            modifier = Modifier.fillMaxSize().imePadding().padding(horizontal = 18.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Row(
