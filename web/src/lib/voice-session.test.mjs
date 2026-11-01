@@ -381,3 +381,22 @@ test('web voice can explicitly switch English and Spanish recognition and spoken
   await h.emit({ type: 'voice_text_segment', text: 'La gravedad atrae la materia.', sequence: 0 });
   assert.equal(h.requests[0].options.language, 'es-ES');
 });
+
+test('touching Lyo animates without ending a listening turn', async (t) => {
+  const h = await harness(t);
+  const lyo = document.querySelector('[aria-label="Touch Lyo for a reaction"]');
+  assert.ok(lyo, 'the mascot has an accessible touch action');
+  await flush(() => lyo.click());
+  assert.ok(document.querySelector('.lyo-live-magic__touch-ripple'), 'touch creates a visible sparkle');
+  assert.equal(h.submissions.length, 0, 'touching the avatar must not send a chat turn');
+  assert.equal(h.recognizers.at(-1).running, true, 'touching Lyo must not stop listening');
+});
+
+test('Live conversation offers a typed message composer', async (t) => {
+  await harness(t);
+  const input = document.querySelector('input[aria-label="Ask Lyo by typing"]')
+    ?? document.querySelector('input#lyo-live-typed-input');
+  assert.ok(input, 'typing is available inside Live mode');
+  assert.ok(input.closest('form')?.querySelector('button[type="submit"]'),
+    'typed message has an explicit send action');
+});
