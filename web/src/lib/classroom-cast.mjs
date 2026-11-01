@@ -4,10 +4,10 @@
  * Keep teacher, AI classmates and the student's companion distinct.
  */
 export const TEACHERS = Object.freeze([
-  { id: 'teacher_1', name: 'Teacher 1', voice: 'onyx', image: '/classroom/cast/teacher-1.png' },
-  { id: 'teacher_2', name: 'Teacher 2', voice: 'echo', image: '/classroom/cast/teacher-2.png' },
-  { id: 'teacher_3', name: 'Teacher 3', voice: 'fable', image: '/classroom/cast/teacher-3.png' },
-  { id: 'teacher_4', name: 'Teacher 4', voice: 'shimmer', image: '/classroom/cast/teacher-4.png' },
+  { id: 'teacher_1', name: 'Teacher 1', voice: 'onyx', image: '/classroom/cast/teacher-1.png', accent: 'text-lyo-300' },
+  { id: 'teacher_2', name: 'Teacher 2', voice: 'echo', image: '/classroom/cast/teacher-2.png', accent: 'text-lyo-300' },
+  { id: 'teacher_3', name: 'Teacher 3', voice: 'fable', image: '/classroom/cast/teacher-3.png', accent: 'text-lyo-300' },
+  { id: 'teacher_4', name: 'Teacher 4', voice: 'shimmer', image: '/classroom/cast/teacher-4.png', accent: 'text-lyo-300' },
 ]);
 
 export const CLASSMATES = Object.freeze([
@@ -18,7 +18,7 @@ export const CLASSMATES = Object.freeze([
 ]);
 
 export const LYO_COMPANION = Object.freeze({
-  id: 'lyo', name: 'Lyo', voice: 'nova', image: '/mascot/mascot_standing.png',
+  id: 'lyo', name: 'Lyo', voice: 'nova', image: '/mascot/mascot_standing.png', accent: 'text-accent-gold',
 });
 
 /** Stable for a subject on every client; the server uses the same rule. */
