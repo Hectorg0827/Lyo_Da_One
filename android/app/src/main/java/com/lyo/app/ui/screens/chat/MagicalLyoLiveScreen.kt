@@ -477,12 +477,7 @@ internal fun MagicalLyoLiveScreen(
                             modifier = Modifier.size(26.dp),
                         )
                     }
-                    Text(
-                        status,
-                        color = Color.White.copy(alpha = 0.68f),
-                        fontSize = 12.sp,
-                        maxLines = 1,
-                    )
+                    Spacer(Modifier.width(14.dp))
                     Box(
                         modifier = Modifier.size(53.dp).clip(CircleShape)
                             .background(Brush.linearGradient(listOf(LiveCoral, Color(0xFFE33A72))))
