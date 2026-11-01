@@ -232,10 +232,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   voiceSessionActive: false,
   voiceSpokenText: null,
 
-  setVoiceSessionActive: (active) => set({
-    voiceSessionActive: active,
-    ...(active ? {} : { voiceSpokenText: null }),
-  }),
+  setVoiceSessionActive: (active) => {
+    if (active && !get().voiceSessionActive) {
+      // Every Live activation starts a *new regular chat*; audio, text and
+      // attachments then share the canonical store and server history.
+      // A local draft only becomes server-persisted after its first turn,
+      // matching normal New Chat behavior (no empty historical threads).
+      if (get().isGenerating) return;
+      get().createConversation();
+    }
+    set({
+      voiceSessionActive: active,
+      ...(active ? {} : { voiceSpokenText: null }),
+    });
+  },
   setVoiceSpokenText: (value) => set({ voiceSpokenText: value }),
   interruptGeneration: () => {
     activeStreamToken += 1;
