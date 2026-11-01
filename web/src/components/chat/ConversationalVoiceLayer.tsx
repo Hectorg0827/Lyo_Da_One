@@ -1548,7 +1548,7 @@ export default function ConversationalVoiceLayer() {
               <div className="lyo-live-magic__learning lyo-live-magic__learning--three" aria-hidden="true">✧</div>
               <div className="lyo-live-magic__learning lyo-live-magic__learning--four" aria-hidden="true">Aa</div>
               <div className={cn('lyo-live-magic__mascot', mascotTaps > 0 && 'lyo-live-magic__mascot--touched')} key={mascotTaps}>
-                <MascotAvatar thinking={phase === 'thinking'}
+                <MascotAvatar liveHero thinking={phase === 'thinking'}
                   speaking={phase === 'speaking'}
                   idle={phase === 'listening' || phase === 'idle'}
                   size={320} alt={status} />
