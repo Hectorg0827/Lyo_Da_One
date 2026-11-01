@@ -152,29 +152,16 @@ internal fun MagicalLyoLiveScreen(
         showTouchSpark = false
     }
     var showTranscript by remember { mutableStateOf(false) }
-    var readingFrame by remember { mutableStateOf(0) }
     val transcriptScroll = rememberLazyListState()
     val transcript = messages.filter { it.role == "user" || it.role == "assistant" }
 
-    LaunchedEffect(thinking) {
-        readingFrame = 0
-        while (thinking) {
-            delay(230)
-            readingFrame = (readingFrame + 1) % 4
-        }
-    }
     LaunchedEffect(showTranscript, transcript.size, messages.lastOrNull()?.content?.length) {
         if (showTranscript && transcript.isNotEmpty()) {
             transcriptScroll.animateScrollToItem(transcript.lastIndex)
         }
     }
 
-    val mascot = if (thinking) when (readingFrame) {
-        0 -> R.drawable.mascot_reading_1
-        1 -> R.drawable.mascot_reading_2
-        2 -> R.drawable.mascot_reading_3
-        else -> R.drawable.mascot_reading_4
-    } else R.drawable.lyo_live_front
+    val mascot = R.drawable.lyo_live_front
 
     val status = when {
         speaking -> if (spanish) "Lyo está respondiendo" else "Lyo is responding"
