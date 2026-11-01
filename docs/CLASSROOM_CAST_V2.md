@@ -9,7 +9,7 @@
 ## Implementation and safety
 
 - Web and Android use the same cast ID and topic-to-teacher mapping.
-- Voice requests send `speaker_id` and voice preference to the shared backend TTS endpoint. The default Kokoro provider provides eight distinct English cast voices. For locales without a verified set of voices, the existing native locale voice is retained rather than silently substituting an English voice or enabling paid TTS.
+- Voice requests send `speaker_id` and voice preference to the shared backend TTS endpoint. The default Kokoro provider provides nine distinct English cast voices, including Lyo's separate companion voice. For locales without a verified set of voices, the existing native locale voice is retained rather than silently substituting an English voice or enabling paid TTS.
 - The backend's optional AI classmate author creates one short, lesson-grounded turn every three eligible scenes, up to four per session. It does not receive learner answers, own grading, or change progression.
 - The backend switch `LYO_CLASSROOM_AI_PEERS_ENABLED` defaults to **false**. Enable it only after staging model-cost, latency, and education-quality acceptance; do not enable it in production just because the code has merged.
 - No extra LYO Live voice spending, OpenAI TTS fallback, or production deployment is enabled by this change.
@@ -20,7 +20,7 @@
 
 1. Confirm the eight character portraits match the existing asset designs on Android and mobile web. The supplied PNGs contain a checkerboard background baked into the image; clean transparent assets would improve presentation without changing the characters.
 2. Verify the same subject selects the same teacher on both clients, and Lyo never narrates as the teacher.
-3. Confirm eight distinct *audible* English voices against the configured Kokoro instance. Verify Spanish and other locales explicitly before promising unique voices in those languages.
+3. Confirm nine distinct *audible* English voices against the configured Kokoro instance. Verify Spanish and other locales explicitly before promising unique voices in those languages.
 4. Enable classmate generation only on staging with model-usage monitoring. Watch a generated classmate ask a relevant question, speak, appear in transcript, and remain consistent after reconnection. A failed generation must leave the teacher functional.
 5. Confirm the four-peer per-session ceiling; do not add phantom classmate seats in solo mode.
 6. Test Android classroom launch, rotation, system-button insets, voice interruption, transcript, recovery, and no crash across several lessons.
