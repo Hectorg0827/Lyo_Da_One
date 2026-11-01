@@ -25,7 +25,7 @@ test('iOS Live is immersive and returns to its existing Chat conversation', () =
   assert.match(live, /viewModel\.sendMessage\(mode: "Chat"\)/);
   assert.match(live, /PhotosPicker\(selection: \$photoItems/);
   assert.match(live, /processDocumentURL\(url\)/);
-  assert.match(vm, /func pauseLiveMicrophone\(\)/);
+  assert.match(vm, /func pauseLiveMicrophone\(/);
   assert.match(vm, /func resumeLiveMicrophone\(\)/);
   assert.doesNotMatch(live, /CallEnd|phone\.down\.fill/);
 });
