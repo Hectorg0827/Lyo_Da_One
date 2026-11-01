@@ -44,3 +44,22 @@ test('mobile web Live has one inline mic, safe-area keyboard viewport and one ca
   assert.match(store, /createConversation\(\)/);
   assert.doesNotMatch(web, /className="lyo-live-magic__hangup"/);
 });
+
+test('all active iOS entry points use one Live mode and audio interruption contract', () => {
+  const main = source('Sources/Views/MainTabView.swift');
+  const overlay = source('Sources/Views/Main/Hybrid/LyoOverlayView.swift');
+  const alternate = source('Sources/Views/Main/AITutor/LioChatSheet.swift');
+  const vm = source('Sources/ViewModels/LyoAIViewModel.swift');
+  const iosLive = source('Sources/Views/Chat/VoiceSessionBottomSheet.swift');
+  assert.match(main, /Notification\.Name\("LyoOpenLiveSession"\)/);
+  assert.match(overlay, /Notification\.Name\("LyoOpenLiveSession"\)/);
+  assert.match(overlay, /beginLiveSession\(\)/);
+  assert.match(alternate, /\.fullScreenCover\(isPresented: \$showLiveSheet/);
+  assert.match(alternate, /VoiceSessionBottomSheet\(viewModel: viewModel/);
+  assert.match(vm, /func interruptLiveAnswer\(\)/);
+  assert.match(vm, /if isVoiceActive && !isLiveMode/);
+  assert.match(vm, /liveMicrophoneMutedByUser/);
+  assert.match(iosLive, /pauseLiveMicrophone\(userInitiated: false\)/);
+  assert.match(iosLive, /pauseLiveMicrophone\(userInitiated: true\)/);
+  assert.match(iosLive, /interruptLiveAnswer\(\)/);
+});
