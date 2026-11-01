@@ -5,6 +5,8 @@ on:
     paths:
       - "Sources/Views/Chat/VoiceSessionBottomSheet.swift"
       - "Sources/Views/Main/Hybrid/LyoOverlayView.swift"
+      - "Sources/Views/Main/AITutor/LioChatSheet.swift"
+      - "Sources/Views/MainTabView.swift"
       - "Sources/ViewModels/LyoAIViewModel.swift"
       - "Sources/Services/ConversationManager.swift"
       - ".github/workflows/lyo-live-ios-syntax.yml"
@@ -25,5 +27,7 @@ jobs:
           swiftc -frontend -parse \
             Sources/Views/Chat/VoiceSessionBottomSheet.swift \
             Sources/Views/Main/Hybrid/LyoOverlayView.swift \
+            Sources/Views/Main/AITutor/LioChatSheet.swift \
+            Sources/Views/MainTabView.swift \
             Sources/ViewModels/LyoAIViewModel.swift \
             Sources/Services/ConversationManager.swift
