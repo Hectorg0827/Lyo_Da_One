@@ -1227,6 +1227,13 @@ fun ChatScreen(nav: NavHostController, onLiveModeChanged: (Boolean) -> Unit = {}
                 inputError = null
                 voiceListenNonce += 1
             },
+            onPause = {
+                voiceListeningArmed = false
+                dictating = false
+                recognizerInFlight = false
+                voiceMicLevel = 0f
+                runCatching { continuousRecognizer?.cancel() }
+            },
             onTestSpeaker = ::testVoiceSpeaker,
             onInterrupt = ::interruptVoiceAnswer,
             onSendText = { typed ->
