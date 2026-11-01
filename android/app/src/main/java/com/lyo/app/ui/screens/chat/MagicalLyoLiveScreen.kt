@@ -111,6 +111,7 @@ internal fun MagicalLyoLiveScreen(
     error: String?,
     onEnd: () -> Unit,
     onListen: () -> Unit,
+    onPause: () -> Unit,
     onTestSpeaker: () -> Unit,
     onInterrupt: () -> Unit,
     onTryHumanVoice: () -> Unit,
@@ -426,113 +427,115 @@ internal fun MagicalLyoLiveScreen(
                     color = Color(0xFFD4BEFF), fontSize = 14.sp,
                 )
             }
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 7.dp)
-                    .clip(RoundedCornerShape(42.dp))
-                    .border(1.dp, Color(0xFF7198AB).copy(alpha = 0.48f), RoundedCornerShape(42.dp))
-                    .background(Brush.horizontalGradient(listOf(Color(0xC91E2935), Color(0xD1121A27))))
-                    .padding(horizontal = 17.dp, vertical = 13.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                val canAct = speaking || thinking || !listening
-                Box(
-                    modifier = Modifier.size(58.dp).clip(CircleShape)
-                        .background(Color.White.copy(alpha = if (canAct) 0.16f else 0.09f))
-                        .clickable(enabled = canAct) {
-                            if (speaking || thinking) onInterrupt() else onListen()
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        if (canAct) Icons.Default.Mic else Icons.Default.MicOff,
-                        contentDescription = when {
-                            speaking || thinking -> if (spanish) "Interrumpir y hablar" else "Interrupt to speak"
-                            listening -> if (spanish) "Escuchando" else "Listening"
-                            else -> if (spanish) "Escuchar" else "Listen"
-                        },
-                        tint = LiveWhite, modifier = Modifier.size(28.dp),
-                    )
-                }
-                Box(
-                    modifier = Modifier.size(62.dp).scale(if (speaking) breathing else 1f)
-                        .clip(CircleShape)
-                        .border(
-                            2.dp,
-                            if (speaking) Brush.sweepGradient(listOf(LiveOrange, LivePink, LiveOrange))
-                            else Brush.sweepGradient(listOf(LiveMint, LiveBlue, LiveMint)),
-                            CircleShape,
-                        )
-                        .background(
-                            Brush.linearGradient(
-                                if (speaking) listOf(Color(0xC75A2914), Color(0xCA992B55))
-                                else listOf(Color(0xAD084F55), Color(0xB1123648)),
-                            ),
-                        )
-                        .clickable(enabled = speaking || thinking || !listening) {
-                            if (speaking || thinking) onInterrupt() else onListen()
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        Icons.Default.Mic,
-                        contentDescription = if (spanish) "Micrófono de Lyo" else "Lyo voice microphone",
-                        tint = if (speaking) Color(0xFFFFC276) else LiveMint,
-                        modifier = Modifier.size(31.dp),
-                    )
-                }
-                Box(
-                    modifier = Modifier.size(58.dp).clip(CircleShape)
-                        .background(Brush.linearGradient(listOf(LiveCoral, Color(0xFFE33A72))))
-                        .clickable(onClick = onEnd),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Default.CallEnd, contentDescription = if (spanish) "Finalizar" else "End", tint = Color.White,
-                        modifier = Modifier.size(29.dp))
-                }
-            }
-            OutlinedTextField(
-                value = draftText,
-                onValueChange = { draftText = it.take(4000) },
+            // One compact dock: one mic control, one hang-up, and typed
+            // input. The app tab bar is hidden only while Live is active.
+            Column(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(top = 9.dp)
-                    .onFocusChanged { state ->
-                        if (typing != state.isFocused) {
-                            typing = state.isFocused
-                            onTypingChanged(state.isFocused)
+                    .padding(top = 6.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .border(1.dp, Color(0xFF718597).copy(alpha = 0.48f), RoundedCornerShape(28.dp))
+                    .background(Color(0xFF141B25))
+                    .padding(horizontal = 12.dp, vertical = 11.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val micEnabled = speaking || thinking || listening
+                    Box(
+                        modifier = Modifier.size(53.dp).clip(CircleShape)
+                            .border(
+                                2.dp,
+                                if (speaking) Brush.sweepGradient(listOf(LiveOrange, LivePink, LiveOrange))
+                                else Brush.sweepGradient(listOf(LiveMint, LiveBlue, LiveMint)),
+                                CircleShape,
+                            )
+                            .background(
+                                Brush.linearGradient(
+                                    if (speaking) listOf(Color(0xAA672D17), Color(0xAA8E3544))
+                                    else listOf(Color(0xB11D343A), Color(0xB119323D)),
+                                ),
+                            )
+                            .clickable {
+                                when {
+                                    speaking || thinking -> onInterrupt()
+                                    listening -> onPause()
+                                    else -> onListen()
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            if (micEnabled) Icons.Default.Mic else Icons.Default.MicOff,
+                            contentDescription = when {
+                                speaking || thinking -> if (spanish) "Interrumpir para hablar" else "Interrupt Lyo to speak"
+                                listening -> if (spanish) "Pausar micrófono" else "Mute microphone"
+                                else -> if (spanish) "Reanudar micrófono" else "Resume microphone"
+                            },
+                            tint = if (speaking) LiveOrange else if (micEnabled) LiveMint else Color.LightGray,
+                            modifier = Modifier.size(26.dp),
+                        )
+                    }
+                    Text(
+                        status,
+                        color = Color.White.copy(alpha = 0.68f),
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                    )
+                    Box(
+                        modifier = Modifier.size(53.dp).clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(LiveCoral, Color(0xFFE33A72))))
+                            .clickable(onClick = onEnd),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            Icons.Default.CallEnd,
+                            contentDescription = if (spanish) "Finalizar conversación" else "End Live conversation",
+                            tint = Color.White, modifier = Modifier.size(25.dp),
+                        )
+                    }
+                }
+                OutlinedTextField(
+                    value = draftText,
+                    onValueChange = { draftText = it.take(4000) },
+                    modifier = Modifier.fillMaxWidth()
+                        .padding(top = 8.dp)
+                        .onFocusChanged { state ->
+                            if (typing != state.isFocused) {
+                                typing = state.isFocused
+                                onTypingChanged(state.isFocused)
+                            }
+                        },
+                    placeholder = {
+                        Text(
+                            if (spanish) "Pregunta a Lyo…" else "Ask Lyo…",
+                            color = Color.White.copy(alpha = 0.52f),
+                        )
+                    },
+                    trailingIcon = {
+                        IconButton(onClick = ::sendTyped, enabled = draftText.isNotBlank()) {
+                            Icon(
+                                Icons.Default.Send,
+                                contentDescription = if (spanish) "Enviar mensaje" else "Send typed message",
+                                tint = if (draftText.isNotBlank()) LiveMint else Color.Gray,
+                            )
                         }
                     },
-                placeholder = {
-                    Text(if (spanish) "Pregunta a Lyo…" else "Ask Lyo…",
-                        color = Color.White.copy(alpha = 0.55f))
-                },
-                trailingIcon = {
-                    IconButton(onClick = ::sendTyped, enabled = draftText.isNotBlank()) {
-                        Icon(Icons.Default.Send,
-                            contentDescription = if (spanish) "Enviar mensaje" else "Send typed message",
-                            tint = if (draftText.isNotBlank()) LiveMint else Color.Gray)
-                    }
-                },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { sendTyped() }),
-                singleLine = true,
-                shape = RoundedCornerShape(34.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedContainerColor = Color(0xFF202935),
-                    unfocusedContainerColor = Color(0xFF1A202B),
-                    focusedBorderColor = LiveMint,
-                    unfocusedBorderColor = Color.White.copy(alpha = 0.23f),
-                    cursorColor = LiveMint,
-                ),
-            )
-            if (speaking || thinking) {
-                // A fallback remains visible even when hands-free interruption is unavailable.
-                TextButton(onClick = onInterrupt) {
-                    Text(if (spanish) "Interrumpir para hablar" else "Tap to interrupt",
-                        fontSize = 12.sp, color = Color(0xFFE6CBFF))
-                }
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { sendTyped() }),
+                    singleLine = true,
+                    shape = RoundedCornerShape(28.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedContainerColor = Color(0xFF10151D),
+                        unfocusedContainerColor = Color(0xFF10151D),
+                        focusedBorderColor = LiveMint,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.18f),
+                        cursorColor = LiveMint,
+                    ),
+                )
             }
             if (error != null && !speaking && !thinking) {
                 TextButton(onClick = onTestSpeaker) {
@@ -549,6 +552,49 @@ internal fun MagicalLyoLiveScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+
+/**
+ * The waveform below the headline follows actual SpeechRecognizer onRmsChanged
+ * readings, or Android TTS PCM energy on engines supporting onAudioAvailable.
+ * Without available output PCM, speaking uses only a subdued ambient motion.
+ */
+@Composable
+private fun LiveVoiceWave(
+    modifier: Modifier,
+    level: Float,
+    drift: Float,
+    speaking: Boolean,
+    thinking: Boolean,
+    listening: Boolean,
+) {
+    val colors = if (speaking) listOf(LiveOrange, LivePink, Color(0xFFFFB470))
+        else listOf(LiveMint, LiveBlue, LiveLavender)
+    val energy = when {
+        thinking -> 0.015f
+        speaking -> (level * 0.82f).coerceAtLeast(0.06f)
+        listening -> level.coerceIn(0f, 1f)
+        else -> 0f
+    }
+    Canvas(modifier) {
+        val centerY = size.height * 0.5f
+        val brush = Brush.horizontalGradient(colors)
+        val maxHeight = (size.height * 0.39f) * energy
+        for (layer in 0..2) {
+            val path = Path()
+            for (step in 0..100) {
+                val position = step / 100f
+                val envelope = sin((position * PI)).toFloat().coerceAtLeast(0f)
+                val motion = sin((position * 13.0 * PI + drift * (0.36 + layer * 0.08) + layer * 0.8)).toFloat()
+                val x = size.width * position
+                val y = centerY + maxHeight * envelope * motion * (1f - layer * 0.15f)
+                if (step == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(path, brush, style = Stroke(width = 12f - layer * 3f), alpha = 0.06f + layer * 0.09f)
+            if (layer == 0) drawPath(path, brush, style = Stroke(width = 3.4f), alpha = 0.75f)
         }
     }
 }
