@@ -3,6 +3,11 @@ package com.lyo.app.ui.classroom.catalog
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,7 +29,7 @@ fun cleanClassroomText(source: String): String {
     return source.lineSequence()
         .filterNot { it.trim().startsWith("~~~") || it.trim().startsWith(fence) }
         .joinToString("\n")
-        .replace(Regex("""\\frac\{([^{}]+)\}\{([^{}]+)\}"""), "$1 ÷ $2")
+        .replace(Regex("""\\frac\{([^{}]+)\}\{([^{}]+)\}"""), "$1 / $2")
         .replace("\\times", "×")
         .replace("\\cdot", "·")
         .replace("\\div", "÷")
@@ -41,11 +46,22 @@ fun cleanClassroomText(source: String): String {
 /** Math is drawn with Android Compose typography, rather than a LaTeX WebView. */
 @Composable
 fun NativeMathNote(source: String, modifier: Modifier = Modifier) {
-    val lines = cleanClassroomText(source).lines().map(String::trim).filter(String::isNotEmpty)
+    val lines = cleanClassroomText(source).lines().map { it.trim() }.filter { it.isNotEmpty() }
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         lines.forEach { line ->
             val equation = line.contains('=') && line.any(Char::isDigit)
-            Text(
+            val fractions = Regex("""^(.+?)\s*/\s*(.+?)\s*=\s*(.+?)\s*/\s*(.+?)$""").matchEntire(line)
+            if (fractions != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                ) {
+                    NativeFraction(fractions.groupValues[1], fractions.groupValues[2])
+                    Text("=", color = Color.White, fontSize = 23.sp, modifier = Modifier.padding(horizontal = 12.dp))
+                    NativeFraction(fractions.groupValues[3], fractions.groupValues[4])
+                }
+            } else Text(
                 text = line,
                 color = Color.White,
                 style = if (equation) MaterialTheme.typography.titleLarge else MaterialTheme.typography.bodyMedium,
@@ -70,3 +86,13 @@ fun NativeMathNote(source: String, modifier: Modifier = Modifier) {
 fun looksLikeMathLesson(text: String): Boolean =
     text.contains('=') && text.any(Char::isDigit) &&
         !text.contains("fun ") && !text.contains("const ") && !text.contains("function ")
+
+@Composable
+private fun NativeFraction(numerator: String, denominator: String) {
+    val barWidth = (maxOf(numerator.length, denominator.length) * 15).coerceIn(52, 126).dp
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(numerator.trim(), color = Color.White, fontSize = 21.sp, fontFamily = FontFamily.Serif)
+        Spacer(Modifier.width(barWidth).height(1.dp).background(Color.White))
+        Text(denominator.trim(), color = Color.White, fontSize = 21.sp, fontFamily = FontFamily.Serif)
+    }
+}
