@@ -1,5 +1,7 @@
 package com.lyo.app.ui.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,6 +27,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -61,7 +65,9 @@ import com.lyo.app.ui.screens.notifications.NotificationsScreen
 import com.lyo.app.ui.screens.profile.ProfileScreen
 import com.lyo.app.ui.screens.settings.SettingsScreen
 import com.lyo.app.ui.screens.stories.StoriesScreen
-import com.lyo.app.ui.theme.Background
+import com.lyo.app.ui.theme.BackgroundDeep1
+import com.lyo.app.ui.theme.BackgroundDeep2
+import com.lyo.app.ui.theme.BackgroundDeep3
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.Surface
 import com.lyo.app.ui.theme.TextPrimary
@@ -124,6 +130,10 @@ object Routes {
     fun communityInvite(token: String) = "community/invite/$token"
     fun courseDetail(courseId: String) = "courses/$courseId"
     fun classroom(courseId: String) = "classroom/$courseId"
+    fun topicClassroom(topic: String): String {
+        val sessionId = "topic-${java.util.UUID.randomUUID()}"
+        return "test-prep/classroom/$sessionId?topic=${android.net.Uri.encode(topic)}&mode=solo"
+    }
     fun reviewClassroom(skillId: String, topic: String): String {
         val session = android.net.Uri.encode("review-$skillId")
         return "review/classroom/$session?topic=${android.net.Uri.encode(topic)}" +
@@ -135,7 +145,9 @@ object Routes {
 private data class BottomItem(val route: String, val label: String, val icon: ImageVector)
 
 /**
- * Mirrors the iOS product hierarchy: Focus, Discover, Create, Community, Profile.
+ * Routes allowed to keep the mobile navigation visible. The bar itself uses
+ * web's four glyphs around the central mascot; Profile stays reachable from
+ * Home, and stays listed here so its screen retains navigation on return.
  * Chat remains a contextual destination opened from Create and other learning surfaces.
  *
  * "Discover" is the clip reel. The two were one surface under two names: this
@@ -193,35 +205,31 @@ private fun LyoNavHost() {
         }
     }
 
-    val showBottomBar = currentRoute in bottomItems.map { it.route }
+    // Chat shares the web's persistent tab bar; Create opens as a full-screen studio.
+    val showBottomBar = currentRoute == Routes.CHAT ||
+        (currentRoute != Routes.CREATE && currentRoute in bottomItems.map { it.route })
 
+    // The web Focus surface uses a near-black, layered backdrop. Keeping
+    // the Android scaffold transparent lets each native screen share that
+    // visual depth without introducing a second navigation runtime.
+    Box(
+        modifier = Modifier.fillMaxSize().background(
+            Brush.verticalGradient(
+                listOf(BackgroundDeep1, BackgroundDeep2, BackgroundDeep3),
+            ),
+        ),
+    ) {
     Scaffold(
-        containerColor = Background,
+        containerColor = Color.Transparent,
         bottomBar = {
             if (showBottomBar) {
-                NavigationBar(containerColor = Surface) {
-                    bottomItems.forEach { item ->
-                        NavigationBarItem(
-                            selected = currentRoute == item.route,
-                            onClick = {
-                                if (currentRoute != item.route) {
-                                    nav.navigate(item.route) {
-                                        popUpTo(Routes.HOME) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            },
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = LyoPurple,
-                                selectedTextColor = LyoPurple,
-                                unselectedIconColor = TextSecondary,
-                                unselectedTextColor = TextSecondary,
-                                indicatorColor = LyoPurple.copy(alpha = 0.15f),
-                            ),
-                        )
+                LyoBottomBar(currentRoute) { route ->
+                    if (currentRoute != route) {
+                        nav.navigate(route) {
+                            popUpTo(Routes.HOME) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
                 }
             }
@@ -337,6 +345,7 @@ private fun LyoNavHost() {
             composable(Routes.NOTIFICATIONS) { NotificationsScreen(nav) }
             composable(Routes.SETTINGS) { SettingsScreen(nav) }
         }
+    }
     }
 }
 

@@ -347,3 +347,44 @@ jobs:
           DEPLOY_HEALTH_URL: https://lyoai.app/api/health
           DEPLOY_EXPECTED_COMMIT: ${{ github.sha }}
         run: node scripts/verify-production-deploy.mjs
+
+  android-voice-lab-preview:
+    name: Android staging Voice Lab preview (paid access locked)
+    if: github.event_name == 'pull_request' && github.head_ref == 'feat/staging-gpt-live-android-20261031' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Verify paid Voice Lab is locked before packaging
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 15 https://lyovoicelabbackend-staging.up.railway.app/healthz | grep -F '"paid_gpt_live":false'
+          status_code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 15 -X POST -H 'Content-Type: application/json' --data '{}' https://lyovoicelabbackend-staging.up.railway.app/api/v1/gpt-live-trial/ticket)
+          test "$status_code" = '403'
+      - name: Build Voice Lab staging APK without provider credentials
+        working-directory: android
+        env:
+          LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app
+          LYO_VOICE_LAB_BASE_URL: https://lyovoicelabbackend-staging.up.railway.app
+          LYO_GPT_LIVE_TRIAL_UI: 'true'
+        run: gradle assembleDebug testDebugUnitTest --no-daemon
+      - name: Upload staging APK (expires in 7 days)
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-voice-lab-staging-locked-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7

@@ -31,23 +31,27 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -65,8 +69,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,18 +80,17 @@ import com.google.gson.JsonObject
 import com.lyo.app.data.Session
 import com.lyo.app.data.StackRepository
 import com.lyo.app.data.api.ApiClient
-import com.lyo.app.data.api.CourseDto
 import com.lyo.app.data.api.DueReviewItemDto
 import com.lyo.app.data.api.StackItemDto
-import com.lyo.app.ui.components.CardGradients
 import com.lyo.app.ui.components.GlassCard
 import com.lyo.app.ui.components.LoadingBox
+import com.lyo.app.ui.components.LyoAvatar
+import com.lyo.app.ui.components.LearnerStatsStrip
+import com.lyo.app.ui.components.learnerStats
 import com.lyo.app.ui.components.SectionHeader
 import com.lyo.app.ui.navigation.Routes
 import com.lyo.app.ui.theme.LyoAmber
-import com.lyo.app.ui.theme.LyoBlue
 import com.lyo.app.ui.theme.LyoGreen
-import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
@@ -94,11 +98,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun HomeScreen(nav: NavHostController) {
     var overview by remember { mutableStateOf<JsonObject?>(null) }
-    var featuredCourses by remember { mutableStateOf<List<CourseDto>>(emptyList()) }
+    var conceptSummary by remember { mutableStateOf<JsonObject?>(null) }
     var courseStacks by remember { mutableStateOf<List<StackItemDto>>(emptyList()) }
     var dueReviews by remember { mutableStateOf<List<DueReviewItemDto>>(emptyList()) }
     var reviewError by remember { mutableStateOf<String?>(null) }
-    var catalogError by remember { mutableStateOf<String?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var stackFilter by remember { mutableStateOf(FocusPresentation.Filter.All) }
     // Saved courses start stacked, and open on a tap. See the deck below.
@@ -108,14 +111,8 @@ fun HomeScreen(nav: NavHostController) {
         runCatching { ApiClient.api.gamificationOverview() }
             .onSuccess { overview = it }
 
-        runCatching { ApiClient.api.courses(0, 5) }
-            .onSuccess {
-                featuredCourses = it
-                catalogError = null
-            }
-            .onFailure {
-                catalogError = it.localizedMessage ?: "The course catalog is unavailable."
-            }
+        runCatching { ApiClient.api.conceptSummary() }
+            .onSuccess { conceptSummary = it }
 
         // Device- and platform-agnostic — the same list backs Focus/Home
         // on any device the user is signed into, unlike the old single-
@@ -147,159 +144,85 @@ fun HomeScreen(nav: NavHostController) {
     val xp = runCatching {
         overview?.getAsJsonObject("xp_summary")?.get("total")?.asInt
     }.getOrNull() ?: Session.user?.resolvedXp ?: 0
-    val level = runCatching {
-        overview?.getAsJsonObject("user_level")?.get("level")?.asInt
-    }.getOrNull() ?: Session.user?.resolvedLevel ?: 1
+    val conceptTotal = runCatching { conceptSummary?.get("total")?.asInt }.getOrNull() ?: 0
+    val hasLearningActivity = courseStacks.isNotEmpty() || xp > 0 || streak > 0 || conceptTotal > 0
+    val learner = Session.user
 
     LazyColumn(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        item {
-            androidx.compose.material3.Button(onClick = { nav.navigate(Routes.TEST_PREP) }, modifier = Modifier.fillMaxWidth()) {
-                Text("I have a test · Start or resume")
-            }
-        }
+        // Match the Web mobile order: discovery header, the live learning
+        // front door, then the returning learner's progress and review cards.
         item {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(
-                    text = "Hi, ${Session.user?.displayName ?: "Learner"}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                IconButton(onClick = { nav.navigate(Routes.NOTIFICATIONS) }) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF2B2F3E))
+                        .clickable { nav.navigate(Routes.COURSES) }
+                        .padding(horizontal = 12.dp),
+                ) {
                     Icon(
-                        Icons.Filled.Notifications,
-                        contentDescription = "Notifications",
+                        Icons.Filled.Search,
+                        contentDescription = null,
                         tint = TextSecondary,
+                        modifier = Modifier.size(21.dp),
+                    )
+                    Spacer(Modifier.width(9.dp))
+                    Text(
+                        "Search discoveries…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = { nav.navigate(Routes.MESSAGES) }) {
-                    Icon(
-                        Icons.Filled.Email,
-                        contentDescription = "Messages",
-                        tint = TextSecondary,
-                    )
+                IconButton(
+                    onClick = { nav.navigate(Routes.NOTIFICATIONS) },
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(Icons.Filled.Notifications, contentDescription = "Notifications", tint = TextSecondary)
                 }
-                IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) {
-                    Icon(
-                        Icons.Filled.Settings,
-                        contentDescription = "Settings",
-                        tint = TextSecondary,
-                    )
+                IconButton(
+                    onClick = { nav.navigate(Routes.MESSAGES) },
+                    modifier = Modifier.size(38.dp),
+                ) {
+                    Icon(Icons.Filled.Email, contentDescription = "Messages", tint = TextSecondary)
                 }
+                HomeAccountMenu(nav)
             }
         }
 
+        // Returning learners also get the full live teacher experience
+        // before stats; this matches the current mobile Web Home screen.
         item {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                StatCard(
-                    emoji = "🔥",
-                    value = "$streak",
-                    label = "Day streak",
-                    accent = LyoAmber,
-                    modifier = Modifier.weight(1f),
-                )
-                StatCard(
-                    emoji = "⚡",
-                    value = "$xp",
-                    label = "XP earned",
-                    accent = LyoPurple,
-                    modifier = Modifier.weight(1f),
-                )
-                StatCard(
-                    emoji = "🏆",
-                    value = "$level",
-                    label = "Level",
-                    accent = LyoGreen,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            FocusFrontDoor(
+                knownLearner = false,
+                onEnterClassroom = { nav.navigate(Routes.topicClassroom(it)) },
+                onStartTestPrep = { nav.navigate(Routes.TEST_PREP) },
+                onOpenChat = { nav.navigate(Routes.CHAT) },
+            )
         }
 
-        if (dueReviews.isNotEmpty() || reviewError != null) {
+        if (hasLearningActivity && learner != null) {
             item {
-                SectionHeader("Ready to review")
-                when {
-                    dueReviews.isNotEmpty() -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            dueReviews.take(3).forEach { review ->
-                                val title = review.skillName?.takeIf { it.isNotBlank() }
-                                    ?: humanizeSkillId(review.skillId)
-                                GlassCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            nav.navigate(
-                                                Routes.reviewClassroom(
-                                                    skillId = review.skillId,
-                                                    topic = title,
-                                                ),
-                                            )
-                                        },
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.padding(14.dp),
-                                    ) {
-                                        Icon(
-                                            Icons.Filled.MenuBook,
-                                            contentDescription = null,
-                                            tint = LyoPurple,
-                                            modifier = Modifier.size(22.dp),
-                                        )
-                                        Column(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .padding(start = 10.dp),
-                                        ) {
-                                            Text(
-                                                text = title,
-                                                style = MaterialTheme.typography.titleSmall,
-                                                color = TextPrimary,
-                                            )
-                                            Text(
-                                                text = when {
-                                                    review.daysOverdue <= 0 ->
-                                                        "Due now · fresh retrieval"
-                                                    review.daysOverdue == 1 ->
-                                                        "1 day overdue · fresh retrieval"
-                                                    else ->
-                                                        "${review.daysOverdue} days overdue · fresh retrieval"
-                                                },
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = TextSecondary,
-                                                modifier = Modifier.padding(top = 2.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    else -> GlassCard(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = reviewError
-                                ?: "Your review schedule could not be loaded right now.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(14.dp),
-                        )
-                    }
-                }
+                LearnerStatsStrip(
+                    stats = learnerStats(overview, conceptSummary, learner),
+                    onOpenProfile = { nav.navigate(Routes.PROFILE) },
+                )
             }
         }
 
+        if (hasLearningActivity) {
         item {
             // "Your Stacks" is the heading the cross-platform contract pins
             // (scripts/verify-android-focus-honesty.mjs), so it stays.
@@ -325,6 +248,13 @@ fun HomeScreen(nav: NavHostController) {
                             selected = stackFilter == filter,
                             onClick = { stackFilter = filter },
                             label = { Text("${filter.label} $count") },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                containerColor = Color(0xFF161B2E),
+                                labelColor = TextSecondary,
+                                selectedContainerColor = Color(0xFF55447B),
+                                selectedLabelColor = Color.White,
+                            ),
                         )
                     }
                 }
@@ -496,77 +426,101 @@ fun HomeScreen(nav: NavHostController) {
                 )
             }
         }
+        }
 
-        item {
-            SectionHeader("Explore Courses")
-            when {
-                featuredCourses.isNotEmpty() -> {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        itemsIndexed(featuredCourses) { index, course ->
-                            CatalogCourseCard(
-                                course = course,
-                                gradient = CardGradients[index % CardGradients.size],
-                                onClick = { nav.navigate(Routes.courseDetail(course.idStr)) },
-                            )
+        if (dueReviews.isNotEmpty() || reviewError != null) {
+            item {
+                SectionHeader("Next for you")
+                if (dueReviews.isNotEmpty()) {
+                    Text(
+                        text = if (dueReviews.size == 1)
+                            "1 concept is ready for a retrieval check."
+                        else "${dueReviews.size} concepts are ready for a retrieval check.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 10.dp),
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        dueReviews.take(3).forEach { review ->
+                            val title = review.skillName?.takeIf { it.isNotBlank() }
+                                ?: humanizeSkillId(review.skillId)
+                            GlassCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        nav.navigate(
+                                            Routes.reviewClassroom(
+                                                skillId = review.skillId,
+                                                topic = title,
+                                            ),
+                                        )
+                                    },
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(11.dp),
+                                    modifier = Modifier.padding(12.dp),
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(Color(0x22F59E0B))
+                                            .border(1.dp, Color(0x44F59E0B), RoundedCornerShape(12.dp)),
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.MenuBook,
+                                            contentDescription = null,
+                                            tint = LyoAmber,
+                                            modifier = Modifier.size(21.dp),
+                                        )
+                                    }
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = title,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = TextPrimary,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            text = when {
+                                                review.daysOverdue <= 0 -> "Due now · fresh retrieval"
+                                                review.daysOverdue == 1 -> "1 day overdue · fresh retrieval"
+                                                else -> "${review.daysOverdue} days overdue · fresh retrieval"
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = TextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    Text(
+                                        "Review ›",
+                                        color = Color(0xFFA9B7FF),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
                         }
                     }
-                }
-                catalogError != null -> GlassCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(18.dp)) {
+                } else {
+                    GlassCard(modifier = Modifier.fillMaxWidth()) {
                         Text(
-                            text = "Course catalog unavailable",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary,
-                        )
-                        Text(
-                            text = catalogError ?: "The course catalog could not be loaded.",
+                            text = reviewError ?: "Your review schedule could not be loaded right now.",
                             style = MaterialTheme.typography.bodySmall,
                             color = TextSecondary,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
-                }
-                else -> GlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { nav.navigate(Routes.COURSES) },
-                ) {
-                    Column(modifier = Modifier.padding(18.dp)) {
-                        Text(
-                            text = "No published courses",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = TextPrimary,
-                        )
-                        Text(
-                            text = "Open Courses to check for newly published learning content.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(top = 4.dp),
+                            modifier = Modifier.padding(14.dp),
                         )
                     }
                 }
             }
         }
 
-        item {
-            SectionHeader("Learning Actions")
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                QuickActionCard(
-                    icon = Icons.Filled.MenuBook,
-                    label = "Browse Courses",
-                    tint = LyoPurple,
-                    onClick = { nav.navigate(Routes.COURSES) },
-                    modifier = Modifier.weight(1f),
-                )
-                QuickActionCard(
-                    icon = Icons.Filled.SmartToy,
-                    label = "Ask Lyo",
-                    tint = LyoBlue,
-                    onClick = { nav.navigate(Routes.CHAT) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-        }
+        // Web keeps catalog browsing and Chat in their dedicated routes;
+        // duplicate stock tiles were making Focus visually noisy.
 
         item { Spacer(Modifier.height(8.dp)) }
     }
@@ -580,40 +534,6 @@ private fun humanizeSkillId(value: String): String =
         .joinToString(" ") { token ->
             token.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
         }
-
-@Composable
-private fun StatCard(
-    emoji: String,
-    value: String,
-    label: String,
-    accent: Color,
-    modifier: Modifier = Modifier,
-) {
-    GlassCard(modifier = modifier) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp, horizontal = 8.dp),
-        ) {
-            Text(emoji, style = MaterialTheme.typography.headlineSmall)
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                color = accent,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-    }
-}
 
 /**
  * A card in the "Your Stacks" row — a course the user has actually
@@ -928,6 +848,93 @@ private fun FlipButton(
  * sheet; "Post to Community" publishes inside Lyo's own Community feed — see
  * StackRepository.postCourseToCommunity's doc comment.
  */
+/**
+ * Mirrors the Web TopBar avatar menu: tapping the learner's identity must
+ * offer explicit destinations, not immediately navigate to Profile.
+ */
+@Composable
+private fun HomeAccountMenu(nav: NavHostController) {
+    var expanded by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val user = Session.user
+
+    Box {
+        IconButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier
+                .size(40.dp)
+                .semantics { contentDescription = "Open profile menu" },
+        ) {
+            LyoAvatar(
+                name = user?.displayName ?: user?.username ?: "Learner",
+                avatarUrl = null,
+                size = 36,
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .width(240.dp)
+                .background(Color(0xFF0D0F18)),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+            ) {
+                Text(
+                    text = user?.displayName?.takeIf { it.isNotBlank() }
+                        ?: user?.username ?: "Your account",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = user?.email.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            DropdownMenuItem(
+                text = { Text("Profile", color = TextSecondary) },
+                leadingIcon = { Icon(Icons.Filled.Person, contentDescription = null, tint = TextSecondary) },
+                onClick = {
+                    expanded = false
+                    nav.navigate(Routes.PROFILE) { launchSingleTop = true }
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Settings", color = TextSecondary) },
+                leadingIcon = { Icon(Icons.Filled.Settings, contentDescription = null, tint = TextSecondary) },
+                onClick = {
+                    expanded = false
+                    nav.navigate(Routes.SETTINGS) { launchSingleTop = true }
+                },
+            )
+            HorizontalDivider(color = Color.White.copy(alpha = 0.08f))
+            DropdownMenuItem(
+                text = { Text("Logout", color = Color(0xFFF87171)) },
+                leadingIcon = {
+                    Icon(Icons.Filled.ExitToApp, contentDescription = null, tint = Color(0xFFF87171))
+                },
+                onClick = {
+                    expanded = false
+                    scope.launch {
+                        Session.logout()
+                        nav.navigate(Routes.LOGIN) { popUpTo(0) }
+                    }
+                },
+            )
+        }
+    }
+}
+
 @Composable
 private fun StackCardMenu(
     onShareExternally: () -> Unit,
@@ -988,61 +995,3 @@ private fun EmptyLearningCard(onClick: () -> Unit) {
     }
 }
 
-@Composable
-private fun CatalogCourseCard(
-    course: CourseDto,
-    gradient: Brush,
-    onClick: () -> Unit,
-) {
-    GlassCard(
-        modifier = Modifier
-            .width(200.dp)
-            .clickable(onClick = onClick),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(72.dp)
-                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp))
-                .background(gradient),
-        )
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = course.title ?: "Untitled Course",
-                style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = course.subject ?: "General",
-                style = MaterialTheme.typography.labelMedium,
-                color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun QuickActionCard(
-    icon: ImageVector,
-    label: String,
-    tint: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    GlassCard(modifier = modifier.clickable(onClick = onClick)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(24.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleSmall,
-                color = TextPrimary,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-    }
-}

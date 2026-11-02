@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.net.URI
 
 plugins {
     id("com.android.application")
@@ -34,6 +35,21 @@ val releaseApiUrl = apiBaseUrl("LYO_API_BASE_URL", setting("LYO_API_BASE_URL") ?
 // Debug and staging builds talk to staging once a staging URL is configured,
 // and fall back to production (as before) until then.
 val stagingApiUrl = setting("LYO_STAGING_API_BASE_URL")?.let { apiBaseUrl("LYO_STAGING_API_BASE_URL", it) }
+// Visible only when the APK points to explicit staging and UI is opt-in.
+// Voice Lab is a separate HTTPS host, never the ordinary LYO API.
+// Only the dedicated Railway staging service is accepted for this experimental APK.
+val voiceLabUrl = setting("LYO_VOICE_LAB_BASE_URL")?.let { raw ->
+    val url = apiBaseUrl("LYO_VOICE_LAB_BASE_URL", raw)
+    require(url.startsWith("https://") && URI(url).host == "lyovoicelabbackend-staging.up.railway.app") {
+        "LYO_VOICE_LAB_BASE_URL must point to the dedicated staging Voice Lab"
+    }
+    url
+}
+val approvedStagingApi = stagingApiUrl?.let {
+    it.startsWith("https://") && URI(it).host?.endsWith("-staging.up.railway.app") == true
+} == true
+val trialUiEnabled = approvedStagingApi && voiceLabUrl != null &&
+    setting("LYO_GPT_LIVE_TRIAL_UI")?.equals("true", ignoreCase = true) == true
 
 // Release signing (Play Store upload key). Read from android/keystore.properties
 // (gitignored) or environment variables; never committed. When absent, debug
@@ -86,6 +102,8 @@ android {
         debug {
             buildConfigField("String", "API_BASE_URL", "\"${stagingApiUrl ?: productionApiUrl}\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (stagingApiUrl != null) "staging" else "production"}\"")
+            buildConfigField("boolean", "GPT_LIVE_TRIAL_UI", if (trialUiEnabled) "true" else "false")
+            buildConfigField("String", "VOICE_LAB_BASE_URL", "\"${if (trialUiEnabled) voiceLabUrl.orEmpty() else ""}\"")
         }
         create("staging") {
             isMinifyEnabled = true
@@ -98,6 +116,8 @@ android {
             matchingFallbacks += listOf("release")
             buildConfigField("String", "API_BASE_URL", "\"${stagingApiUrl ?: productionApiUrl}\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (stagingApiUrl != null) "staging" else "production"}\"")
+            buildConfigField("boolean", "GPT_LIVE_TRIAL_UI", if (trialUiEnabled) "true" else "false")
+            buildConfigField("String", "VOICE_LAB_BASE_URL", "\"${if (trialUiEnabled) voiceLabUrl.orEmpty() else ""}\"")
         }
         release {
             isMinifyEnabled = true
@@ -108,6 +128,8 @@ android {
             if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "API_BASE_URL", "\"$releaseApiUrl\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (releaseApiUrl == productionApiUrl) "production" else "custom"}\"")
+            buildConfigField("boolean", "GPT_LIVE_TRIAL_UI", "false")
+            buildConfigField("String", "VOICE_LAB_BASE_URL", "\"\"")
         }
     }
     compileOptions {

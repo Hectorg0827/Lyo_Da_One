@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { playVoiceBlob, speakVoiceFallback, unspokenRemainder } from './voice-playback.mjs';
+import { playVoiceBlob, speakVoiceFallback, unspokenRemainder, pauseAfterSpeechMs, waitForSpeechPause } from './voice-playback.mjs';
 
 function audioHarness(t) {
   const instances = [];
@@ -73,4 +73,20 @@ test('a partial failure resumes from the unplayed portion', () => {
   assert.equal(unspokenRemainder('One two three four.', 0.5), 'three four.');
   assert.equal(unspokenRemainder('Already complete.', 1), '');
   assert.equal(unspokenRemainder('Not started.', 0), 'Not started.');
+});
+
+test('natural gaps follow only complete spoken clauses', () => {
+  assert.equal(pauseAfterSpeechMs('Really?”'), 170);
+  assert.equal(pauseAfterSpeechMs('That makes sense.'), 125);
+  assert.equal(pauseAfterSpeechMs('First, '), 80);
+  assert.equal(pauseAfterSpeechMs('a partial phrase'), 0);
+});
+
+test('a new spoken turn immediately cancels any deliberate pause', async () => {
+  const controller = new AbortController();
+  const pause = waitForSpeechPause(500, { signal: controller.signal });
+  const rejected = assert.rejects(pause, { name: 'AbortError' });
+  controller.abort();
+  await rejected;
+  await waitForSpeechPause(1);
 });

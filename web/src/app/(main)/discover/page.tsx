@@ -5,7 +5,8 @@
  *
  * Mirrors iOS `Sources/Views/Main/DiscoverView.swift`: a full-bleed,
  * vertically paged video feed with dynamic topic tabs and top/bottom scrims.
- * The single global TopBar search filters the entire library via URL state.
+ * A compact fixed LYO logo / scrollable filters / search layout sits above the reel.
+ * Searches and filters are backed by URL state so links survive navigation.
  *
  * There used to be a second reel at `/clips`, on the same clips API. Discover
  * was what everything pointed at — the mobile nav, the search bar, the empty
@@ -15,8 +16,9 @@
  */
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   Search,
   Sparkles,
@@ -564,6 +566,21 @@ function DiscoverContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryParam = searchParams.get('q')?.trim() ?? '';
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchDraft, setSearchDraft] = useState(queryParam);
+  useEffect(() => setSearchDraft(queryParam), [queryParam]);
+
+  const submitDiscoverSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('clip');
+    const nextQuery = searchDraft.trim();
+    if (nextQuery) params.set('q', nextQuery);
+    else params.delete('q');
+    const suffix = params.toString();
+    router.replace(`/discover${suffix ? `?${suffix}` : ''}`, { scroll: false });
+    setSearchOpen(false);
+  };
   // `?compose=clip` opens the composer, and `topic` fills it in. The finish
   // screen in the classroom links here that way: a learner who just finished
   // something is the best source of a clip this app will ever get, and the
@@ -869,63 +886,89 @@ function DiscoverContent() {
         )}
       </div>
 
-      <button type="button" aria-label="Record or upload Discover video"
-        onClick={() => setComposing(true)}
-        className="absolute right-4 top-24 z-20 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-bold text-white shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
-        + Create video
-      </button>
+      {!searchOpen && (
+        <button type="button" aria-label="Record or upload Discover video"
+          onClick={() => setComposing(true)}
+          className="absolute right-4 top-24 z-20 rounded-full bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-2 text-sm font-bold text-white shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">
+          + Create video
+        </button>
+      )}
 
-      {/* Search lives in the global TopBar. Filters are navigable with touch,
-          trackpad, keyboard and buttons; the gradient protects readability. */}
-      <nav
-        aria-label="Discover video filters"
-        className="absolute inset-x-0 top-0 z-20 overflow-hidden bg-gradient-to-b from-[#10101c]/95 via-black/60 to-transparent pt-2 pb-5"
-      >
-        <div className="flex items-center gap-1.5 overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar px-4 snap-x snap-proximity [scrollbar-width:none]">
-          {([
-            { id: 'for_you', label: 'For You', mode: 'for_you' },
-            { id: 'latest', label: 'Latest', mode: 'latest' },
-            { id: 'popular', label: 'Popular', mode: 'popular' },
-            { id: 'saved', label: 'Saved', mode: 'saved' },
-          ] as const).map((tab) => {
-            const active = !subject && feedMode === tab.mode;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                aria-pressed={active}
-                onClick={(event) => {
-                  chooseFilter(tab.mode);
-                  event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-                }}
-                className={`relative snap-center shrink-0 whitespace-nowrap px-3.5 pt-2 pb-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-t-md ${active ? 'text-white' : 'text-white/60 hover:text-white'}`}
-              >
-                {tab.label}
-                {active && <span className="absolute inset-x-3.5 bottom-1 h-[3px] rounded-full bg-gradient-to-r from-[#5f7bff] to-[#ac67ff]" />}
-              </button>
-            );
-          })}
-          {subjectChoices.map((name) => {
-            const active = subject === name;
-            return (
-              <button
-                key={`subject:${name}`}
-                type="button"
-                aria-pressed={active}
-                onClick={(event) => {
-                  chooseFilter('for_you', name);
-                  event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-                }}
-                className={`relative snap-center shrink-0 whitespace-nowrap px-3.5 pt-2 pb-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-t-md ${active ? 'text-white' : 'text-white/60 hover:text-white'}`}
-              >
-                {name}
-                {active && <span className="absolute inset-x-3.5 bottom-1 h-[3px] rounded-full bg-gradient-to-r from-[#5f7bff] to-[#ac67ff]" />}
-              </button>
-            );
-          })}
+      {/* The logo and search stay fixed; only Discover filters scroll between them. */}
+      <div className="absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/95 via-black/65 to-transparent pb-4">
+        <div className="flex h-16 items-center gap-2 px-3">
+          <Image src="/brand/lyo-logo.png" width={46} height={44} alt="LYO" className="h-11 w-12 shrink-0 object-contain" priority />
+          <nav aria-label="Discover video filters" className="min-w-0 flex-1 overflow-hidden">
+            <div className="flex items-center gap-1 overflow-x-auto overscroll-x-contain touch-pan-x no-scrollbar snap-x snap-proximity [scrollbar-width:none]">
+            {([
+              { id: 'for_you', label: 'For You', mode: 'for_you' },
+              { id: 'latest', label: 'Latest', mode: 'latest' },
+              { id: 'popular', label: 'Popular', mode: 'popular' },
+              { id: 'saved', label: 'Saved', mode: 'saved' },
+            ] as const).map((tab) => {
+              const active = !subject && feedMode === tab.mode;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={(event) => {
+                    chooseFilter(tab.mode);
+                    event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                  }}
+                  className={`relative snap-center shrink-0 whitespace-nowrap px-3.5 pt-2 pb-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-t-md ${active ? 'text-white' : 'text-white/60 hover:text-white'}`}
+                >
+                  {tab.label}
+                  {active && <span className="absolute inset-x-3.5 bottom-1 h-[3px] rounded-full bg-gradient-to-r from-[#5f7bff] to-[#ac67ff]" />}
+                </button>
+              );
+            })}
+            {subjectChoices.map((name) => {
+              const active = subject === name;
+              return (
+                <button
+                  key={`subject:${name}`}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={(event) => {
+                    chooseFilter('for_you', name);
+                    event.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                  }}
+                  className={`relative snap-center shrink-0 whitespace-nowrap px-3.5 pt-2 pb-3 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 rounded-t-md ${active ? 'text-white' : 'text-white/60 hover:text-white'}`}
+                >
+                  {name}
+                  {active && <span className="absolute inset-x-3.5 bottom-1 h-[3px] rounded-full bg-gradient-to-r from-[#5f7bff] to-[#ac67ff]" />}
+                </button>
+              );
+            })}
+  
+            </div>
+          </nav>
+          <button
+            type="button"
+            aria-label="Search Discover videos"
+            aria-expanded={searchOpen}
+            onClick={() => setSearchOpen((open) => !open)}
+            className="flex h-11 w-11 shrink-0 items-center justify-center text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-400"
+          >
+            <Search className="h-7 w-7" strokeWidth={2} />
+          </button>
         </div>
-        <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-9 bg-gradient-to-l from-[#10101c]/95 to-transparent" />
-      </nav>
+        {searchOpen && (
+          <form onSubmit={submitDiscoverSearch} role="search" className="flex gap-2 px-4 pb-2">
+            <input
+              autoFocus
+              type="search"
+              value={searchDraft}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              placeholder="Search videos or subjects…"
+              aria-label="Search Discover videos"
+              className="min-w-0 flex-1 rounded-xl border border-white/20 bg-[#181a2b]/95 px-4 py-2 text-sm text-white placeholder:text-white/50 outline-none focus:border-violet-400"
+            />
+            <button type="submit" className="rounded-xl bg-[#6366f1] px-4 py-2 text-sm font-semibold text-white">Search</button>
+          </form>
+        )}
+      </div>
 
       {composing && (
         <CreateClipModal

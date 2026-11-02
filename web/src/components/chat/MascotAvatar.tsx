@@ -22,11 +22,13 @@ const READING_FRAMES = [
 export default function MascotAvatar({
   thinking = false,
   idle = false,
+  speaking = false,
   size = 32,
   alt,
 }: {
   thinking?: boolean;
   idle?: boolean;
+  speaking?: boolean;
   size?: number;
   /** Overrides the default alt text (e.g. a specific lyoState like "Lyo is confused"). */
   alt?: string;
@@ -76,6 +78,23 @@ export default function MascotAvatar({
         width={size}
         height={size}
         className="shrink-0 rounded-full object-contain ring-1 ring-white/10"
+      />
+    );
+  }
+
+  // Distinct, gentle speaking motion. We keep the approved standing
+  // mascot artwork unchanged and move the whole character, rather than
+  // stretching its facial features or inventing a mouth animation.
+  if (speaking) {
+    return (
+      <motion.img
+        src="/mascot/mascot_standing.png"
+        alt={alt ?? 'Lyo is speaking'}
+        width={size}
+        height={size}
+        className="shrink-0 object-contain select-none"
+        animate={{ y: [0, -4, 0], scale: [1, 1.045, 1], rotate: [-0.6, 0.6, -0.6] }}
+        transition={{ duration: 0.75, repeat: Infinity, ease: 'easeInOut' }}
       />
     );
   }
