@@ -113,9 +113,9 @@ fun ClassroomScreen(
         if (notebookOpen) engine.refreshLearnerRecord()
     }
 
-    val chrome = rememberChromeVisibility(
-        blockAutoHide = engine.hasActiveCheckpoint || engine.lessonRecovery || settingsOpen || notebookOpen,
-    )
+    // Lesson controls and progress remain visible; auto-hiding the header
+    // left an empty strip and confused learners during interaction.
+    val chrome = rememberChromeVisibility(blockAutoHide = true)
 
     Box(
         modifier = Modifier
@@ -138,7 +138,7 @@ fun ClassroomScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) { detectTapGestures { chrome.toggle() } },
+                .pointerInput(Unit) { detectTapGestures { chrome.poke() } },
         )
 
         Column(modifier = Modifier.fillMaxSize()) {
