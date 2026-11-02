@@ -556,7 +556,7 @@ function ClassroomStage() {
             </p>
             {caption && <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }} className="min-h-11 text-[11px] text-[var(--text-secondary)] underline underline-offset-2">Full transcript</button>}
           </div>
-          <div data-classroom-caption-target className="relative h-[44px] overflow-hidden sm:h-[50px]">
+          <div data-classroom-caption-target className={cn('relative overflow-hidden', voiceOn ? 'h-10 sm:h-[44px]' : 'h-[72px] sm:h-[84px]')}>
           <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
             {caption ? `${caption.speaker}: ${caption.text}` : ''}
           </span>
