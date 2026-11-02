@@ -391,6 +391,7 @@ fun BottomActionDock(
     modifier: Modifier = Modifier,
 ) {
     var handRaised by remember { mutableStateOf(false) }
+    var moreOpen by remember { mutableStateOf(false) }
     var question by remember { mutableStateOf("") }
     val context = LocalContext.current
     val speechLauncher = rememberLauncherForActivityResult(
@@ -442,34 +443,75 @@ fun BottomActionDock(
                 Text("$continueLabel →")
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onHint, modifier = Modifier.heightIn(min = 48.dp)) { Text("Help") }
-            OutlinedButton(onClick = onTooEasy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Challenge") }
-            if (handRaised) {
+        // The four actions are equally sized; the question editor is
+        // deliberately separate so it never squeezes the action buttons.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Button(
+                onClick = { handRaised = true; startDictation() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ClassroomTokens.AccentPurple,
+                    contentColor = androidx.compose.ui.graphics.Color.White,
+                ),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 6.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 60.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.Mic, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text("Speak", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            OutlinedButton(
+                onClick = { handRaised = !handRaised },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 6.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 60.dp),
+            ) {
+                Text("Raise hand", style = MaterialTheme.typography.labelSmall)
+            }
+            OutlinedButton(
+                onClick = onTooEasy,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 6.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 60.dp),
+            ) {
+                Text("Challenge", style = MaterialTheme.typography.labelSmall)
+            }
+            OutlinedButton(
+                onClick = { moreOpen = !moreOpen },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 6.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 60.dp),
+            ) {
+                Text("More", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        if (handRaised) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            ) {
                 androidx.compose.material3.OutlinedTextField(
                     value = question,
                     onValueChange = { question = it },
                     placeholder = { Text("Ask the teacher…", color = TextSecondary) },
                     modifier = Modifier.weight(1f),
+                    maxLines = 3,
                 )
-                IconButton(onClick = { startDictation() }) {
-                    Icon(
-                        Icons.Filled.Mic,
-                        contentDescription = "Speak your question",
-                        tint = ClassroomTokens.AccentPurple,
-                    )
-                }
-                IconButton(onClick = {
-                    onAskQuestion(question)
-                    question = ""
-                    handRaised = false
-                }) {
-                    Icon(Icons.Filled.Send, contentDescription = "Send", tint = ClassroomTokens.AccentPurple)
-                }
-            } else {
-                OutlinedButton(onClick = { handRaised = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                    Text("Raise hand", color = LyoGold)
-                }
+                IconButton(
+                    enabled = question.isNotBlank(),
+                    onClick = {
+                        onAskQuestion(question.trim())
+                        question = ""
+                        handRaised = false
+                    },
+                ) { Icon(Icons.Filled.Send, contentDescription = "Send your question", tint = ClassroomTokens.AccentPurple) }
+            }
+        }
+        if (moreOpen) {
+            OutlinedButton(onClick = { onHint(); moreOpen = false }, modifier = Modifier.fillMaxWidth()) {
+                Text("Help · Show me a hint")
             }
         }
     }
