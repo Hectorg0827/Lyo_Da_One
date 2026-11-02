@@ -386,6 +386,7 @@ function stopStallWatch() {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
+const CLASSROOM_VOICE_NOTICE = 'Teacher audio is temporarily unavailable. Captions will continue; tap the voice icon to retry.';
 
 function wsUrl(connection: ClassroomConnection, token: string | null): string {
   return buildClassroomWsUrl(API_URL, connection, token);
@@ -405,73 +406,6 @@ function stopSpeech() {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
-}
-
-// Non-Latin scripts are decisive, but only in this order: Japanese prose mixes
-// kana with kanji, and Korean can carry hanja, so those language-specific
-// scripts must be checked before the CJK ideographs they share with Chinese.
-const SCRIPT_LANGUAGE_HINTS: { code: string; test: RegExp }[] = [
-  { code: 'ja', test: /[぀-ヿ]/ },   // hiragana + katakana
-  { code: 'ko', test: /[가-힯]/ },   // hangul syllables
-  { code: 'ar', test: /[؀-ۿ]/ },
-  { code: 'ru', test: /[Ѐ-ӿ]/ },
-  { code: 'hi', test: /[ऀ-ॿ]/ },
-  { code: 'zh', test: /[一-鿿]/ },   // shared ideographs — last resort
-];
-
-// Latin-script languages share an alphabet and much of their function-word
-// vocabulary ("la" is French and Spanish, "para" is Spanish and Portuguese),
-// so no single hint is decisive. Score every candidate across the whole sample
-// and take the strongest rather than returning on the first pattern that hits.
-const LATIN_LANGUAGE_HINTS: { code: string; unique?: RegExp; words: RegExp }[] = [
-  { code: 'es', unique: /[¿¡ñ]/g, words: /\b(el|los|las|que|para|con|una|uno|por|cómo|qué|cuál|más|así|pero|también|está)\b/gi },
-  { code: 'pt', unique: /[ãõ]/g, words: /\b(não|com|para|uma|isso|então|você|está|são|também|mais)\b/gi },
-  { code: 'fr', unique: /[œùêîôë]/g, words: /\b(le|la|les|des|est|une|avec|pour|qui|où|dans|nous|être|cette)\b/gi },
-  { code: 'de', unique: /[äöüß]/g, words: /\b(der|die|das|und|nicht|mit|für|eine|ist|auch|sich|wird)\b/gi },
-  { code: 'it', words: /\b(il|lo|gli|che|per|con|una|è|questo|come|sono|anche|della)\b/gi },
-];
-
-// A language-exclusive character is far stronger evidence than a function word
-// that several languages share.
-const UNIQUE_CHAR_WEIGHT = 3;
-// Below this, the evidence is as likely to be an English coincidence as a real
-// signal — fall back to the browser's default voice instead of guessing.
-const MIN_LANGUAGE_SCORE = 2;
-
-function scoreLatinLanguage(text: string, hint: { unique?: RegExp; words: RegExp }): number {
-  const uniqueHits = hint.unique ? (text.match(hint.unique)?.length ?? 0) : 0;
-  const distinctWords = new Set(
-    (text.match(hint.words) ?? []).map((word) => word.toLowerCase()),
-  ).size;
-  return uniqueHits * UNIQUE_CHAR_WEIGHT + distinctWords;
-}
-
-/**
- * Best-effort guess at the spoken-language code for `text`, so narration is
- * read in a matching voice instead of always defaulting to English. Returns
- * null (meaning: let the browser's default voice handle it) when the text is
- * too short or shows no language-specific signal.
- */
-function detectSpeechLanguage(text: string): string | null {
-  const trimmed = text.trim();
-  if (trimmed.length < 8) return null;
-
-  for (const { code, test } of SCRIPT_LANGUAGE_HINTS) {
-    if (test.test(trimmed)) return code;
-  }
-
-  let best: { code: string; score: number } | null = null;
-  for (const hint of LATIN_LANGUAGE_HINTS) {
-    const score = scoreLatinLanguage(trimmed, hint);
-    if (score > (best?.score ?? 0)) best = { code: hint.code, score };
-  }
-  return best && best.score >= MIN_LANGUAGE_SCORE ? best.code : null;
-}
-
-/** Picks an installed SpeechSynthesis voice matching a language code, if any. */
-function findVoiceForLanguage(code: string): SpeechSynthesisVoice | undefined {
-  return window.speechSynthesis.getVoices()
-    .find((voice) => voice.lang.toLowerCase().startsWith(code));
 }
 
 /** Classify a board "write"/"draw" payload into the right visual. */
@@ -558,44 +492,6 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     if (phase === 'audio') learnerActionStarted = null;
   }
 
-  function speakWithLocalizedDeviceVoice(
-    text: string,
-    language: string,
-    generation: number,
-    onDone: () => void,
-  ) {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      playTimer = setTimeout(onDone, speechDelay(text));
-      return;
-    }
-    try {
-      const utterance = new SpeechSynthesisUtterance(text);
-      const detectedLanguage = detectSpeechLanguage(text);
-      const resolvedLanguage = language === 'auto'
-        ? (detectedLanguage || window.navigator.language || 'en-US')
-        : language;
-      utterance.lang = resolvedLanguage;
-      const family = resolvedLanguage.split('-')[0].toLowerCase();
-      utterance.voice = findVoiceForLanguage(family) ?? null;
-      utterance.pitch = 1;
-      utterance.rate = get().speechRate;
-      let finished = false;
-      const done = () => {
-        if (!finished && generation === speechGeneration) {
-          finished = true;
-          onDone();
-        }
-      };
-      utterance.onstart = () => recordResponseLatency('audio');
-      utterance.onend = done;
-      utterance.onerror = done;
-      window.speechSynthesis.speak(utterance);
-      playTimer = setTimeout(done, Math.max(speechDelay(text) * 1.8, 9000));
-    } catch {
-      playTimer = setTimeout(onDone, speechDelay(text));
-    }
-  }
-
   function speakLine(speaker: string, text: string, onDone: () => void) {
     if (!get().voiceOn || typeof window === 'undefined') {
       playTimer = setTimeout(onDone, speechDelay(text));
@@ -616,9 +512,20 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       if (generation === speechGeneration) onDone();
     }).catch((error: { playbackStarted?: boolean }) => {
       if (controller.signal.aborted || generation !== speechGeneration) return;
-      // Never replay a partially spoken sentence after a network failure.
-      if (error.playbackStarted) onDone();
-      else speakWithLocalizedDeviceVoice(text, language, generation, onDone);
+      // A device TTS fallback changes the teacher's identity mid-lesson and
+      // sounds robotic on many phones. Keep the real cast voice or captions.
+      if (error.playbackStarted) {
+        onDone();
+      } else {
+        prefetchedSpeech.clear();
+        set((state) => ({
+          voiceOn: false,
+          notice: state.notice ?? CLASSROOM_VOICE_NOTICE,
+        }));
+        // Leave this sentence visible for a readable beat, then advance.
+        // Never replay or duplicate a graded answer.
+        playTimer = setTimeout(onDone, Math.min(speechDelay(text), 4000));
+      }
     }).finally(() => {
       controller.abort();
       if (speechAbort === controller) speechAbort = null;
@@ -1580,7 +1487,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     toggleSound: () => set((s) => ({ soundOn: !s.soundOn })),
     toggleVoice: () => {
       const next = !get().voiceOn;
-      set({ voiceOn: next });
+      set((state) => ({
+        voiceOn: next,
+        notice: next && state.notice === CLASSROOM_VOICE_NOTICE ? null : state.notice,
+      }));
       if (!next) {
         prefetchedSpeech.clear();
         if (playTimer) { clearTimeout(playTimer); playTimer = null; }

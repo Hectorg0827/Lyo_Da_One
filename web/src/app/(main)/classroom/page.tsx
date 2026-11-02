@@ -36,6 +36,7 @@ import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 import SurfaceLoading from '@/components/ui/SurfaceLoading';
 import { classroomSpeaker, speakingClassmates, teacherForTopic } from '@/lib/classroom-cast.mjs';
+import { classroomNextAction } from '@/lib/classroom-navigation.mjs';
 
 const LYO_STATE_IMG: Record<string, string> = {
   reading: '/mascot/mascot_reading_1.png',
@@ -246,10 +247,13 @@ function ClassroomStage() {
     : primaryContinue;
 
   // History and narration transport are shown only when actionable.
-  const canGoBack = viewingBoard === -1 ? totalBoards > 0 : viewingBoard > 0;
+  // On the live board, Previous can either reveal a saved board or return
+  // to the start of the current explanation. The control remains visible.
+  const canGoBack = viewingBoard === -1 ? totalBoards > 0 || board.length > 1 : viewingBoard > 0;
   const canGoNext = viewingBoard !== -1 || isNarrating;
   const goBack = () => {
-    if (viewingBoard === -1) viewBoard(totalBoards - 1);
+    if (viewingBoard === -1 && totalBoards > 0) viewBoard(totalBoards - 1);
+    else if (viewingBoard === -1) boardScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     else viewBoard(viewingBoard - 1);
   };
   const goNext = () => {
@@ -278,6 +282,24 @@ function ClassroomStage() {
   // Every desk control needs an open socket, so gate them on the session
   // actually being live rather than letting the click vanish.
   const live = status === 'live';
+  const nextAction = classroomNextAction({
+    viewingHistory: viewingBoard !== -1,
+    readyToContinue,
+    narrating: isNarrating,
+    stalled: stallPhase === 'stalled',
+    live,
+    waiting: waitingForScene,
+    hasCheckpoint: pendingCheckpoint,
+    hasPrompt: Boolean(prompt),
+  });
+  const handleNextAction = () => {
+    switch (nextAction.type) {
+      case 'history': goNext(); break;
+      case 'continue': continueLesson(); break;
+      case 'skip': skipTurn(); break;
+      case 'retry': nudgeTeacher(); break;
+    }
+  };
   const deskDisabledReason = status === 'connecting'
     ? 'Walking to class — one moment…'
     : status === 'ended'
@@ -837,14 +859,29 @@ function ClassroomStage() {
             {deskDisabledReason}
           </p>
         )}
-        {readyToContinue && (
+        {/* Permanent, thumb-reachable transport. A learner can always see
+            where the lesson stands; waiting never looks like a dead end. */}
+        <div role="group" aria-label="Lesson navigation" className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)] gap-2">
           <button
-            onClick={continueLesson}
-            className="min-h-12 w-full rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.22)] transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+            onClick={goBack}
+            disabled={!canGoBack}
+            aria-label="Review previous lesson step"
+            className="flex min-h-12 items-center justify-center gap-1.5 rounded-xl border border-white/15 bg-white/[0.06] px-3 py-2 text-sm font-semibold text-white/85 disabled:opacity-40"
           >
-            {displayedContinueLabel} →
+            <ChevronLeft className="h-4 w-4" /> Previous
           </button>
-        )}
+          <button
+            type="button"
+            onClick={handleNextAction}
+            disabled={nextAction.disabled}
+            aria-label={nextAction.type === 'continue' ? displayedContinueLabel : nextAction.label}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple px-3 py-2 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.22)] transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:bg-white/10 disabled:from-[#222842] disabled:to-[#222842] disabled:text-white/70 disabled:shadow-none"
+          >
+            {nextAction.type === 'continue' ? displayedContinueLabel : nextAction.label}
+            {!nextAction.disabled && <ChevronRight className="h-4 w-4" />}
+          </button>
+        </div>
         <div className="grid grid-cols-3 items-stretch gap-2">
           <div className="relative">
             <button
