@@ -83,10 +83,8 @@ jobs:
             sleep 12
             adb logcat -d -s AndroidRuntime:E > preview-crash-logcat.txt
             adb exec-out screencap -p > preview-startup.png
-            if grep -q 'Process: com.lyo.app' preview-crash-logcat.txt; then
-              cat preview-crash-logcat.txt
-              exit 1
-            fi
+            cat preview-crash-logcat.txt
+            ! grep -q 'Process: com.lyo.app' preview-crash-logcat.txt
             adb shell pidof com.lyo.app
       - name: Upload emulator crash diagnostics and startup screenshot
         if: always()
