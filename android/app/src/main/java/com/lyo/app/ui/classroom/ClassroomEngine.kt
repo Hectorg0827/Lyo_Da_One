@@ -563,14 +563,14 @@ class ClassroomEngine(
                         // estimate that can cut a slow response off mid-sentence.
                         withTimeoutOrNull(180_000L) {
                             suspendCancellableCoroutine<Unit> { continuation ->
-                                voicePlayer.play(spoken, voiceLanguage) {
+                                voicePlayer.play(spoken, voiceLanguage, ClassroomCast.speaker(turn.speaker, topic).id) {
                                     if (continuation.isActive) continuation.resume(Unit)
                                 }
                                 continuation.invokeOnCancellation { voicePlayer.stop() }
                             }
                         }
                     } else {
-                        voicePlayer?.play(spoken, voiceLanguage)
+                        voicePlayer?.play(spoken, voiceLanguage, ClassroomCast.speaker(turn.speaker, topic).id)
                     }
                 }
             }

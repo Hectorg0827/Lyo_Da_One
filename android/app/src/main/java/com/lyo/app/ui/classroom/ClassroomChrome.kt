@@ -7,6 +7,7 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +47,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lyo.app.data.api.LearnerConceptRecordDto
@@ -114,14 +116,12 @@ fun ClassroomTopBar(
         IconButton(onClick = onBack) {
             Icon(Icons.Filled.ArrowBack, contentDescription = "Leave classroom", tint = TextPrimary)
         }
-        Text(
-            text = topic,
-            color = TextPrimary,
-            style = MaterialTheme.typography.titleSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text("LYO CLASSROOM", color = ClassroomTokens.AccentPurple,
+                style = MaterialTheme.typography.labelSmall)
+            Text(topic, color = TextPrimary, style = MaterialTheme.typography.titleSmall,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         IconButton(onClick = onToggleNotebook) {
             Icon(Icons.Filled.MenuBook, contentDescription = "Your notebook", tint = TextPrimary)
         }
@@ -429,7 +429,7 @@ fun BottomActionDock(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp),
     ) {
         if (canContinue) {
             Button(
@@ -437,7 +437,7 @@ fun BottomActionDock(
                 colors = ButtonDefaults.buttonColors(containerColor = ClassroomTokens.AccentPurple, contentColor = androidx.compose.ui.graphics.Color.White),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp),
+                    .padding(bottom = 5.dp),
             ) {
                 Text("$continueLabel →")
             }
@@ -482,43 +482,65 @@ fun BottomActionDock(
  *  per course, matching web/iOS's `TEACHER_VARIANTS[stableHash(courseId)]`
  *  pattern), never driven by a wire-contract field. */
 @Composable
-fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, modifier: Modifier = Modifier, mascotState: String = "reading", lessonRecovery: Boolean = false, onTranscript: () -> Unit = {}) {
+fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, topic: String, modifier: Modifier = Modifier, lessonRecovery: Boolean = false, onTranscript: () -> Unit = {}) {
     val speaker = caption?.takeIf { it.isJsonObject }?.asJsonObject?.get("speaker")
         ?.takeIf { it.isJsonPrimitive }?.asString
     val text = caption?.takeIf { it.isJsonObject }?.asJsonObject?.get("text")
         ?.takeIf { it.isJsonPrimitive }?.asString
+    val character = ClassroomCast.speaker(speaker, topic)
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 3.dp)
             .background(Surface, RoundedCornerShape(16.dp))
-            .padding(12.dp),
+            .padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
-        val frame = com.lyo.app.ui.classroom.catalog.rememberMascotFrame(state = mascotState, variant = "lyo")
-        androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(frame.drawableRes),
-            contentDescription = "Lyo is $mascotState",
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            modifier = frame.modifier
-                .size(40.dp)
-                .background(Surface, CircleShape),
+        Image(
+            painter = painterResource(character.portrait),
+            contentDescription = "${character.name}, ${if (character.id.startsWith("student_")) "AI classmate" else "AI teacher"}",
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+            modifier = Modifier
+                .size(36.dp)
+                .background(androidx.compose.ui.graphics.Color.White, RoundedCornerShape(12.dp)),
         )
         if (text != null) {
             Column(modifier = Modifier.weight(1f)) {
                 if (speaker != null) {
-                    Text(text = if (speaker == "Teacher") "Lyo explains" else "$speaker speaks", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
+                    Text(text = "${character.name} · ${if (character.id.startsWith("student_")) "AI classmate" else "AI teacher"}", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
                 }
-                Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         } else {
-            Text("Lyo is preparing the next step…", color = TextSecondary, modifier = Modifier.weight(1f))
+            Text("Your teacher is preparing the next step…", color = TextSecondary, modifier = Modifier.weight(1f))
         }
         Column {
             if (lessonRecovery) Text("Paused", color = ClassroomTokens.Gold, style = MaterialTheme.typography.labelSmall)
             androidx.compose.material3.TextButton(onClick = onTranscript) { Text("Transcript", color = ClassroomTokens.AccentPurple) }
+        }
+    }
+}
+
+/** Lyo remains beside the learner, not in the teacher's seat. */
+@Composable
+fun LyoCompanionBadge(state: String, spokenClassmates: List<String>, modifier: Modifier = Modifier) {
+    val frame = com.lyo.app.ui.classroom.catalog.rememberMascotFrame(state = state, variant = "lyo")
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp)
+            .background(Surface.copy(alpha = 0.78f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Image(painter = painterResource(frame.drawableRes), contentDescription = "Lyo, your companion",
+            modifier = frame.modifier.size(24.dp))
+        Text("LYO  ·  Your study companion", color = TextSecondary,
+            style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+        ClassroomCast.classmates.filter { it.name in spokenClassmates }.forEach { peer ->
+            Image(painter = painterResource(peer.portrait), contentDescription = "${peer.name}, AI classmate",
+                 modifier = Modifier.size(24.dp).background(androidx.compose.ui.graphics.Color.White, CircleShape))
         }
     }
 }

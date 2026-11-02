@@ -2,14 +2,14 @@ name: LYO Magical Live — staging Android test APK
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/lyo-live-magical-ui-20261031]
 
 permissions:
   contents: read
 
 jobs:
   staging-apk:
-    if: github.head_ref == 'feat/lyo-live-magical-ui-20261031' && github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.head_ref == 'feat/lyo-live-magical-ui-20261031' || github.head_ref == 'codex/classroom-blackboard-premium-ui-20261102') && github.event.pull_request.head.repo.full_name == github.repository
     name: Build locked staging Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 25

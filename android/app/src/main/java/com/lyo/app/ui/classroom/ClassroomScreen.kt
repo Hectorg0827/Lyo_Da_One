@@ -1,17 +1,20 @@
 package com.lyo.app.ui.classroom
 
-import android.app.Activity
-import android.content.pm.ActivityInfo
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,8 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavHostController
 import com.lyo.app.data.StackRepository
 import com.lyo.app.data.a2ui.resolvePointer
@@ -37,6 +38,7 @@ import com.lyo.app.data.classroom.ClassroomStallPhase
 import com.lyo.app.ui.classroom.a2ui.A2uiSurface
 import com.lyo.app.ui.screens.classroom.ClassroomVoicePlayer
 import com.lyo.app.ui.theme.Background
+import com.lyo.app.ui.theme.ClassroomTokens
 import com.lyo.app.ui.theme.LyoRed
 import com.lyo.app.ui.theme.TextSecondary
 
@@ -99,27 +101,6 @@ fun ClassroomScreen(
         }
     }
 
-    // Legacy Android classroom policy: landscape full-screen + immersive
-    // system bars. Web does not force orientation, so this is not parity.
-    // Modeled directly on ChatScreen.kt's TextToSpeech
-    // DisposableEffect shape: acquire in the effect body, capture the
-    // ORIGINAL orientation before mutating so onDispose restores it
-    // exactly rather than hardcoding a default (some other screen may
-    // already have set a non-UNSPECIFIED orientation elsewhere in the app).
-    val activity = context as? Activity
-    DisposableEffect(Unit) {
-        val originalOrientation = activity?.requestedOrientation
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-        val window = activity?.window
-        val insetsController = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
-        insetsController?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        insetsController?.hide(WindowInsetsCompat.Type.systemBars())
-        onDispose {
-            insetsController?.show(WindowInsetsCompat.Type.systemBars())
-            activity?.requestedOrientation = originalOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-        }
-    }
-
     var settingsOpen by remember { mutableStateOf(false) }
     var notebookOpen by remember { mutableStateOf(false) }
     // ClassroomPreferences.reducedMotion is a plain var (see its doc
@@ -139,6 +120,7 @@ fun ClassroomScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
+            .windowInsetsPadding(WindowInsets.safeDrawing)
             .background(Background),
     ) {
         // Background tap-catcher, drawn BEHIND everything below — Compose's
@@ -198,19 +180,31 @@ fun ClassroomScreen(
                 )
             }
 
-            // One real Lyo mascot beside the explanation, above the teaching tools.
+            // A teacher leads; Lyo remains a separate student companion.
             TeacherBadgeAndCaption(
                 caption = engine.surface.dataModel.resolvePointer("/caption"),
-                mascotState = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
+                topic = topic,
                 lessonRecovery = engine.lessonRecovery,
                 onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
             )
+            LyoCompanionBadge(
+                state = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
+                spokenClassmates = if (teachingMode == "classroom") engine.transcript.map { it.speaker } else emptyList(),
+            )
 
-            // Teaching tools scroll independently from the explanation and controls.
+            // Blackboard-first layout: the teacher and Lyo have compact identity
+            // badges above, while the real, server-driven lesson owns the space.
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .background(ClassroomTokens.BoardBackground, RoundedCornerShape(20.dp))
+                    .border(
+                        1.dp,
+                        ClassroomTokens.AccentPurple.copy(alpha = 0.35f),
+                        RoundedCornerShape(20.dp),
+                    ),
             ) {
                 A2uiSurface(
                     state = engine.surface,
@@ -218,8 +212,17 @@ fun ClassroomScreen(
                     onAction = { action -> engine.onAction(action); chrome.poke() },
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(12.dp)
+                        .padding(start = 12.dp, end = 12.dp, top = 44.dp, bottom = 10.dp)
                         .verticalScroll(rememberScrollState()),
+                )
+
+                Text(
+                    text = "INTERACTIVE BLACKBOARD",
+                    color = ClassroomTokens.AccentPurple,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 18.dp, top = 14.dp),
                 )
 
                 // The cover page: what this class is, before any of it is
@@ -236,7 +239,7 @@ fun ClassroomScreen(
                         opening = engine.opening,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(8.dp),
+                            .padding(start = 8.dp, end = 8.dp, top = 44.dp),
                     )
                 }
 
@@ -247,7 +250,7 @@ fun ClassroomScreen(
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(8.dp),
+                            .padding(start = 8.dp, end = 8.dp, top = 44.dp),
                     )
                 } else if (engine.status == "connecting") {
                     Text(
