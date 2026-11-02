@@ -7,6 +7,7 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -661,32 +662,32 @@ fun StallRecoveryCard(
     modifier: Modifier = Modifier,
 ) {
     Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(Surface, RoundedCornerShape(12.dp))
-            .padding(12.dp),
+            .padding(10.dp)
+            .border(1.dp, ClassroomTokens.Gold, RoundedCornerShape(18.dp))
+            .background(Surface, RoundedCornerShape(18.dp))
+            .padding(18.dp),
     ) {
-        Text("This step is stuck", color = TextPrimary, style = MaterialTheme.typography.labelLarge)
+        Text("A quick pause", color = TextPrimary, style = MaterialTheme.typography.titleLarge)
         Text(
-            ClassroomSessionContract.STALL_RECOVERY,
+            "The next step didn't load. Try again, or restart this lesson if it stays stuck.",
             color = TextSecondary,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 4.dp),
+            style = MaterialTheme.typography.bodyMedium,
         )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 10.dp),
-        ) {
-            Button(
-                onClick = onAskAgain,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ClassroomTokens.AccentPurple,
-                    contentColor = TextPrimary,
-                ),
-            ) { Text("Ask Lyo again") }
-            OutlinedButton(onClick = onStartOver) { Text("Start this lesson over") }
-        }
+        Button(
+            onClick = onAskAgain,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = ClassroomTokens.AccentPurple,
+                contentColor = TextPrimary,
+            ),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text("Try again →") }
+        OutlinedButton(
+            onClick = onStartOver,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) { Text("Start lesson over") }
     }
 }
 
