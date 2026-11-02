@@ -77,6 +77,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.google.gson.JsonObject
+import com.lyo.app.BuildConfig
 import com.lyo.app.data.Session
 import com.lyo.app.data.StackRepository
 import com.lyo.app.data.api.ApiClient
@@ -153,6 +154,22 @@ fun HomeScreen(nav: NavHostController) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
+        // Distinct debug-only identifier for physical-device validation. This
+        // is deliberately absent from release builds.
+        if (BuildConfig.DEBUG) {
+            item {
+                Text(
+                    text = "LYO PREMIUM CLASSROOM · PREVIEW 2026.11.02",
+                    color = Color(0xFFC8AFFF),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF241A47), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+        }
+
         // Match the Web mobile order: discovery header, the live learning
         // front door, then the returning learner's progress and review cards.
         item {
