@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -128,12 +129,9 @@ object ClassroomSocketClient {
             return
         }
 
-        val wsBase = BuildConfig.API_BASE_URL
-            .replaceFirst("https://", "wss://")
-            .replaceFirst("http://", "ws://")
-            .trimEnd('/')
-
-        val urlBuilder = "$wsBase/api/v1/classroom/ws/connect".toHttpUrl().newBuilder()
+        // OkHttp's HttpUrl accepts http(s), not ws(s). newWebSocket() performs
+        // the WebSocket upgrade using the secure HTTPS transport directly.
+        val urlBuilder = classroomSocketHttpUrl(BuildConfig.API_BASE_URL).newBuilder()
             .addQueryParameter("session_id", params.sessionId)
             .addQueryParameter("client_contract_version", "2")
             .addQueryParameter("topic", params.topic)
@@ -209,6 +207,23 @@ object ClassroomSocketClient {
         socket = null
         reconnectAttempt = 0
     }
+}
+
+/**
+ * Build the HTTP(S) handshake URL for OkHttp's WebSocket client.
+ *
+ * The actual connection is still ws(s): OkHttp upgrades the HTTP(S) request.
+ * Do not send a wss:// URL to HttpUrl/Request.Builder, which rejects it.
+ */
+internal fun classroomSocketHttpUrl(apiBaseUrl: String): HttpUrl {
+    val httpBase = when {
+        apiBaseUrl.startsWith("wss://", ignoreCase = true) ->
+            "https://" + apiBaseUrl.substring(6)
+        apiBaseUrl.startsWith("ws://", ignoreCase = true) ->
+            "http://" + apiBaseUrl.substring(5)
+        else -> apiBaseUrl
+    }
+    return "${httpBase.trimEnd('/')}/api/v1/classroom/ws/connect".toHttpUrl()
 }
 
 private val VALID_MODES = setOf("solo", "classroom", "challenge", "review")
