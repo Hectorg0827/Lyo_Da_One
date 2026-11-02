@@ -216,6 +216,16 @@ fun ClassroomScreen(
                     modifier = Modifier.padding(start = 18.dp, top = 15.dp, bottom = 8.dp),
                 )
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (engine.stallPhase == ClassroomStallPhase.STALLED) {
+                        StallRecoveryCard(
+                            onAskAgain = { engine.nudgeTeacher(); chrome.poke() },
+                            onStartOver = {
+                                resumeSeat = null
+                                sessionAttempt += 1
+                                chrome.poke()
+                            },
+                        )
+                    } else {
                     A2uiSurface(
                         state = engine.surface,
                         catalog = engine.catalog,
@@ -251,22 +261,14 @@ fun ClassroomScreen(
                             modifier = Modifier.align(Alignment.Center),
                         )
                     }
+                    }
                 }
             }
 
             // The step never arrived. The class says so, says it is not the
             // learner's fault, and gives them two things that actually move
             // it — asking again, and leaving the stuck session behind.
-            if (engine.stallPhase == ClassroomStallPhase.STALLED) {
-                StallRecoveryCard(
-                    onAskAgain = { engine.nudgeTeacher(); chrome.poke() },
-                    onStartOver = {
-                        resumeSeat = null
-                        sessionAttempt += 1
-                        chrome.poke()
-                    },
-                )
-            } else {
+            if (engine.stallPhase != ClassroomStallPhase.STALLED) {
                 engine.notice?.let { message ->
                     ClassroomNoticeCard(message = message, onDismiss = { engine.dismissNotice() })
                 }
