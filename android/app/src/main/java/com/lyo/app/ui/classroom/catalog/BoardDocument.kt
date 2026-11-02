@@ -29,8 +29,12 @@ fun BoardDocumentView(document: ClassroomBoardDocument) {
             document.blocks.forEach { block ->
                 when (block.kind) {
                     "code" -> Column(Modifier.background(Background, RoundedCornerShape(12.dp)).padding(12.dp)) {
-                        if (block.language.isNotBlank()) Text(block.language.uppercase(), color = LyoVioletLight, style = MaterialTheme.typography.labelSmall)
-                        Text(block.text, fontFamily = FontFamily.Monospace, color = TextPrimary, modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp))
+                        if (looksLikeMathLesson(block.text) && (block.language.isBlank() || block.language in listOf("text", "plain", "math", "latex"))) {
+                            NativeMathNote(block.text)
+                        } else {
+                            if (block.language.isNotBlank()) Text(block.language.uppercase(), color = LyoVioletLight, style = MaterialTheme.typography.labelSmall)
+                            Text(block.text, fontFamily = FontFamily.Monospace, color = TextPrimary, modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp))
+                        }
                     }
                     "table" -> Column(Modifier.horizontalScroll(rememberScrollState()).background(Background, RoundedCornerShape(12.dp)).padding(12.dp)) {
                         Row { block.headers.forEach { Text(it, color = LyoVioletLight, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(140.dp).padding(8.dp)) } }
@@ -40,11 +44,11 @@ fun BoardDocumentView(document: ClassroomBoardDocument) {
                         block.items.forEachIndexed { i, item ->
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text(if (block.kind == "steps") "${i + 1}." else "•", color = LyoVioletLight)
-                                Text(item, color = TextPrimary, modifier = Modifier.weight(1f))
+                                Text(cleanClassroomText(item), color = TextPrimary, modifier = Modifier.weight(1f))
                             }
                         }
                     }
-                    else -> Text(block.text, color = TextSecondary)
+                    else -> if (looksLikeMathLesson(block.text)) NativeMathNote(block.text) else Text(cleanClassroomText(block.text), color = TextSecondary)
                 }
             }
         }
