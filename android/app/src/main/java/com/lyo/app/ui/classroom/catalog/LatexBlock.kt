@@ -11,8 +11,6 @@ import com.lyo.app.ui.theme.TextSecondary
 @Composable
 fun A2uiRenderScope.LatexBlockRenderer() {
     val latex = resolveString("latex") ?: return
-    Column {
-        Text(text = "Math", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
-        WebViewBlock(WebViewBlockKind.LATEX, latex)
-    }
+    // Native text/fraction fallback; never embed a TeX WebView in a lesson.
+    NativeMathNote(latex)
 }
