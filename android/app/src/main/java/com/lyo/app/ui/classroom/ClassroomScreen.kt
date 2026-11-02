@@ -194,71 +194,63 @@ fun ClassroomScreen(
 
             // Blackboard-first layout: the teacher and Lyo have compact identity
             // badges above, while the real, server-driven lesson owns the space.
-            Box(
+            // The blackboard is the hero: own a dedicated title row and a
+            // separately scrolling content viewport. Never draw the heading
+            // over the dynamic A2UI lesson content.
+            Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
-                    .background(ClassroomTokens.BoardBackground, RoundedCornerShape(20.dp))
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
+                    .background(ClassroomTokens.BoardBackground, RoundedCornerShape(22.dp))
                     .border(
                         1.dp,
-                        ClassroomTokens.AccentPurple.copy(alpha = 0.35f),
-                        RoundedCornerShape(20.dp),
+                        ClassroomTokens.AccentPurple.copy(alpha = 0.65f),
+                        RoundedCornerShape(22.dp),
                     ),
             ) {
-                A2uiSurface(
-                    state = engine.surface,
-                    catalog = engine.catalog,
-                    onAction = { action -> engine.onAction(action); chrome.poke() },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(start = 12.dp, end = 12.dp, top = 44.dp, bottom = 10.dp)
-                        .verticalScroll(rememberScrollState()),
-                )
-
                 Text(
-                    text = "INTERACTIVE BLACKBOARD",
+                    text = "✧  Interactive Blackboard",
                     color = ClassroomTokens.AccentPurple,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 18.dp, top = 14.dp),
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(start = 18.dp, top = 15.dp, bottom = 8.dp),
                 )
-
-                // The cover page: what this class is, before any of it is
-                // taught. A learner should never be looking at a blank board
-                // wondering whether the class has begun, and after a resume
-                // they should be told that it is the middle of one.
-                // Gone as soon as the teacher puts anything on the board —
-                // not merely once something has been said. A scene opening on
-                // a QuizCard adds no transcript line, and this card is drawn
-                // over the board, so keying off narration left it covering
-                // the learner's first checkpoint.
-                if (!engine.hasBoardContent) {
-                    OpeningCard(
-                        opening = engine.opening,
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    A2uiSurface(
+                        state = engine.surface,
+                        catalog = engine.catalog,
+                        onAction = { action -> engine.onAction(action); chrome.poke() },
                         modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(start = 8.dp, end = 8.dp, top = 44.dp),
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
                     )
-                }
 
-                if (engine.status == "error") {
-                    Text(
-                        text = engine.errorMessage ?: "The classroom hit a snag.",
-                        color = LyoRed,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(start = 8.dp, end = 8.dp, top = 44.dp),
-                    )
-                } else if (engine.status == "connecting") {
-                    Text(
-                        text = "Preparing your classroom…",
-                        color = TextSecondary,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
+                    if (!engine.hasBoardContent) {
+                        OpeningCard(
+                            opening = engine.opening,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                        )
+                    }
+                    if (engine.status == "error") {
+                        Text(
+                            text = engine.errorMessage ?: "The classroom hit a snag.",
+                            color = LyoRed,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    } else if (engine.status == "connecting") {
+                        Text(
+                            text = "Preparing your classroom…",
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                    }
                 }
             }
 
