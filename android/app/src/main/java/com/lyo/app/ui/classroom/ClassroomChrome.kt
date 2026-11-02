@@ -429,7 +429,7 @@ fun BottomActionDock(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp),
     ) {
         if (canContinue) {
             Button(
@@ -437,7 +437,7 @@ fun BottomActionDock(
                 colors = ButtonDefaults.buttonColors(containerColor = ClassroomTokens.AccentPurple, contentColor = androidx.compose.ui.graphics.Color.White),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp),
+                    .padding(bottom = 5.dp),
             ) {
                 Text("$continueLabel →")
             }
@@ -494,16 +494,16 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, topic: String,
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 3.dp)
             .background(Surface, RoundedCornerShape(16.dp))
-            .padding(12.dp),
+            .padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
         Image(
             painter = painterResource(character.portrait),
             contentDescription = "${character.name}, ${if (character.id.startsWith("student_")) "AI classmate" else "AI teacher"}",
             contentScale = androidx.compose.ui.layout.ContentScale.Fit,
             modifier = Modifier
-                .size(48.dp)
+                .size(36.dp)
                 .background(androidx.compose.ui.graphics.Color.White, RoundedCornerShape(12.dp)),
         )
         if (text != null) {
@@ -511,7 +511,7 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, topic: String,
                 if (speaker != null) {
                     Text(text = "${character.name} · ${if (character.id.startsWith("student_")) "AI classmate" else "AI teacher"}", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
                 }
-                Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         } else {
             Text("Your teacher is preparing the next step…", color = TextSecondary, modifier = Modifier.weight(1f))
@@ -528,19 +528,19 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, topic: String,
 fun LyoCompanionBadge(state: String, spokenClassmates: List<String>, modifier: Modifier = Modifier) {
     val frame = com.lyo.app.ui.classroom.catalog.rememberMascotFrame(state = state, variant = "lyo")
     Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp)
             .background(Surface.copy(alpha = 0.78f), RoundedCornerShape(12.dp))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
+            .padding(horizontal = 8.dp, vertical = 3.dp),
     ) {
         Image(painter = painterResource(frame.drawableRes), contentDescription = "Lyo, your companion",
-            modifier = frame.modifier.size(30.dp))
+            modifier = frame.modifier.size(24.dp))
         Text("LYO  ·  Your study companion", color = TextSecondary,
             style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
         ClassroomCast.classmates.filter { it.name in spokenClassmates }.forEach { peer ->
             Image(painter = painterResource(peer.portrait), contentDescription = "${peer.name}, AI classmate",
-                modifier = Modifier.size(28.dp).background(androidx.compose.ui.graphics.Color.White, CircleShape))
+                 modifier = Modifier.size(24.dp).background(androidx.compose.ui.graphics.Color.White, CircleShape))
         }
     }
 }

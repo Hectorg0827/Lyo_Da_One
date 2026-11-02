@@ -2,6 +2,7 @@ package com.lyo.app.ui.classroom
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,6 +38,7 @@ import com.lyo.app.data.classroom.ClassroomStallPhase
 import com.lyo.app.ui.classroom.a2ui.A2uiSurface
 import com.lyo.app.ui.screens.classroom.ClassroomVoicePlayer
 import com.lyo.app.ui.theme.Background
+import com.lyo.app.ui.theme.ClassroomTokens
 import com.lyo.app.ui.theme.LyoRed
 import com.lyo.app.ui.theme.TextSecondary
 
@@ -189,11 +192,19 @@ fun ClassroomScreen(
                 spokenClassmates = if (teachingMode == "classroom") engine.transcript.map { it.speaker } else emptyList(),
             )
 
-            // Teaching tools scroll independently from the explanation and controls.
+            // Blackboard-first layout: the teacher and Lyo have compact identity
+            // badges above, while the real, server-driven lesson owns the space.
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                    .background(ClassroomTokens.BoardBackground, RoundedCornerShape(20.dp))
+                    .border(
+                        1.dp,
+                        ClassroomTokens.AccentPurple.copy(alpha = 0.35f),
+                        RoundedCornerShape(20.dp),
+                    ),
             ) {
                 A2uiSurface(
                     state = engine.surface,
@@ -201,8 +212,17 @@ fun ClassroomScreen(
                     onAction = { action -> engine.onAction(action); chrome.poke() },
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(12.dp)
+                        .padding(start = 12.dp, end = 12.dp, top = 44.dp, bottom = 10.dp)
                         .verticalScroll(rememberScrollState()),
+                )
+
+                Text(
+                    text = "INTERACTIVE BLACKBOARD",
+                    color = ClassroomTokens.AccentPurple,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 18.dp, top = 14.dp),
                 )
 
                 // The cover page: what this class is, before any of it is
@@ -219,7 +239,7 @@ fun ClassroomScreen(
                         opening = engine.opening,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(8.dp),
+                            .padding(start = 8.dp, end = 8.dp, top = 44.dp),
                     )
                 }
 
@@ -230,7 +250,7 @@ fun ClassroomScreen(
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(8.dp),
+                            .padding(start = 8.dp, end = 8.dp, top = 44.dp),
                     )
                 } else if (engine.status == "connecting") {
                     Text(
