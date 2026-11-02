@@ -163,6 +163,22 @@ test('board rendering no longer inserts seconds of delay before narration', () =
   store.getState().disconnect();
 });
 
+test('unavailable natural teacher audio continues with captions instead of switching voices', async () => {
+  const { store, sockets, timers } = classroom();
+  // The harness begins muted to keep other teaching tests deterministic.
+  store.getState().toggleVoice();
+  sockets[0].onopen();
+  sockets[0].receive(component('TeacherMessage', { text: 'Let us learn with one clear example.' }));
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(store.getState().voiceOn, false, 'never switch to the phone voice');
+  assert.match(store.getState().notice, /Teacher audio is temporarily unavailable/);
+  assert.equal(store.getState().caption.text, 'Let us learn with one clear example.');
+  assert.ok(timers.some(timer => !timer.canceled && timer.delay <= 4000),
+    'the caption remains on screen before the next turn');
+  store.getState().disconnect();
+});
+
 test('taking the floor immediately stops the teacher and preserves the board', () => {
   const { store, sockets, canceled } = classroom();
   sockets[0].receive(component('TeacherMessage', { text: 'A teacher explanation.' }));
