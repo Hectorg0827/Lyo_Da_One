@@ -112,7 +112,7 @@ export default function ClassroomCaptionSync() {
 
   // ── Roll-up, the way broadcast captions work ──────────────────────────────
   //
-  // The compact teacher strip is two lines tall in either voice mode, and the caption
+  // The strip is two lines tall (three with the voice off), and the caption
   // used to be clamped to that with `line-clamp`. A clamp keeps the FIRST two
   // lines, so the moment the teacher said more than fitted, the learner was
   // left staring at a frozen opening while every newly spoken word was
@@ -436,13 +436,15 @@ export default function ClassroomCaptionSync() {
             // hand the gesture to the page behind it; `pointer-events-auto`
             // because the wrapper disables them and reading back is the point.
             // Each max-height is the line-height beside it multiplied by the
-            // two lines the compact teacher strip holds — 2x20 and 2x22.
-            // The target height and this maximum must be edited together: a mismatch
+            // number of lines the window holds — 2x20 and 2x22 with the voice on,
+            // 3x24 and 3x28 without. The two must be edited together: a mismatch
             // shows a sliced half line at the bottom edge, which reads as a
             // rendering fault rather than as more text below.
             className={`pointer-events-auto w-full overflow-y-auto overscroll-contain
               [scrollbar-width:none] [&::-webkit-scrollbar]:hidden
-              max-h-10 text-[14px] leading-5 sm:max-h-[44px] sm:text-[15px] sm:leading-[22px]`}
+              ${voiceOn
+                ? 'max-h-10 text-[14px] leading-5 sm:max-h-[44px] sm:text-[15px] sm:leading-[22px]'
+                : 'max-h-[72px] text-base leading-6 sm:max-h-[84px] sm:text-lg sm:leading-7'}`}
           >
             <p className="text-white/95">
               <span className={`mr-1.5 font-bold ${SPEAKER_TONE[caption.speaker] ?? 'text-lyo-300'}`}>
