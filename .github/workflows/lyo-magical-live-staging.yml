@@ -16,6 +16,8 @@ jobs:
     env:
       LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app/
       LYO_GPT_LIVE_TRIAL_UI: 'false'
+      LYO_VERSION_CODE: '20261102'
+      LYO_VERSION_NAME: '2026.11.02-premium-classroom-preview'
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 17
@@ -34,10 +36,18 @@ jobs:
       - name: Build staging-targeted debug APK and Android unit tests
         working-directory: android
         run: gradle assembleDebug testDebugUnitTest --no-daemon
-      - name: Upload staging-only APK for Samsung validation
+      - name: Verify preview version and label
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK")"
+          printf '%s\\n' "$BADGING" | grep "^package: name='com.lyo.app' versionCode='20261102' versionName='2026.11.02-premium-classroom-preview'"
+          printf '%s\\n' "$BADGING" | grep "^application-label:'LYO Premium Preview'"
+          cp "$APK" android/app/build/outputs/apk/debug/LYO-PREMIUM-CLASSROOM-20261102.apk
+      - name: Upload identifiable staging APK for Samsung validation
         uses: actions/upload-artifact@v4
         with:
-          name: lyo-magical-live-staging-android-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: LYO-PREMIUM-CLASSROOM-20261102
+          path: android/app/build/outputs/apk/debug/LYO-PREMIUM-CLASSROOM-20261102.apk
           if-no-files-found: error
           retention-days: 7
