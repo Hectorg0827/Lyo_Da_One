@@ -498,13 +498,10 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, topic: String,
             .background(Surface, RoundedCornerShape(16.dp))
             .padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
-        Image(
-            painter = painterResource(character.portrait),
-            contentDescription = "${character.name}, ${if (character.id.startsWith("student_")) "AI classmate" else "AI teacher"}",
-            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-            modifier = Modifier
-                .size(36.dp)
-                .background(androidx.compose.ui.graphics.Color.White, RoundedCornerShape(12.dp)),
+        TransparentClassroomPortrait(
+            drawableRes = character.portrait,
+            contentDescription = character.name + ", AI teacher or classmate",
+            modifier = Modifier.size(48.dp),
         )
         if (text != null) {
             Column(modifier = Modifier.weight(1f)) {
@@ -539,8 +536,11 @@ fun LyoCompanionBadge(state: String, spokenClassmates: List<String>, modifier: M
         Text("LYO  ·  Your study companion", color = TextSecondary,
             style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
         ClassroomCast.classmates.filter { it.name in spokenClassmates }.forEach { peer ->
-            Image(painter = painterResource(peer.portrait), contentDescription = "${peer.name}, AI classmate",
-                 modifier = Modifier.size(24.dp).background(androidx.compose.ui.graphics.Color.White, CircleShape))
+            TransparentClassroomPortrait(
+                drawableRes = peer.portrait,
+                contentDescription = peer.name + ", AI classmate",
+                modifier = Modifier.size(24.dp),
+            )
         }
     }
 }
