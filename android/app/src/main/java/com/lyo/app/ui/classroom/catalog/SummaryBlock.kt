@@ -33,7 +33,7 @@ import com.lyo.app.ui.theme.TextSecondary
 @Composable
 fun A2uiRenderScope.SummaryBlockRenderer() {
     val title = resolveString("title") ?: "Summary"
-    val content = resolveString("content")
+    val content = resolveString("content")?.let(::cleanClassroomText)
     val items = resolveStringList("items")
     val retrievalScheduled = resolveBoolean("retrievalScheduled", false)
     val role = resolveString("role", "board") ?: "board"
@@ -45,7 +45,7 @@ fun A2uiRenderScope.SummaryBlockRenderer() {
         "feedback" -> "FEEDBACK"
         "recovery" -> "LESSON PAUSED"
         "details" -> "LESSON DETAILS"
-        else -> "TEACHING TOOL"
+        else -> "LESSON NOTES"
     }
 
     Column(
@@ -56,16 +56,16 @@ fun A2uiRenderScope.SummaryBlockRenderer() {
             .background(Surface, RoundedCornerShape(12.dp))
             .padding(12.dp),
     ) {
-        Text(text = label, color = accent)
-        Text(text = title, color = TextPrimary)
+        Text(text = label, color = accent, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
+        Text(text = cleanClassroomText(title), color = TextPrimary, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
         if (role == "details") TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide details" else "Read details") }
         if (expanded && document != null) {
             BoardDocumentView(document)
         } else if (expanded && content != null) {
-            Text(text = content, color = TextPrimary, modifier = Modifier.padding(top = 4.dp))
+            if (looksLikeMathLesson(content)) NativeMathNote(content) else Text(text = content, color = TextPrimary, modifier = Modifier.padding(top = 4.dp))
         }
         if (expanded) items.forEach { item ->
-            Text(text = "•  $item", color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
+            Text(text = "•  " + cleanClassroomText(item), color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
         }
         if (retrievalScheduled) {
             Text(
