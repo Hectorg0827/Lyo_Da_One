@@ -361,6 +361,7 @@ fun ClassroomScreen(
                     canContinue = engine.canContinue && !engine.isReviewingPastStep,
                     continueLabel = engine.continueLabel,
                     onContinue = { if (engine.mayAdvanceLiveStep) engine.continueLesson(); chrome.poke() },
+                    allowContinue = engine.mayAdvanceLiveStep,
                     onAskQuestion = { text -> engine.askQuestion(text); chrome.poke() },
                     onHint = { engine.requestHint("nudge"); chrome.poke() },
                     onTooEasy = { engine.signalTooEasy(); chrome.poke() },
