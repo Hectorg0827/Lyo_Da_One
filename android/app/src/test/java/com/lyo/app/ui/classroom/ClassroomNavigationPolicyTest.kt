@@ -19,4 +19,18 @@ class ClassroomNavigationPolicyTest {
         assertFalse(canAdvanceLiveLesson(false, true, false, true, false))
         assertFalse(canAdvanceLiveLesson(false, true, false, false, true))
     }
+    @Test fun recoveryBoardCanContinueWithoutResubmittingAnAnswer() {
+        // The backend explicitly permits a fresh example after grading
+        // failed; the visual Review/Paused label is not a local pause.
+        assertTrue(canAdvanceLiveLesson(
+            reviewingPast = false, canContinue = true,
+            activeCheckpoint = false, failed = false, paused = false,
+        ))
+        assertFalse(canAdvanceLiveLesson(
+            reviewingPast = false, canContinue = true,
+            activeCheckpoint = false, failed = false, paused = false,
+            awaitingResponse = true,
+        ))
+    }
+
 }
