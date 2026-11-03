@@ -119,7 +119,7 @@ fun ClassroomModePicker(
                 )
             }
             if (fullScreen) {
-                Text("PREVIEW · NAV-SAFE V3", color = Muted,
+                Text("PREVIEW · RECOVERY V4", color = Muted,
                     style = MaterialTheme.typography.labelSmall)
                 Spacer(Modifier.height(12.dp))
             }
