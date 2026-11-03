@@ -7,6 +7,7 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -106,6 +107,8 @@ fun ClassroomTopBar(
     onToggleVoice: () -> Unit,
     onToggleNotebook: () -> Unit,
     onToggleSettings: () -> Unit,
+    focusModeLabel: String? = null,
+    onToggleMode: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -118,10 +121,19 @@ fun ClassroomTopBar(
             Icon(Icons.Filled.ArrowBack, contentDescription = "Leave classroom", tint = TextPrimary)
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text("LYO CLASSROOM", color = ClassroomTokens.AccentPurple,
-                style = MaterialTheme.typography.labelSmall)
             Text(topic, color = TextPrimary, style = MaterialTheme.typography.titleSmall,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (focusModeLabel != null) {
+                Text(
+                    text = focusModeLabel + " ▾",
+                    color = ClassroomTokens.AccentPurple,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.clickable(onClick = onToggleMode).padding(vertical = 3.dp),
+                )
+            } else {
+                Text("LYO CLASSROOM", color = ClassroomTokens.AccentPurple,
+                    style = MaterialTheme.typography.labelSmall)
+            }
         }
         IconButton(onClick = onToggleNotebook) {
             Icon(Icons.Filled.MenuBook, contentDescription = "Your notebook", tint = TextPrimary)
