@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
@@ -175,18 +176,23 @@ fun ClassroomScreen(
 
         Column(modifier = Modifier.fillMaxSize()) {
             AnimatedVisibility(visible = chrome.visible) {
-                ClassroomTopBar(
-                    topic = topic,
-                    isPaused = engine.isPaused,
-                    isVoiceEnabled = engine.isVoiceEnabled,
-                    onBack = { nav.popBackStack() },
-                    onTogglePause = { engine.togglePause(); chrome.poke() },
-                    onToggleVoice = { engine.toggleVoice(); chrome.poke() },
-                    onToggleNotebook = { notebookOpen = !notebookOpen; settingsOpen = false; chrome.poke() },
-                    onToggleSettings = { settingsOpen = !settingsOpen; notebookOpen = false; chrome.poke() },
-                    focusModeLabel = if (activeDisplayMode == ClassroomDisplayMode.SOLO) "Focus" else null,
-                    onToggleMode = { showModePicker = true; chrome.poke() },
-                )
+                renderedMode?.let { mode ->
+                    PremiumClassroomHeader(
+                        topic = topic,
+                        mode = mode,
+                        stepNumber = engine.viewedStepIndex + 1,
+                        totalSteps = engine.stepCount,
+                        isPaused = engine.isPaused || isAutoRecovery,
+                        isConnecting = engine.status == "connecting",
+                        isVoiceEnabled = engine.isVoiceEnabled,
+                        onBack = { nav.popBackStack() },
+                        onPickMode = { showModePicker = true; chrome.poke() },
+                        onTogglePause = { engine.togglePause(); chrome.poke() },
+                        onToggleVoice = { engine.toggleVoice(); chrome.poke() },
+                        onNotebook = { notebookOpen = !notebookOpen; settingsOpen = false; chrome.poke() },
+                        onSettings = { settingsOpen = !settingsOpen; notebookOpen = false; chrome.poke() },
+                    )
+                }
             }
 
             // Independent of chrome.visible (matching web's settingsOpen/
@@ -214,9 +220,6 @@ fun ClassroomScreen(
                 )
             }
 
-            activeDisplayMode?.takeIf { it != ClassroomDisplayMode.SOLO }?.let { current ->
-                ClassroomModeSwitcher(current) { showModePicker = true }
-            }
             // Three distinct presentations use the same teacher and live engine.
             renderedMode?.let { mode ->
                 ClassroomModeHero(
@@ -238,6 +241,12 @@ fun ClassroomScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 5.dp)
+                    .shadow(
+                        elevation = 9.dp,
+                        shape = RoundedCornerShape(22.dp),
+                        ambientColor = Color(0xFF7654FF).copy(alpha = .5f),
+                        spotColor = Color(0xFF7654FF).copy(alpha = .5f),
+                    )
                     .background(
                         Brush.verticalGradient(
                             listOf(Color(0xFF182044), Color(0xFF121A3B), Color(0xFF0D1335)),
