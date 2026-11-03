@@ -53,6 +53,7 @@ fun PremiumClassroomDock(
     canContinue: Boolean,
     continueLabel: String,
     onContinue: () -> Unit,
+    allowContinue: Boolean,
     onAskQuestion: (String) -> Unit,
     onHint: () -> Unit,
     onTooEasy: () -> Unit,
@@ -102,7 +103,7 @@ fun PremiumClassroomDock(
             Box(
                 modifier = Modifier.fillMaxWidth()
                     .background(ActiveGradient, RoundedCornerShape(16.dp))
-                    .clickable(enabled = allowLiveActions, onClick = onContinue)
+                    .clickable(enabled = allowContinue, onClick = onContinue)
                     .padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center,
             ) {
