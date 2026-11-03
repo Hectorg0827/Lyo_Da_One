@@ -27,8 +27,13 @@ import com.lyo.app.ui.theme.TextPrimary
  */
 @Composable
 fun A2uiRenderScope.ChalkboardTextRenderer() {
-    val text = resolveString("text")?.let(::cleanClassroomText) ?: return
+    val rawText = resolveString("text") ?: return
     val highlightedTerm = resolveString("highlightedTerm")
+    if (containsLessonMath(rawText) && highlightedTerm.isNullOrBlank()) {
+        LessonRichText(rawText)
+        return
+    }
+    val text = cleanClassroomText(rawText)
 
     val transition = rememberInfiniteTransition(label = "chalk-highlight-pulse")
     val pulseAlpha by transition.animateFloat(
