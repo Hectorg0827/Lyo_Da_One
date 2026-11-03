@@ -139,17 +139,9 @@ fun ClassroomScreen(
     val isAutoRecovery = engine.stallPhase == ClassroomStallPhase.STALLED ||
         engine.status == "error" || engine.lessonRecovery
     val renderedMode = if (isAutoRecovery) ClassroomDisplayMode.REVIEW else activeDisplayMode
-    // The companion appears only after a real Lyo contribution, then leaves.
-    val lastLyoLine = engine.transcript.lastOrNull { it.speaker.equals("Lyo", ignoreCase = true) }
-    var showFocusLyoTip by remember(topic, courseId) { mutableStateOf(false) }
-    LaunchedEffect(lastLyoLine?.id) {
-        if (lastLyoLine != null) {
-            showFocusLyoTip = true
-            delay(5_500L)
-            showFocusLyoTip = false
-        }
+    val lastLyoLine = engine.transcript.lastOrNull {
+        it.speaker.equals("Lyo", ignoreCase = true)
     }
-
 
     Box(
         modifier = Modifier
@@ -330,29 +322,17 @@ fun ClassroomScreen(
                         )
                     }
                     }
-                    if (activeDisplayMode == ClassroomDisplayMode.SOLO &&
-                        !isAutoRecovery && !engine.isReviewingPastStep &&
-                        showFocusLyoTip && lastLyoLine != null
-                    ) {
-                        FocusLyoTipOverlay(
-                            message = lastLyoLine.text,
-                            onDismiss = { showFocusLyoTip = false },
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                        )
-                    }
+
                 }
             }
 
-            // Focus uses the temporary Lyo overlay in the blackboard instead.
-            renderedMode?.takeIf { it != ClassroomDisplayMode.SOLO &&
-                activeDisplayMode != ClassroomDisplayMode.SOLO }?.let { mode ->
+            renderedMode?.let { mode ->
                 ClassroomModeCompanion(
                     mode = mode,
                     transcript = engine.transcript,
                     isReviewingPastStep = engine.isReviewingPastStep,
                     isGroupSession = backendTeachingMode == "classroom",
+                    lastLyoText = lastLyoLine?.text,
                 )
             }
 
@@ -372,16 +352,13 @@ fun ClassroomScreen(
                 }
             }
 
-            if (activeDisplayMode == ClassroomDisplayMode.SOLO) {
-                FocusStepNavigation(engine)
-            } else if (activeDisplayMode != null) {
+            if (activeDisplayMode != null) {
                 ClassroomStepNavigation(engine)
             }
             renderedMode?.let { mode ->
                 PremiumClassroomDock(
                     mode = mode,
-                    canContinue = engine.canContinue && !engine.isReviewingPastStep &&
-                        activeDisplayMode != ClassroomDisplayMode.SOLO,
+                    canContinue = engine.canContinue && !engine.isReviewingPastStep,
                     continueLabel = engine.continueLabel,
                     onContinue = { if (engine.mayAdvanceLiveStep) engine.continueLesson(); chrome.poke() },
                     onAskQuestion = { text -> engine.askQuestion(text); chrome.poke() },
