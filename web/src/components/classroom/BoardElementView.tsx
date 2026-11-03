@@ -307,7 +307,7 @@ function QuizView({
       <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
         {isSpanish ? 'Tu turno — comprobación' : 'Your turn — checkpoint'}
       </p>
-      <ClassroomRichText text={quiz.question} className="text-base font-medium leading-relaxed text-white" />
+      <ClassroomRichText text={quiz.question ?? ''} className="text-base font-medium leading-relaxed text-white" />
       <div className="grid gap-2 sm:grid-cols-2">
         {(quiz.options ?? []).map((opt) => {
           const chosen = el.answered === opt.label;
