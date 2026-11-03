@@ -72,18 +72,26 @@ fun ClassroomScreen(
     // cannot be argued out of it. Bumping this key is what rebuilds it.
     var sessionAttempt by remember(topic, courseId) { mutableIntStateOf(0) }
     var resumeSeat by remember(topic, courseId) { mutableStateOf<ClassroomSavedSession?>(null) }
+    // The teacher's server mode is selected only once at entry. Switching
+    // visual modes later leaves this live session and graded evidence intact.
+    var activeDisplayMode by remember(topic, courseId) {
+        mutableStateOf<ClassroomDisplayMode?>(null)
+    }
+    var showModePicker by remember(topic, courseId) { mutableStateOf(true) }
+    var backendTeachingMode by remember(topic, courseId) { mutableStateOf(teachingMode) }
+
     // Keyed on the attempt too: engine.dispose() closes this player, so a
     // rebuilt engine inheriting the old one would teach in silence.
-    val voicePlayer = remember(context, topic, courseId, teachingMode, courseBacked, sessionAttempt) {
+    val voicePlayer = remember(context, topic, courseId, backendTeachingMode, courseBacked, sessionAttempt) {
         ClassroomVoicePlayer(context)
     }
     val engine = remember(
-        topic, courseId, teachingMode, courseBacked, reviewConceptId, sessionAttempt,
+        topic, courseId, backendTeachingMode, courseBacked, reviewConceptId, sessionAttempt,
     ) {
         ClassroomEngine(
             topic = topic,
             sessionIdParam = courseId,
-            mode = teachingMode,
+            mode = backendTeachingMode,
             courseBacked = courseBacked,
             reviewConceptId = reviewConceptId,
             voicePlayer = voicePlayer,
@@ -91,12 +99,12 @@ fun ClassroomScreen(
             resumeSession = resumeSeat,
         )
     }
-    DisposableEffect(engine) {
-        engine.start()
-        onDispose { engine.dispose() }
+    DisposableEffect(engine, activeDisplayMode != null) {
+        if (activeDisplayMode != null) engine.start()
+        onDispose { if (activeDisplayMode != null) engine.dispose() }
     }
-    LaunchedEffect(courseId, topic, courseBacked) {
-        if (courseBacked) {
+    LaunchedEffect(courseId, topic, courseBacked, activeDisplayMode) {
+        if (activeDisplayMode != null && courseBacked) {
             StackRepository.upsertCourseOnStart(courseId, title = topic)
         }
     }
@@ -180,6 +188,9 @@ fun ClassroomScreen(
                 )
             }
 
+            activeDisplayMode?.let { current ->
+                ClassroomModeSwitcher(current) { showModePicker = true }
+            }
             // A teacher leads; Lyo remains a separate student companion.
             TeacherBadgeAndCaption(
                 caption = engine.surface.dataModel.resolvePointer("/caption"),
@@ -189,7 +200,7 @@ fun ClassroomScreen(
             )
             LyoCompanionBadge(
                 state = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
-                spokenClassmates = if (teachingMode == "classroom") engine.transcript.map { it.speaker } else emptyList(),
+                spokenClassmates = if (activeDisplayMode == ClassroomDisplayMode.CLASSROOM) engine.transcript.map { it.speaker } else emptyList(),
             )
 
             // Blackboard-first layout: the teacher and Lyo have compact identity
@@ -227,9 +238,13 @@ fun ClassroomScreen(
                         )
                     } else {
                     A2uiSurface(
-                        state = engine.surface,
+                        state = engine.shownSurface,
                         catalog = engine.catalog,
-                        onAction = { action -> engine.onAction(action); chrome.poke() },
+                        onAction = { action ->
+                            // Completed scenes may be inspected, not regraded.
+                            if (!engine.isReviewingPastStep) engine.onAction(action)
+                            chrome.poke()
+                        },
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(rememberScrollState())
@@ -281,6 +296,9 @@ fun ClassroomScreen(
                 }
             }
 
+            if (activeDisplayMode != null) {
+                ClassroomStepNavigation(engine)
+            }
             AnimatedVisibility(visible = chrome.visible || engine.canContinue) {
                 BottomActionDock(
                     canContinue = engine.canContinue,
@@ -291,6 +309,23 @@ fun ClassroomScreen(
                     onTooEasy = { engine.signalTooEasy(); chrome.poke() },
                 )
             }
+        }
+        if (showModePicker) {
+            ClassroomModePicker(
+                current = activeDisplayMode,
+                canDismiss = activeDisplayMode != null,
+                onChoose = { selected ->
+                    if (activeDisplayMode == null) {
+                        // Backend mode is chosen before opening the socket.
+                        // A later UI mode change does not restart the class.
+                        backendTeachingMode = if (teachingMode == "review" && reviewConceptId != null)
+                            "review" else selected.backendModeWhenStarting()
+                    }
+                    activeDisplayMode = selected
+                    showModePicker = false
+                },
+                onDismiss = { showModePicker = false },
+            )
         }
     }
 }
