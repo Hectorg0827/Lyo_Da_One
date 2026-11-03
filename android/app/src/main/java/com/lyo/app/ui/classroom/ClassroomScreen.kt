@@ -26,6 +26,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -191,17 +193,16 @@ fun ClassroomScreen(
             activeDisplayMode?.let { current ->
                 ClassroomModeSwitcher(current) { showModePicker = true }
             }
-            // A teacher leads; Lyo remains a separate student companion.
-            TeacherBadgeAndCaption(
-                caption = engine.surface.dataModel.resolvePointer("/caption"),
-                topic = topic,
-                lessonRecovery = engine.lessonRecovery,
-                onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
-            )
-            LyoCompanionBadge(
-                state = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
-                spokenClassmates = if (activeDisplayMode == ClassroomDisplayMode.CLASSROOM) engine.transcript.map { it.speaker } else emptyList(),
-            )
+            // Three distinct presentations use the same teacher and live engine.
+            activeDisplayMode?.let { mode ->
+                ClassroomModeHero(
+                    mode = mode,
+                    topic = topic,
+                    caption = engine.surface.dataModel.resolvePointer("/caption"),
+                    isPaused = engine.isPaused || engine.stallPhase == ClassroomStallPhase.STALLED,
+                    onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
+                )
+            }
 
             // Blackboard-first layout: the teacher and Lyo have compact identity
             // badges above, while the real, server-driven lesson owns the space.
@@ -213,19 +214,24 @@ fun ClassroomScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 5.dp)
-                    .background(ClassroomTokens.BoardBackground, RoundedCornerShape(22.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF182044), ClassroomTokens.BoardBackground, Color(0xFF0D1335)),
+                        ),
+                        RoundedCornerShape(22.dp),
+                    )
                     .border(
                         1.dp,
                         ClassroomTokens.AccentPurple.copy(alpha = 0.65f),
                         RoundedCornerShape(22.dp),
                     ),
             ) {
-                Text(
-                    text = "✧  Interactive Blackboard",
-                    color = ClassroomTokens.AccentPurple,
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(start = 18.dp, top = 15.dp, bottom = 8.dp),
-                )
+                activeDisplayMode?.let { mode ->
+                    ClassroomBoardHeading(
+                        mode = mode,
+                        paused = engine.isPaused || engine.stallPhase == ClassroomStallPhase.STALLED,
+                    )
+                }
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     if (engine.stallPhase == ClassroomStallPhase.STALLED) {
                         StallRecoveryCard(
@@ -278,6 +284,15 @@ fun ClassroomScreen(
                     }
                     }
                 }
+            }
+
+            activeDisplayMode?.let { mode ->
+                ClassroomModeCompanion(
+                    mode = mode,
+                    transcript = engine.transcript,
+                    isReviewingPastStep = engine.isReviewingPastStep,
+                    isGroupSession = backendTeachingMode == "classroom",
+                )
             }
 
             // The step never arrived. The class says so, says it is not the
