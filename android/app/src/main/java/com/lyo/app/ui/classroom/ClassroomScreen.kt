@@ -345,7 +345,9 @@ fun ClassroomScreen(
                 }
             }
 
-            renderedMode?.let { mode ->
+            // Focus uses the temporary Lyo overlay in the blackboard instead.
+            renderedMode?.takeIf { it != ClassroomDisplayMode.SOLO &&
+                activeDisplayMode != ClassroomDisplayMode.SOLO }?.let { mode ->
                 ClassroomModeCompanion(
                     mode = mode,
                     transcript = engine.transcript,
@@ -370,13 +372,16 @@ fun ClassroomScreen(
                 }
             }
 
-            if (activeDisplayMode != null) {
+            if (activeDisplayMode == ClassroomDisplayMode.SOLO) {
+                FocusStepNavigation(engine)
+            } else if (activeDisplayMode != null) {
                 ClassroomStepNavigation(engine)
             }
             renderedMode?.let { mode ->
                 PremiumClassroomDock(
                     mode = mode,
-                    canContinue = engine.canContinue && !engine.isReviewingPastStep,
+                    canContinue = engine.canContinue && !engine.isReviewingPastStep &&
+                        activeDisplayMode != ClassroomDisplayMode.SOLO,
                     continueLabel = engine.continueLabel,
                     onContinue = { if (engine.mayAdvanceLiveStep) engine.continueLesson(); chrome.poke() },
                     onAskQuestion = { text -> engine.askQuestion(text); chrome.poke() },
