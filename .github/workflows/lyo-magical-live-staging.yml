@@ -100,11 +100,11 @@ jobs:
             nodes = [n for n in root.iter('node') if 'Start lesson' in (n.get('content-desc','') + ' ' + n.get('text',''))]
             assert nodes, 'Missing accessible Start lesson CTA in picker'
             bounds = nodes[-1].get('bounds', '')
-            m = re.match(r'\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]', bounds)
-            assert m, 'CTA bounds not reported: '+bounds
-            x1,y1,x2,y2 = map(int, m.groups())
+            numbers = list(map(int, re.findall('[0-9]+', bounds)))
+            assert len(numbers) == 4, 'CTA bounds not reported: '+bounds
+            x1,y1,x2,y2 = numbers
             dimensions = subprocess.check_output(['adb','shell','wm','size'],text=True)
-            h = int(re.search(r'(\\d+)x(\\d+)', dimensions).group(2))
+            h = int(re.findall('[0-9]+', dimensions)[-1])
             assert y2 < h-120, f'CTA overlaps navigation region: button bottom={y2}, screen={h}'
             assert y2 > y1 and x2 > x1
             subprocess.check_call(['adb','shell','input','tap',str((x1+x2)//2),str((y1+y2)//2)])
