@@ -16,8 +16,8 @@ jobs:
     env:
       LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app/
       LYO_GPT_LIVE_TRIAL_UI: 'false'
-      LYO_VERSION_CODE: '2026110209'
-      LYO_VERSION_NAME: '2026.11.02-classroom-nav-safe-v2'
+      LYO_VERSION_CODE: '2026110210'
+      LYO_VERSION_NAME: '2026.11.03-classroom-navsafe-v3'
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 17
@@ -41,14 +41,14 @@ jobs:
           set -euo pipefail
           APK=android/app/build/outputs/apk/debug/app-debug.apk
           BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK")"
-          printf '%s\\n' "$BADGING" | grep "^package: name='com.lyo.app' versionCode='2026110209' versionName='2026.11.02-classroom-nav-safe-v2'"
+          printf '%s\\n' "$BADGING" | grep "^package: name='com.lyo.app' versionCode='2026110210' versionName='2026.11.03-classroom-navsafe-v3'"
           printf '%s\\n' "$BADGING" | grep "^application-label:'LYO Premium Preview'"
-          cp "$APK" android/app/build/outputs/apk/debug/LYO-PREMIUM-CLASSROOM-NAVSAFE-20261102.apk
+          cp "$APK" android/app/build/outputs/apk/debug/LYO-PREMIUM-CLASSROOM-NAVSAFE-V3-20261103.apk
       - name: Upload identifiable staging APK for Samsung validation
         uses: actions/upload-artifact@v4
         with:
-          name: LYO-PREMIUM-CLASSROOM-NAVSAFE-20261102
-          path: android/app/build/outputs/apk/debug/LYO-PREMIUM-CLASSROOM-NAVSAFE-20261102.apk
+          name: LYO-PREMIUM-CLASSROOM-NAVSAFE-V3-20261103
+          path: android/app/build/outputs/apk/debug/LYO-PREMIUM-CLASSROOM-NAVSAFE-V3-20261103.apk
           if-no-files-found: error
           retention-days: 7
 
@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: LYO-PREMIUM-CLASSROOM-NAVSAFE-20261102
+          name: LYO-PREMIUM-CLASSROOM-NAVSAFE-V3-20261103
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -77,7 +77,7 @@ jobs:
           disable-animations: true
           script: |
             set -eu
-            adb install -r LYO-PREMIUM-CLASSROOM-NAVSAFE-20261102.apk
+            adb install -r LYO-PREMIUM-CLASSROOM-NAVSAFE-V3-20261103.apk
             adb logcat -c
             adb shell am start -W -n com.lyo.app/.MainActivity
             sleep 12
@@ -86,6 +86,34 @@ jobs:
             cat preview-crash-logcat.txt
             ! grep -q 'Process: com.lyo.app' preview-crash-logcat.txt
             adb shell pidof com.lyo.app
+            # Reproduce the Samsung three-button navigation geometry in an
+            # unauthenticated, debug-only classroom mode-picker screen.
+            adb shell cmd overlay enable --user 0 com.android.internal.systemui.navbar.threebutton || true
+            adb shell am start -W -n com.lyo.app/.ClassroomPickerPreviewActivity
+            sleep 4
+            adb exec-out screencap -p > picker-before.png
+            adb shell uiautomator dump /sdcard/classroom-picker.xml
+            adb pull /sdcard/classroom-picker.xml picker-before.xml
+            python3 - <<'PY'
+            import os, re, subprocess, xml.etree.ElementTree as ET
+            root = ET.parse('picker-before.xml').getroot()
+            nodes = [n for n in root.iter('node') if 'Start lesson' in (n.get('content-desc','') + ' ' + n.get('text',''))]
+            assert nodes, 'Missing accessible Start lesson CTA in picker'
+            bounds = nodes[-1].get('bounds', '')
+            m = re.match(r'\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]', bounds)
+            assert m, 'CTA bounds not reported: '+bounds
+            x1,y1,x2,y2 = map(int, m.groups())
+            dimensions = subprocess.check_output(['adb','shell','wm','size'],text=True)
+            h = int(re.search(r'(\\d+)x(\\d+)', dimensions).group(2))
+            assert y2 < h-120, f'CTA overlaps navigation region: button bottom={y2}, screen={h}'
+            assert y2 > y1 and x2 > x1
+            subprocess.check_call(['adb','shell','input','tap',str((x1+x2)//2),str((y1+y2)//2)])
+            print('CTA clearance',h-y2,'px, tap', (x1+x2)//2,(y1+y2)//2)
+            PY
+            sleep 2
+            adb shell uiautomator dump /sdcard/classroom-after.xml
+            adb pull /sdcard/classroom-after.xml picker-after.xml
+            grep -q 'START_TAPPED' picker-after.xml
       - name: Upload emulator crash diagnostics and startup screenshot
         if: always()
         uses: actions/upload-artifact@v4
@@ -94,5 +122,8 @@ jobs:
           path: |
             preview-crash-logcat.txt
             preview-startup.png
+            picker-before.png
+            picker-before.xml
+            picker-after.xml
           if-no-files-found: warn
           retention-days: 3
