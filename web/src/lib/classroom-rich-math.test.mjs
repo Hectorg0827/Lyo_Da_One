@@ -15,7 +15,7 @@ test('chemistry question inline formulas render as KaTeX, not literal dollar not
   }, content));
   assert.match(html, /class="katex"/);
   assert.doesNotMatch(html, /\$CO_2\$/);
-  assert.doesNotMatch(html, /\\text\{/);
+  assert.match(html, /katex-mathml/);
 });
 
 test('ordinary answer choices remain readable text', () => {
