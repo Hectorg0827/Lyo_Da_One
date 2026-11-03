@@ -7,4 +7,5 @@ internal fun canAdvanceLiveLesson(
     activeCheckpoint: Boolean,
     failed: Boolean,
     paused: Boolean,
-): Boolean = !reviewingPast && canContinue && !activeCheckpoint && !failed && !paused
+    awaitingResponse: Boolean = false,
+): Boolean = !reviewingPast && canContinue && !activeCheckpoint && !failed && !paused && !awaitingResponse
