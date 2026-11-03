@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.gson.JsonElement
+import com.lyo.app.ui.classroom.catalog.cleanClassroomText
 import com.lyo.app.ui.theme.ClassroomTokens
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
@@ -58,7 +59,7 @@ fun ClassroomModeHero(
         ClassroomDisplayMode.CLASSROOM -> "LIVE CLASSROOM"
         ClassroomDisplayMode.REVIEW -> if (isPaused) "LESSON PAUSED" else "REVIEW YOUR LEARNING"
     }
-    val prompt = phrase?.let(com.lyo.app.ui.classroom.catalog::cleanClassroomText)
+    val prompt = phrase?.let(::cleanClassroomText)
         ?.replace("$", "")?.takeIf { it.isNotBlank() }
         ?: when (mode) {
             ClassroomDisplayMode.SOLO -> "We'll learn this one step at a time."
