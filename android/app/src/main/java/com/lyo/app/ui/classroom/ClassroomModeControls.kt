@@ -6,6 +6,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -115,7 +118,11 @@ fun ClassroomModePicker(
                     fontWeight = FontWeight.Bold,
                 )
             }
-            if (fullScreen) Spacer(Modifier.height(12.dp))
+            if (fullScreen) {
+                Text("PREVIEW · NAV-SAFE V3", color = Muted,
+                    style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.height(12.dp))
+            }
             Text(
                 "Choose your\nclassroom mode",
                 color = Color.White,
@@ -231,6 +238,8 @@ fun ClassroomModePicker(
                     .background(ButtonGradient, RoundedCornerShape(17.dp))
                     .border(1.dp, Lilac.copy(alpha = .55f), RoundedCornerShape(17.dp))
                     .clickable { onChoose(selected) }
+                    .semantics { contentDescription = if (canDismiss) "Switch classroom mode" else "Start lesson" }
+                    .testTag("classroom-start-lesson")
                     .padding(vertical = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
