@@ -17,8 +17,8 @@ import { cn } from '@/lib/utils';
  */
 export function ClassroomRichText({ text, className = '' }: { text: string; className?: string }) {
   const normalized = text
-    .replace(/\\\\\(([^\n]*?)\\\\\)/g, (_, math: string) => `$${math}$`)
-    .replace(/\\\\\[([\s\S]*?)\\\\\]/g, (_, math: string) => `$$\n${math}\n$$`);
+    .replace(/\\\(([^\n]*?)\\\)/g, (_, math: string) => `$${math}$`)
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_, math: string) => `$$\n${math}\n$$`);
 
   return (
     <div className={cn(
