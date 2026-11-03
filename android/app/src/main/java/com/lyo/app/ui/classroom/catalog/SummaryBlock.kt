@@ -2,6 +2,9 @@ package com.lyo.app.ui.classroom.catalog
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -51,13 +54,19 @@ fun A2uiRenderScope.SummaryBlockRenderer() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
-            .background(Surface, RoundedCornerShape(12.dp))
-            .padding(12.dp),
+            .padding(vertical = 5.dp)
+            .background(
+                Brush.verticalGradient(listOf(Color(0xFF1C2550), Color(0xFF131B3B))),
+                RoundedCornerShape(20.dp),
+            )
+            .border(1.dp, accent.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
+            .padding(15.dp),
     ) {
         Text(text = label, color = accent, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-        Text(text = cleanClassroomText(title), color = TextPrimary, style = androidx.compose.material3.MaterialTheme.typography.titleMedium)
+        Text(text = cleanClassroomText(title), color = TextPrimary,
+            style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 5.dp, bottom = 9.dp))
         if (role == "details") TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide details" else "Read details") }
         if (expanded && document != null) {
             BoardDocumentView(document)
