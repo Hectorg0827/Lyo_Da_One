@@ -37,6 +37,17 @@ import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 import SurfaceLoading from '@/components/ui/SurfaceLoading';
 import { classroomSpeaker, speakingClassmates, teacherForTopic } from '@/lib/classroom-cast.mjs';
 
+type ClassroomDisplayMode = 'focus' | 'live' | 'review';
+
+const DISPLAY_MODE_OPTIONS: { key: ClassroomDisplayMode; label: string; description: string }[] = [
+  { key: 'focus', label: 'Focus Mode', description: 'Practice independently with your teacher and a blackboard-first lesson.' },
+  { key: 'live', label: 'Live Class', description: 'Learn with your teacher and participating AI classmates.' },
+  { key: 'review', label: 'Review & Resume', description: 'Explore saved steps and safely return to your lesson.' },
+];
+
+const displayModeFromTeachingMode = (value: ClassroomMode): ClassroomDisplayMode =>
+  value === 'classroom' ? 'live' : value === 'review' ? 'review' : 'focus';
+
 const LYO_STATE_IMG: Record<string, string> = {
   reading: '/mascot/mascot_reading_1.png',
   thinking: '/mascot/mascot_reading_3.png',
@@ -88,7 +99,16 @@ function ClassroomStage() {
   // with nothing on screen saying so, which is a lesson quietly shorter than
   // the one the learner asked for.
   const initialDuration = normalizeSessionMinutes(params.get('duration')) ?? 10;
+  // The teaching track is selected before the socket starts. Display mode is
+  // independent: switching the three premium layouts never resets a lesson.
   const [mode, setMode] = useState<ClassroomMode>(initialMode);
+  const initialDisplayMode = displayModeFromTeachingMode(initialMode);
+  const needsModeChoice = !resume && !lessonId && !modeParam;
+  const [hasStarted, setHasStarted] = useState(!needsModeChoice);
+  const [displayMode, setDisplayMode] = useState<ClassroomDisplayMode>(initialDisplayMode);
+  const [pendingDisplayMode, setPendingDisplayMode] = useState<ClassroomDisplayMode>(initialDisplayMode);
+  const [modePickerOpen, setModePickerOpen] = useState(needsModeChoice);
+  const [rememberMode, setRememberMode] = useState(true);
   const [durationMinutes, setDurationMinutes] = useState(initialDuration);
   const [reduceMotion, setReduceMotion] = useState(false);
   const systemReducedMotion = useReducedMotion();
@@ -122,7 +142,7 @@ function ClassroomStage() {
     progressCurrent, progressTotal, error, notice, stallPhase, resumable, soundOn, voiceOn,
     speechRate, languageCode,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
-    askQuestion, signal, takeFloor, requestHint, continueLesson, skipTurn, toggleSound, toggleVoice,
+    askQuestion, signal, takeFloor, requestHint, continueLesson, toggleSound, toggleVoice,
     setSpeechRate, viewBoard, interruptPrompt,
     nudgeTeacher, restartLesson, resumeLesson, dismissNotice,
   } = useClassroomStore();
@@ -154,10 +174,22 @@ function ClassroomStage() {
   const dictatingRef = useRef(false);
 
   useEffect(() => {
+    if (!hasStarted) return;
     connect(connection);
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, courseId, lessonId, reviewConceptId, objective, recordScope, difficulty, mode, durationMinutes, animationsOff, language, resume]);
+  }, [hasStarted, topic, courseId, lessonId, reviewConceptId, objective, recordScope, difficulty, mode, durationMinutes, animationsOff, language, resume]);
+
+  useEffect(() => {
+    if (modeParam) return;
+    try {
+      const saved = window.localStorage.getItem('lyo_classroom_display_mode');
+      if (saved === 'focus' || saved === 'live' || saved === 'review') {
+        setPendingDisplayMode(saved);
+        if (!needsModeChoice) setDisplayMode(saved);
+      }
+    } catch { /* Private browsing must not prevent a lesson. */ }
+  }, [modeParam, needsModeChoice]);
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
@@ -247,22 +279,37 @@ function ClassroomStage() {
 
   // History and narration transport are shown only when actionable.
   const canGoBack = viewingBoard === -1 ? totalBoards > 0 : viewingBoard > 0;
-  const canGoNext = viewingBoard !== -1 || isNarrating;
   const goBack = () => {
     if (viewingBoard === -1) viewBoard(totalBoards - 1);
     else viewBoard(viewingBoard - 1);
   };
   const goNext = () => {
-    if (viewingBoard === -1) {
-      if (isNarrating) skipTurn();
-      return;
-    }
+    if (viewingBoard === -1) return;
     viewBoard(viewingBoard >= totalBoards - 1 ? -1 : viewingBoard + 1);
   };
-  const nextLabel = viewingBoard === -1 ? 'Skip' : 'Next';
-  const nextTitle = viewingBoard !== -1
-    ? 'Step forward through earlier boards'
-    : 'Skip ahead — cuts the current line short';
+  const canAdvanceStep = viewingBoard !== -1 || readyToContinue;
+  const chooseDisplayMode = (selected: ClassroomDisplayMode) => {
+    setDisplayMode(selected);
+    setPendingDisplayMode(selected);
+    try {
+      if (rememberMode) window.localStorage.setItem('lyo_classroom_display_mode', selected);
+      else window.localStorage.removeItem('lyo_classroom_display_mode');
+    } catch { /* Preference is optional. */ }
+    if (!hasStarted) {
+      // This is the only time a visual choice determines the server track.
+      setMode(selected === 'live' ? 'classroom' : 'solo');
+      setHasStarted(true);
+    } else if (selected === 'review' && viewingBoard === -1 && totalBoards > 0) {
+      viewBoard(totalBoards - 1);
+    } else if (selected !== 'review' && viewingBoard !== -1) {
+      viewBoard(-1);
+    }
+    setModePickerOpen(false);
+  };
+  const openModePicker = () => {
+    setPendingDisplayMode(displayMode);
+    setModePickerOpen(true);
+  };
   // Lyo owns the teacher position beside the transcript. There is no
   // participant rail: the backend has no real peers to put in one, so the
   // only honest number of classmates to draw is none. CAST survives below
@@ -388,12 +435,13 @@ function ClassroomStage() {
 
   return (
     <div
-      className="relative mx-auto flex h-full min-h-0 max-w-5xl flex-col overflow-hidden pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+      data-classroom-display-mode={displayMode}
+      className="relative mx-auto flex h-full min-h-0 max-w-7xl flex-col overflow-hidden bg-gradient-to-b from-[#0a102a] via-[#101735] to-[#0c1230] pb-[max(0.5rem,env(safe-area-inset-bottom))]"
       style={visualHeight ? { height: visualHeight } : undefined}
     >
 
-      {/* ── Top bar ── */}
-      <div className="flex items-start gap-2 border-b border-lyo-400/10 bg-gradient-to-r from-lyo-500/10 via-transparent to-accent-purple/5 px-3 py-2 sm:gap-3 sm:px-4">
+      {/* ── Premium Classroom header ── */}
+      <div className="flex items-start gap-2 border-b border-[#6567b0]/25 bg-gradient-to-b from-[#0a102a] to-[#111a3a] px-2 py-2 sm:gap-3 sm:px-4">
         <button
           onClick={() => router.back()}
           aria-label="Leave classroom"
@@ -423,6 +471,12 @@ function ClassroomStage() {
           )}
         </div>
         <div className="ml-auto flex items-center gap-1">
+          <button type="button" onClick={openModePicker}
+            aria-label="Choose classroom mode" aria-haspopup="dialog"
+            className="inline-flex min-h-10 items-center gap-1 rounded-full border border-[#b282ff]/55 bg-[#24215c] px-2.5 text-[11px] font-bold text-white sm:px-3">
+            <span className="hidden text-white/65 sm:inline">Mode:</span>
+            {displayMode === 'focus' ? 'Focus' : displayMode === 'live' ? 'Live Class' : 'Review'} <span aria-hidden="true">⌄</span>
+          </button>
           <button
             onClick={toggleVoice}
             title={voiceOn ? 'Mute voices' : 'Hear the class speak'}
@@ -477,21 +531,15 @@ function ClassroomStage() {
               Your notebook
             </button>
           </div>
-          <label className="space-y-1">
+          <div className="space-y-1">
             <span className="flex items-center gap-1.5 font-semibold text-white">
-              <Gauge className="h-3.5 w-3.5" /> Learning mode
+              <Gauge className="h-3.5 w-3.5" /> Classroom mode
             </span>
-            <select
-              value={mode}
-              onChange={(event) => setMode(event.target.value as ClassroomMode)}
-              className="w-full rounded-lg border border-white/15 bg-[var(--background)] px-2 py-2 text-white"
-            >
-              <option value="solo">Solo teacher</option>
-              <option value="classroom">Classroom discussion</option>
-              <option value="challenge">Challenge mode</option>
-              <option value="review">Spaced review</option>
-            </select>
-          </label>
+            <button type="button" onClick={() => { setSettingsOpen(false); openModePicker(); }}
+              className="min-h-10 w-full rounded-lg border border-white/15 bg-[var(--background)] px-2 py-2 text-left text-white">
+              {displayMode === 'focus' ? 'Focus Mode' : displayMode === 'live' ? 'Live Class' : 'Review & Resume'} · Change
+            </button>
+          </div>
           <label className="space-y-1">
             <span className="flex items-center gap-1.5 font-semibold text-white">
               <Timer className="h-3.5 w-3.5" /> Session target
@@ -537,14 +585,21 @@ function ClassroomStage() {
       {/* A real teacher character, not Lyo. ClassroomCaptionSync owns
           the visual text; this component owns the semantic live region. */}
       <div className={cn(
-        'mx-3 mb-2 flex min-h-[68px] shrink-0 items-center gap-2.5 rounded-2xl border bg-gradient-to-r from-[#17203F] to-[#0D142E] px-3 py-1.5 shadow-[0_8px_22px_rgba(2,6,23,0.24)] sm:mx-4 sm:gap-3 sm:px-4',
-        'border-lyo-400/25',
+        'mx-3 mb-2 flex shrink-0 items-center gap-2.5 rounded-[22px] border px-3 py-2 shadow-[0_8px_22px_rgba(2,6,23,0.24)] sm:mx-4 sm:gap-3 sm:px-4',
+        displayMode === 'live' ? 'min-h-[104px] border-[#83bbff]/35 bg-gradient-to-r from-[#141b43] to-[#19254c]'
+          : displayMode === 'review' ? 'min-h-[72px] border-[#b282ff]/35 bg-gradient-to-r from-[#141b43] to-[#221c4f]'
+          : 'min-h-[65px] border-[#b282ff]/30 bg-gradient-to-r from-[#17203f] to-[#0d142e]',
       )}>
         <motion.img
-          key={currentCharacter.id}
-          src={currentCharacter.image}
-          alt={`${currentCharacter.name} — ${currentCharacter.id.startsWith('student_') ? 'AI classmate' : 'AI teacher'}`}
-          className="h-10 w-10 shrink-0 rounded-xl border border-white/10 bg-white/95 object-contain shadow-[0_6px_16px_rgba(0,0,0,0.25)] sm:h-12 sm:w-12"
+          key={displayMode === 'live' ? currentCharacter.id : instructor.id}
+          src={displayMode === 'live' ? currentCharacter.image : instructor.image}
+          alt={displayMode === 'live' && currentCharacter.id.startsWith('student_')
+            ? `${currentCharacter.name}, participating AI classmate` : `${instructor.name}, your AI teacher`}
+          className={cn(
+            'shrink-0 rounded-xl border border-white/10 bg-white/95 object-contain shadow-[0_6px_16px_rgba(0,0,0,0.25)]',
+            displayMode === 'live' ? 'h-[74px] w-[74px] sm:h-24 sm:w-24'
+              : 'h-12 w-12 sm:h-14 sm:w-14',
+          )}
           initial={animationsOff ? false : { scale: 0.7 }}
           animate={{ scale: 1, rotate: 0, y: 0 }}
           transition={{ duration: animationsOff ? 0 : 0.3 }}
@@ -552,7 +607,9 @@ function ClassroomStage() {
         <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-lyo-300">
-              {currentCharacter.id.startsWith('student_') ? `${currentCharacter.name} · AI classmate` : `${instructor.name} · AI teacher`}
+              {displayMode === 'review' ? 'Review · your saved learning' :
+                displayMode === 'focus' ? `${instructor.name} · your teacher` :
+                currentCharacter.id.startsWith('student_') ? `${currentCharacter.name} · AI classmate` : `${instructor.name} · AI teacher`}
             </p>
             {caption && <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }} className="min-h-11 text-[11px] text-[var(--text-secondary)] underline underline-offset-2">Full transcript</button>}
           </div>
@@ -575,7 +632,7 @@ function ClassroomStage() {
       </div>
 
       {/* Lyo is the learner's companion. Never use this image as the teacher. */}
-      <div className="mx-3 mb-1.5 flex shrink-0 items-center gap-2 rounded-xl border border-lyo-400/15 bg-lyo-500/5 px-2.5 py-1 sm:mx-4">
+      {displayMode !== 'focus' && <div className="mx-3 mb-1.5 flex shrink-0 items-center gap-2 rounded-xl border border-lyo-400/15 bg-lyo-500/5 px-2.5 py-1 sm:mx-4">
         <img src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
           alt="Lyo, your study companion" className="h-6 w-6 object-contain" />
         <span className="min-w-0 flex-1 truncate text-[11px] text-white/65"><strong className="text-lyo-200">Lyo</strong> · Your study companion</span>
@@ -583,39 +640,27 @@ function ClassroomStage() {
           {visibleClassmates.map((peer) => <img key={peer.id} src={peer.image} alt={`${peer.name}, AI classmate`}
             title={peer.name} className="h-6 w-6 rounded-full border border-white/15 bg-white object-cover" />)}
         </div>}
-      </div>
+      </div>}
 
       {/* The board grows with the lesson. Only this area scrolls when a scene
           is longer than the available phone height; the teacher stays visible. */}
       {(shownBoard.length > 0 || !prompt || error) && (
       <div ref={boardScrollRef} className="mx-2 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1 sm:mx-4" aria-label="Interactive blackboard" role="region">
         <div className={cn(
-          'flex min-h-[240px] flex-col overflow-hidden rounded-[22px] border border-lyo-400/30',
-          'bg-gradient-to-b from-[#17203F] via-[#0D142E] to-[#0A0F24]',
+          'flex min-h-[240px] flex-col overflow-hidden rounded-[22px] border',
+          displayMode === 'live' ? 'border-[#83bbff]/35 bg-gradient-to-b from-[#18244c] via-[#121a3b] to-[#0d1335]'
+            : displayMode === 'review' ? 'border-[#b282ff]/35 bg-gradient-to-b from-[#172044] via-[#111735] to-[#0d1335]'
+            : 'border-[#b282ff]/35 bg-gradient-to-b from-[#17203f] via-[#0d142e] to-[#0a0f24]',
           'shadow-[inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_70px_rgba(2,6,23,0.35),0_14px_40px_rgba(2,6,23,0.36)]',
         )}>
-            <div className="flex min-h-11 shrink-0 items-center justify-between gap-1 border-b border-lyo-400/20 bg-lyo-500/10 px-2 py-1">
-              <div className="min-w-20">
-                {canGoBack && (
-                  <button onClick={goBack} title="Previous board"
-                    className="flex min-h-10 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-white/75 hover:bg-white/5 hover:text-white">
-                    <ChevronLeft className="h-4 w-4" /> Back
-                  </button>
-                )}
-              </div>
-              <span className="flex min-w-0 items-center gap-1.5 truncate text-[10px] font-bold uppercase tracking-[0.13em] text-lyo-200">
-                <NotebookPen className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span className="truncate">Interactive blackboard</span>
-                {viewingBoard !== -1 && <span className="text-white/50">{viewingBoard + 1}/{totalBoards}</span>}
+            <div className="flex min-h-11 shrink-0 items-center justify-between gap-2 border-b border-lyo-400/20 bg-lyo-500/10 px-4 py-2">
+              <span className="flex min-w-0 items-center gap-2 truncate text-[11px] font-bold uppercase tracking-[0.09em] text-lyo-200">
+                <NotebookPen className="h-4 w-4 shrink-0" aria-hidden="true" />
+                {displayMode === 'focus' ? 'Interactive Blackboard' : displayMode === 'live' ? "Today's challenge" : 'Review your learning'}
               </span>
-              <div className="flex min-w-20 justify-end">
-                {canGoNext && (
-                  <button onClick={goNext} title={nextTitle}
-                    className="flex min-h-10 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-white/80 hover:bg-white/5 hover:text-white">
-                    {nextLabel} <ChevronRight className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
+              <span className="shrink-0 text-xs text-white/50">
+                {viewingBoard === -1 ? 'Current lesson' : `Step ${viewingBoard + 1} of ${totalBoards}`}
+              </span>
             </div>
 
           <div className="space-y-3 px-3 py-3 sm:space-y-5 sm:px-7 sm:py-6">
@@ -816,6 +861,25 @@ function ClassroomStage() {
         )}
       </AnimatePresence>
 
+      {/* Persistent, backend-safe step navigation on all three layouts. */}
+      <nav className="mx-3 mt-2 flex min-h-12 shrink-0 items-center gap-2 rounded-[20px] border border-[#b282ff]/35 bg-[#121b3d] px-2 py-1.5 sm:mx-4"
+        aria-label="Classroom step navigation">
+        <button type="button" onClick={goBack} disabled={!canGoBack}
+          className="min-h-10 flex-1 rounded-xl px-2 text-xs font-semibold text-white hover:bg-white/10 disabled:cursor-not-allowed disabled:text-white/30"
+          aria-label="Previous lesson step"><ChevronLeft className="mr-1 inline h-4 w-4" />Previous</button>
+        <span className="min-w-[72px] text-center text-[11px] font-semibold text-white/70" aria-live="polite">
+          {viewingBoard === -1 ? `Live · ${Math.max(1, totalBoards + 1)}` : `${viewingBoard + 1} / ${Math.max(1, totalBoards)}`}
+        </span>
+        <button type="button"
+          onClick={() => { if (viewingBoard !== -1) goNext(); else if (readyToContinue) continueLesson(); }}
+          disabled={!canAdvanceStep}
+          className="min-h-10 flex-1 rounded-xl bg-gradient-to-r from-[#655bfa] to-[#aa50f5] px-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-none disabled:bg-white/5 disabled:text-white/35"
+          aria-label={viewingBoard !== -1 ? 'Next saved lesson step' : 'Continue lesson safely'}>
+          {viewingBoard !== -1 ? (viewingBoard >= totalBoards - 1 ? 'Resume' : 'Next') : displayedContinueLabel}
+          <ChevronRight className="ml-1 inline h-4 w-4" />
+        </button>
+      </nav>
+
       {/* No seated cast row.
         *
         * The four classmates this used to draw were not real. The backend's
@@ -837,19 +901,11 @@ function ClassroomStage() {
             {deskDisabledReason}
           </p>
         )}
-        {readyToContinue && (
-          <button
-            onClick={continueLesson}
-            className="min-h-11 w-full rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple py-2 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.22)] transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {displayedContinueLabel} →
-          </button>
-        )}
-        <div className="grid grid-cols-3 items-stretch gap-2">
-          <div className="relative">
+        <div className={cn('grid items-stretch gap-2', displayMode === 'review' ? 'grid-cols-3' : 'grid-cols-4')}>
+          {displayMode !== 'live' && <div className="relative">
             <button
               onClick={() => setHintMenuOpen((open) => !open)}
-              disabled={!live}
+              disabled={!live || viewingBoard !== -1}
               title={live ? undefined : deskDisabledReason}
               aria-expanded={hintMenuOpen}
               aria-haspopup="menu"
@@ -875,19 +931,19 @@ function ClassroomStage() {
                 ))}
               </div>
             )}
-          </div>
-          <button
+          </div>}
+          {displayMode !== 'review' && <button
             onClick={() => signal('too_easy')}
-            disabled={!live}
+            disabled={!live || viewingBoard !== -1}
             title={live ? undefined : deskDisabledReason}
             className="flex min-h-12 w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.06] px-2 py-2 text-xs font-semibold text-white/80 transition-colors hover:border-accent-purple/35 hover:bg-accent-purple/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Zap className="h-4 w-4 text-accent-purple" /> Challenge
-          </button>
+          </button>}
 
-          <button
+          {displayMode === 'live' && <button
             onClick={() => setHandRaised((raised) => !raised)}
-            disabled={!live}
+            disabled={!live || viewingBoard !== -1}
             title={live ? undefined : deskDisabledReason}
             aria-expanded={handRaised}
             className={cn(
@@ -900,9 +956,21 @@ function ClassroomStage() {
             )}
           >
             <Hand className="h-4 w-4" /> Raise hand
+          </button>}
+          <button type="button"
+            onClick={() => { setHandRaised(true); if (speechSupported) toggleDictation('question'); }}
+            disabled={!live || viewingBoard !== -1 || !speechSupported}
+            aria-label="Speak to your teacher"
+            className="flex min-h-12 items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.06] px-1 text-xs font-semibold text-white/80 disabled:opacity-35">
+            <Mic className="h-4 w-4 text-[#b282ff]" /> {displayMode === 'live' ? 'Talk' : 'Speak'}
           </button>
-          {handRaised && (
-            <div className="col-span-3 flex gap-2 pt-1">
+          <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }}
+            aria-label="Open classroom notebook and transcript"
+            className="flex min-h-12 items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/[0.06] px-1 text-xs font-semibold text-white/80">
+            <NotebookPen className="h-4 w-4 text-[#b282ff]" /> More
+          </button>
+          {handRaised && viewingBoard === -1 && (
+            <div className={cn('flex gap-2 pt-1', displayMode === 'review' ? 'col-span-3' : 'col-span-4')}>
               <input
                 autoFocus
                 value={question}
@@ -943,6 +1011,72 @@ function ClassroomStage() {
           )}
         </div>
       </div>
+
+      {/* Three premium layouts share one canonical lesson and grading state. */}
+      <AnimatePresence>
+        {modePickerOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            role="dialog" aria-modal="true" aria-labelledby="classroom-mode-heading"
+            className="fixed inset-0 z-[80] flex justify-center overflow-y-auto bg-gradient-to-b from-[#101638] via-[#0a102c] to-[#17103c] px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(6rem,env(safe-area-inset-bottom))]">
+            <div className="flex w-full max-w-xl flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold tracking-[0.12em] text-white/80">✦ LYO CLASSROOM</span>
+                {hasStarted && <button type="button" onClick={() => setModePickerOpen(false)}
+                  className="min-h-11 min-w-11 rounded-full bg-white/10 text-white"
+                  aria-label="Close classroom mode selector"><X className="mx-auto h-5 w-5" /></button>}
+              </div>
+              <h2 id="classroom-mode-heading" className="font-rounded text-3xl font-bold leading-tight text-white sm:text-4xl">
+                Choose your<br />classroom mode
+              </h2>
+              <p className="text-sm leading-relaxed text-[#b8bbdc]">
+                Three ways to learn. You can switch anytime without losing your progress.
+              </p>
+              <div role="radiogroup" aria-label="Classroom display mode" className="mt-1 flex flex-col gap-3">
+                {DISPLAY_MODE_OPTIONS.map((option) => (
+                  <button key={option.key} type="button" role="radio"
+                    aria-checked={pendingDisplayMode === option.key}
+                    onClick={() => setPendingDisplayMode(option.key)}
+                    className={cn(
+                      'flex min-h-[104px] items-center gap-4 rounded-[20px] border px-4 py-3 text-left transition-colors',
+                      pendingDisplayMode === option.key
+                        ? 'border-[#b282ff] bg-gradient-to-r from-[#2a2261] to-[#262054] shadow-[0_10px_30px_rgba(99,102,241,0.2)]'
+                        : 'border-[#52528e]/70 bg-gradient-to-r from-[#131d42] to-[#101632] hover:border-[#b282ff]/70',
+                    )}>
+                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#272252] text-2xl text-[#d7b8ff]">
+                      {option.key === 'focus' ? <NotebookPen className="h-7 w-7" /> :
+                        option.key === 'live' ? <AudioLines className="h-7 w-7" /> : '↻'}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-base font-bold text-white">{option.label}</span>
+                      <span className="mt-1 block text-xs leading-relaxed text-[#b8bbdc]">{option.description}</span>
+                    </span>
+                    <span className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2',
+                      pendingDisplayMode === option.key ? 'border-[#b282ff] bg-[#8f5cf8]' : 'border-[#7776a9]')}>
+                      {pendingDisplayMode === option.key && <span className="text-xs text-white">✓</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <label className="mt-1 flex min-h-11 items-center gap-3 text-sm text-white">
+                <input type="checkbox" checked={rememberMode} onChange={(event) => setRememberMode(event.target.checked)}
+                  className="h-4 w-4 accent-[#8f5cf8]" />
+                Remember my choice on this device
+              </label>
+              <div className="sticky bottom-0 mt-auto rounded-2xl bg-[#0a102c]/95 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
+                <button type="button" onClick={() => chooseDisplayMode(pendingDisplayMode)}
+                  className="min-h-14 w-full rounded-[17px] border border-[#d7b8ff]/55 bg-gradient-to-r from-[#655bfa] to-[#aa50f5] px-5 text-base font-bold text-white shadow-lg shadow-[#655bfa]/20"
+                  aria-label={hasStarted ? 'Switch classroom mode' : 'Start lesson'}>
+                  {hasStarted ? 'Switch mode' : 'Start lesson'} →
+                </button>
+                <p className="mt-2 text-center text-xs text-[#b8bbdc]">
+                  Your lesson history and answers stay safe when changing modes.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ── Notebook drawer — the transcript, a byproduct ── */}
       <AnimatePresence>
