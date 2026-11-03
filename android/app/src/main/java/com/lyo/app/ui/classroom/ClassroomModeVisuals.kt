@@ -1,6 +1,7 @@
 package com.lyo.app.ui.classroom
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -185,5 +186,48 @@ fun ClassroomBoardHeading(mode: ClassroomDisplayMode, paused: Boolean) {
         )
         Text(if (paused) "Paused" else "●", color = if (paused) Amber else Mint,
             style = MaterialTheme.typography.labelSmall)
+    }
+}
+
+/** Temporary, dismissible Lyo insight. Never consumes a permanent content row. */
+@Composable
+fun FocusLyoTipOverlay(
+    message: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(
+                Brush.horizontalGradient(listOf(Color(0xFF1E265B), Color(0xFF281A60))),
+                RoundedCornerShape(20.dp),
+            )
+            .border(1.dp, Violet.copy(alpha = 0.72f), RoundedCornerShape(20.dp))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        TransparentClassroomPortrait(
+            drawableRes = com.lyo.app.R.drawable.mascot_reading_1,
+            contentDescription = "Lyo, your companion",
+            modifier = Modifier.size(40.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Lyo's tip", color = Violet, style = MaterialTheme.typography.labelSmall)
+            Text(
+                cleanClassroomText(message).take(160),
+                color = TextPrimary,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Text(
+            "✕",
+            color = TextSecondary,
+            modifier = Modifier.clickable(onClick = onDismiss).padding(6.dp),
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
