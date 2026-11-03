@@ -269,15 +269,21 @@ fun ClassroomScreen(
                     if (isAutoRecovery && !engine.isReviewingPastStep &&
                         (engine.stallPhase == ClassroomStallPhase.STALLED || engine.status == "error")
                     ) {
-                        StallRecoveryCard(
-                            onAskAgain = {
+                        PremiumClassroomRecovery(
+                            lastLessonText = engine.transcript.lastOrNull {
+                                !it.speaker.equals("You", ignoreCase = true)
+                            }?.text,
+                            canReviewPrevious = engine.stepCount > 1,
+                            isFatal = engine.status == "error",
+                            onRetry = {
                                 if (engine.status == "error") {
                                     resumeSeat = null
                                     sessionAttempt += 1
                                 } else engine.nudgeTeacher()
                                 chrome.poke()
                             },
-                            onStartOver = {
+                            onReviewPrevious = { engine.previousStep(); chrome.poke() },
+                            onRestart = {
                                 resumeSeat = null
                                 sessionAttempt += 1
                                 chrome.poke()
@@ -339,8 +345,7 @@ fun ClassroomScreen(
                 }
             }
 
-            renderedMode?.takeIf { it != ClassroomDisplayMode.SOLO &&
-                activeDisplayMode != ClassroomDisplayMode.SOLO }?.let { mode ->
+            renderedMode?.let { mode ->
                 ClassroomModeCompanion(
                     mode = mode,
                     transcript = engine.transcript,
@@ -365,19 +370,19 @@ fun ClassroomScreen(
                 }
             }
 
-            if (activeDisplayMode == ClassroomDisplayMode.SOLO) {
-                FocusStepNavigation(engine)
-            } else if (activeDisplayMode != null) {
+            if (activeDisplayMode != null) {
                 ClassroomStepNavigation(engine)
             }
-            AnimatedVisibility(visible = !engine.isReviewingPastStep && (chrome.visible || engine.canContinue)) {
-                BottomActionDock(
-                    canContinue = engine.canContinue && activeDisplayMode != ClassroomDisplayMode.SOLO,
+            renderedMode?.let { mode ->
+                PremiumClassroomDock(
+                    mode = mode,
+                    canContinue = engine.canContinue && !engine.isReviewingPastStep,
                     continueLabel = engine.continueLabel,
-                    onContinue = { engine.continueLesson(); chrome.poke() },
+                    onContinue = { if (engine.mayAdvanceLiveStep) engine.continueLesson(); chrome.poke() },
                     onAskQuestion = { text -> engine.askQuestion(text); chrome.poke() },
                     onHint = { engine.requestHint("nudge"); chrome.poke() },
                     onTooEasy = { engine.signalTooEasy(); chrome.poke() },
+                    allowLiveActions = !engine.isReviewingPastStep && !isAutoRecovery && !engine.isPaused,
                 )
             }
         }
