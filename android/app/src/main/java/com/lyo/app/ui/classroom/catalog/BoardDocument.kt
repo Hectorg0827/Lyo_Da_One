@@ -1,6 +1,9 @@
 package com.lyo.app.ui.classroom.catalog
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,7 +32,15 @@ fun BoardDocumentView(document: ClassroomBoardDocument) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             document.blocks.forEach { block ->
                 when (block.kind) {
-                    "code" -> Column(Modifier.background(Background, RoundedCornerShape(12.dp)).padding(12.dp)) {
+                    "code" -> Column(
+                        Modifier.fillMaxWidth()
+                            .background(
+                                Brush.horizontalGradient(listOf(Color(0xFF202252), Color(0xFF181F45))),
+                                RoundedCornerShape(16.dp),
+                            )
+                            .border(1.dp, LyoVioletLight.copy(alpha = .30f), RoundedCornerShape(16.dp))
+                            .padding(14.dp),
+                    ) {
                         if ((looksLikeMathLesson(block.text) || containsLessonMath(block.text)) && (block.language.isBlank() || block.language in listOf("text", "plain", "math", "latex"))) {
                             LessonRichText(block.text)
                         } else {
@@ -43,8 +54,9 @@ fun BoardDocumentView(document: ClassroomBoardDocument) {
                         block.rows.forEach { row ->
                             Column(
                                 modifier = Modifier.fillMaxWidth()
-                                    .background(Background, RoundedCornerShape(12.dp))
-                                    .padding(12.dp),
+                                    .background(Color(0xFF1A2148), RoundedCornerShape(15.dp))
+                                    .border(1.dp, LyoVioletLight.copy(alpha = .24f), RoundedCornerShape(15.dp))
+                                    .padding(14.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 row.forEachIndexed { col, cell ->
