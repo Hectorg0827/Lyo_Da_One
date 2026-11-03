@@ -19,6 +19,7 @@ import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
 import { TeachingVisualView } from './TeachingVisualView';
 import { BoardDocumentView } from './BoardDocumentView';
+import { ClassroomRichText } from './ClassroomRichText';
 
 let mermaidReady: Promise<typeof import('mermaid')> | null = null;
 function loadMermaid() {
@@ -270,7 +271,7 @@ function ChalkView({ text, reducedMotion }: { text: string; reducedMotion: boole
   return (
     <div className="space-y-2.5">
       {beats.map((beat, i) => (
-        <motion.p
+        <motion.div
           key={i}
           initial={reducedMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -279,8 +280,10 @@ function ChalkView({ text, reducedMotion }: { text: string; reducedMotion: boole
             : { delay: i * 0.5, duration: 0.4, ease: 'easeOut' }}
           className="text-white/95 text-lg leading-relaxed font-medium [text-shadow:0_0_14px_rgba(167,139,250,0.25)]"
         >
-          {withExpressions(beat)}
-        </motion.p>
+          {beat.includes('$') || beat.includes('\\(') || beat.includes('\\[')
+            ? <ClassroomRichText text={beat} />
+            : withExpressions(beat)}
+        </motion.div>
       ))}
     </div>
   );
@@ -304,7 +307,7 @@ function QuizView({
       <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
         {isSpanish ? 'Tu turno — comprobación' : 'Your turn — checkpoint'}
       </p>
-      <p className="whitespace-pre-line text-base font-medium leading-relaxed text-white">{quiz.question}</p>
+      <ClassroomRichText text={quiz.question ?? ''} className="text-base font-medium leading-relaxed text-white" />
       <div className="grid gap-2 sm:grid-cols-2">
         {(quiz.options ?? []).map((opt) => {
           const chosen = el.answered === opt.label;
@@ -322,7 +325,7 @@ function QuizView({
                 !chosen && locked && 'bg-white/[0.03] border-white/10 text-white/65',
               )}
             >
-              <span>{opt.label}</span>
+              <ClassroomRichText text={opt.label} className="min-w-0 flex-1" />
               {chosen && el.wasCorrect === undefined && (
                 <span className="shrink-0 text-[11px] font-bold text-lyo-100">
                   {isSpanish ? 'Elegida' : 'Selected'}
@@ -377,7 +380,7 @@ function QuizView({
         </p>
       )}
       {el.feedback && (
-        <p
+        <div
           className={cn(
             'text-sm rounded-lg border px-3 py-2',
             el.wasCorrect === undefined
@@ -388,8 +391,8 @@ function QuizView({
           )}
           role="status"
         >
-          {el.feedback}
-        </p>
+          <ClassroomRichText text={el.feedback} />
+        </div>
       )}
     </div>
   );
@@ -524,12 +527,13 @@ function TransferView({
       <p className="text-[11px] font-black tracking-widest text-lyo-200 uppercase">
         {isSpanish ? 'Tu turno' : 'Your turn'}
       </p>
-      <label htmlFor={`transfer-${el.id}`} className="block whitespace-pre-line text-white text-base font-medium leading-relaxed">
-        {el.input.question || (isSpanish ? '¿Cómo usarías esta idea?' : 'How would you use this idea?')}
-      </label>
+      <div id={`transfer-question-${el.id}`} className="text-base font-medium leading-relaxed text-white">
+        <ClassroomRichText text={el.input.question || (isSpanish ? '¿Cómo usarías esta idea?' : 'How would you use this idea?')} />
+      </div>
       <textarea
         ref={textareaRef}
         id={`transfer-${el.id}`}
+        aria-labelledby={`transfer-question-${el.id}`}
         value={response}
         disabled={locked}
         rows={3}
@@ -625,7 +629,7 @@ function SummaryView({ el, compactText }: { el: Extract<BoardElement, { kind: 's
         <BookOpenCheck className={cn('mt-0.5 h-4 w-4 shrink-0', recovery ? 'text-[var(--warning)]' : 'text-lyo-300')} /> {el.title}
       </h3>
       {collapse ? <details className="text-sm text-[var(--text-secondary)]"><summary className="cursor-pointer">Read supporting notes</summary><div className="mt-3">{content}</div></details> : content}
-      {el.items.length > 0 && <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--text-secondary)]">{el.items.map((item, index) => <li key={index}>{item}</li>)}</ul>}
+      {el.items.length > 0 && <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--text-secondary)]">{el.items.map((item, index) => <li key={index}><ClassroomRichText text={item} /></li>)}</ul>}
       {el.retrievalScheduled && <p className="text-xs font-semibold text-lyo-300">Spaced retrieval scheduled</p>}
     </section>
   );
@@ -766,7 +770,7 @@ export function BoardElementView({
               className="flex items-start gap-3 text-white/90 text-base"
             >
               <span className="mt-2 w-2 h-2 rounded-full bg-accent-gold shrink-0" />
-              <span>{item}</span>
+              <ClassroomRichText text={item} className="min-w-0 flex-1" />
             </motion.li>
           ))}
         </ul>

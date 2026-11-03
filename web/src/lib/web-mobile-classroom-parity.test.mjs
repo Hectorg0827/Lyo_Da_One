@@ -35,3 +35,23 @@ test('Web mobile hides its dock while Live or Classroom owns the screen', () => 
   assert.match(live, /lyo-live-magic__main/);
   assert.match(live, /lyo-live-magic__composer/);
 });
+
+
+test('short-screen mode picker scrolls choices independently of the always-visible action', () => {
+  assert.ok(classroom.includes('data-classroom-mode-options'));
+  assert.ok(classroom.includes('data-classroom-mode-footer'));
+  assert.ok(classroom.includes('min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto'));
+  assert.ok(!classroom.includes('sticky bottom-0 mt-auto rounded-2xl'));
+});
+
+test('web Classroom renders teacher prompts using the same math-aware component as the board', () => {
+  const board = readFileSync(new URL('../components/classroom/BoardElementView.tsx', import.meta.url), 'utf8');
+  const rich = readFileSync(new URL('../components/classroom/ClassroomRichText.tsx', import.meta.url), 'utf8');
+  assert.ok(classroom.includes('ClassroomRichText text={prompt.text}'));
+  assert.ok(board.includes('ClassroomRichText text={quiz.question'));
+  assert.ok(board.includes('ClassroomRichText text={opt.label}'));
+  assert.ok(board.includes('ClassroomRichText text={el.feedback}'));
+  assert.ok(rich.includes('remarkMath'));
+  assert.ok(rich.includes('rehypeKatex'));
+  assert.ok(rich.includes('katex-display'));
+});
