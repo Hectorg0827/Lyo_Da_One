@@ -90,7 +90,7 @@ fun PremiumClassroomHeader(
             ) { Icon(Icons.Filled.ArrowBack, "Leave classroom", tint = Color.White) }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "✦  Lyo Classroom",
+                    text = if (mode == ClassroomDisplayMode.SOLO) topic else "✦  Lyo Classroom",
                     color = Color.White,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
@@ -98,7 +98,9 @@ fun PremiumClassroomHeader(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = topic,
+                    text = if (mode == ClassroomDisplayMode.SOLO)
+                        (if (isPaused) "● Paused" else if (isConnecting) "○ Loading" else "● Live lesson")
+                    else topic,
                     color = Color(0xFFB1B9DC),
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
@@ -127,9 +129,14 @@ fun PremiumClassroomHeader(
                 )
                 Text("⌄", color = Color.White)
             }
+            if (mode == ClassroomDisplayMode.SOLO) {
+                IconButton(onClick = { toolsOpen = !toolsOpen }, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.MoreHoriz, "Classroom tools", tint = TextPrimary)
+                }
+            }
         }
 
-        Row(
+        if (mode != ClassroomDisplayMode.SOLO) Row(
             modifier = Modifier.fillMaxWidth().padding(start = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
