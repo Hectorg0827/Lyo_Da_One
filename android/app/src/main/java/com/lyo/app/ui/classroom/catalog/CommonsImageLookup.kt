@@ -26,15 +26,15 @@ internal fun safeCommonsImageUrl(value: String?): String? {
 /** Never trust arbitrary remote JSON URLs, and never send signed-in app tokens. */
 internal fun parseCommonsClassroomImage(json: String): CommonsClassroomImage? = runCatching {
     val root = JsonParser.parseString(json).asJsonObject
-    val pages = root.getAsJsonObject("query")?.getAsJsonObject("pages") ?: return null
-    val page = pages.entrySet().firstOrNull()?.value?.asJsonObject ?: return null
-    val imageInfo = page.getAsJsonArray("imageinfo") ?: return null
-    val info = imageInfo.firstOrNull()?.asJsonObject ?: return null
+    val pages = root.getAsJsonObject("query")?.getAsJsonObject("pages") ?: return@runCatching null
+    val page = pages.entrySet().firstOrNull()?.value?.asJsonObject ?: return@runCatching null
+    val imageInfo = page.getAsJsonArray("imageinfo") ?: return@runCatching null
+    val info = imageInfo.firstOrNull()?.asJsonObject ?: return@runCatching null
     fun text(value: JsonElement?): String? =
         value?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString
     val resultUrl = safeCommonsImageUrl(text(info.get("thumburl")))
         ?: safeCommonsImageUrl(text(info.get("url")))
-        ?: return null
+        ?: return@runCatching null
     val title = text(page.get("title"))?.removePrefix("File:") ?: "Wikimedia Commons"
     CommonsClassroomImage(resultUrl, title.take(150))
 }.getOrNull()
