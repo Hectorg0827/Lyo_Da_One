@@ -9,9 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -140,11 +138,21 @@ fun ClassroomScreen(
     val isAutoRecovery = engine.stallPhase == ClassroomStallPhase.STALLED ||
         engine.status == "error" || engine.lessonRecovery
     val renderedMode = if (isAutoRecovery) ClassroomDisplayMode.REVIEW else activeDisplayMode
+    // The companion appears only after a real Lyo contribution, then leaves.
+    val lastLyoLine = engine.transcript.lastOrNull { it.speaker.equals("Lyo", ignoreCase = true) }
+    var showFocusLyoTip by remember(topic, courseId) { mutableStateOf(false) }
+    LaunchedEffect(lastLyoLine?.id) {
+        if (lastLyoLine != null) {
+            showFocusLyoTip = true
+            delay(5_500L)
+            showFocusLyoTip = false
+        }
+    }
+
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
             .background(Background),
     ) {
         // Background tap-catcher, drawn BEHIND everything below — Compose's
@@ -176,6 +184,8 @@ fun ClassroomScreen(
                     onToggleVoice = { engine.toggleVoice(); chrome.poke() },
                     onToggleNotebook = { notebookOpen = !notebookOpen; settingsOpen = false; chrome.poke() },
                     onToggleSettings = { settingsOpen = !settingsOpen; notebookOpen = false; chrome.poke() },
+                    focusModeLabel = if (activeDisplayMode == ClassroomDisplayMode.SOLO) "Focus" else null,
+                    onToggleMode = { showModePicker = true; chrome.poke() },
                 )
             }
 
@@ -204,7 +214,7 @@ fun ClassroomScreen(
                 )
             }
 
-            activeDisplayMode?.let { current ->
+            activeDisplayMode?.takeIf { it != ClassroomDisplayMode.SOLO }?.let { current ->
                 ClassroomModeSwitcher(current) { showModePicker = true }
             }
             // Three distinct presentations use the same teacher and live engine.
@@ -305,10 +315,23 @@ fun ClassroomScreen(
                         )
                     }
                     }
+                    if (activeDisplayMode == ClassroomDisplayMode.SOLO &&
+                        !isAutoRecovery && !engine.isReviewingPastStep &&
+                        showFocusLyoTip && lastLyoLine != null
+                    ) {
+                        FocusLyoTipOverlay(
+                            message = lastLyoLine.text,
+                            onDismiss = { showFocusLyoTip = false },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                        )
+                    }
                 }
             }
 
-            renderedMode?.let { mode ->
+            renderedMode?.takeIf { it != ClassroomDisplayMode.SOLO &&
+                activeDisplayMode != ClassroomDisplayMode.SOLO }?.let { mode ->
                 ClassroomModeCompanion(
                     mode = mode,
                     transcript = engine.transcript,
@@ -333,12 +356,14 @@ fun ClassroomScreen(
                 }
             }
 
-            if (activeDisplayMode != null) {
+            if (activeDisplayMode == ClassroomDisplayMode.SOLO) {
+                FocusStepNavigation(engine)
+            } else if (activeDisplayMode != null) {
                 ClassroomStepNavigation(engine)
             }
             AnimatedVisibility(visible = !engine.isReviewingPastStep && (chrome.visible || engine.canContinue)) {
                 BottomActionDock(
-                    canContinue = engine.canContinue,
+                    canContinue = engine.canContinue && activeDisplayMode != ClassroomDisplayMode.SOLO,
                     continueLabel = engine.continueLabel,
                     onContinue = { engine.continueLesson(); chrome.poke() },
                     onAskQuestion = { text -> engine.askQuestion(text); chrome.poke() },
