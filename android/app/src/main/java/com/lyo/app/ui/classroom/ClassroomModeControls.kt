@@ -66,17 +66,7 @@ fun ClassroomModePicker(
 ) {
     var selected by remember(current, suggested) { mutableStateOf(current ?: suggested) }
     val fullScreen = !canDismiss
-    Dialog(
-        onDismissRequest = { if (canDismiss) onDismiss() },
-        properties = DialogProperties(
-            dismissOnBackPress = canDismiss,
-            dismissOnClickOutside = canDismiss,
-            usePlatformDefaultWidth = false,
-            // This dialog uses a full-screen, edge-to-edge window on Android 15+.
-            // Apply safeDrawing insets explicitly rather than drawing over the nav bar.
-            decorFitsSystemWindows = false,
-        ),
-    ) {
+    val pickerContent: @Composable () -> Unit = {
         Column(
             modifier = (if (fullScreen) Modifier.fillMaxSize()
                 else Modifier.fillMaxWidth(.94f).fillMaxHeight(.90f))
@@ -261,6 +251,15 @@ fun ClassroomModePicker(
             }
             }
         }
+    }
+    if (fullScreen) {
+        // Use the real Activity window, not an edge-to-edge Dialog window.
+        Box(Modifier.fillMaxSize().background(DeepBlue)) { pickerContent() }
+    } else {
+        Dialog(onDismissRequest = onDismiss, properties = DialogProperties(
+            dismissOnBackPress = true, dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false, decorFitsSystemWindows = true,
+        )) { pickerContent() }
     }
 }
 
