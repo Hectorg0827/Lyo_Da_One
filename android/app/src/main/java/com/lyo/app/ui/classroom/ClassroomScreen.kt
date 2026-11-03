@@ -299,7 +299,7 @@ fun ClassroomScreen(
             if (activeDisplayMode != null) {
                 ClassroomStepNavigation(engine)
             }
-            AnimatedVisibility(visible = chrome.visible || engine.canContinue) {
+            AnimatedVisibility(visible = !engine.isReviewingPastStep && (chrome.visible || engine.canContinue)) {
                 BottomActionDock(
                     canContinue = engine.canContinue,
                     continueLabel = engine.continueLabel,
