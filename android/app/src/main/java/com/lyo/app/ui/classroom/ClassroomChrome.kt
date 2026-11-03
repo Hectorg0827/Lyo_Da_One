@@ -551,7 +551,7 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, topic: String,
                 if (speaker != null) {
                     Text(text = "${character.name} · ${if (character.id.startsWith("student_")) "AI classmate" else "AI teacher"}", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
                 }
-                Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(text = text.replace("**", "").replace("*", "").replace("$", ""), color = TextPrimary, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         } else {
             Text("Your teacher is preparing the next step…", color = TextSecondary, modifier = Modifier.weight(1f))
