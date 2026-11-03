@@ -132,7 +132,7 @@ fun ClassroomModeCompanion(
                 when {
                     speakingPeers.isNotEmpty() -> "Voices participating: " + speakingPeers.joinToString { it.name }
                     isGroupSession -> "Your classmates will appear as they participate."
-                    else -> "This lesson started solo; classmates join when you start a Live Class.",
+                    else -> "This lesson started solo; classmates join when you start a Live Class."
                 },
                 color = TextSecondary, style = MaterialTheme.typography.labelSmall,
             )
@@ -151,7 +151,7 @@ fun ClassroomModeCompanion(
                         ClassroomDisplayMode.CLASSROOM -> "Great ideas. Keep going!"
                         ClassroomDisplayMode.REVIEW -> if (isReviewingPastStep)
                             "This is a saved step. Your live class is unchanged."
-                        else "Ready whenever you want to continue.",
+                        else "Ready whenever you want to continue."
                     },
                     color = TextSecondary, style = MaterialTheme.typography.bodySmall,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
@@ -174,7 +174,7 @@ fun ClassroomBoardHeading(mode: ClassroomDisplayMode, paused: Boolean) {
                 paused -> "Your saved lesson"
                 mode == ClassroomDisplayMode.SOLO -> "Interactive Blackboard"
                 mode == ClassroomDisplayMode.CLASSROOM -> "Today's challenge"
-                else -> "Review & Resume",
+                else -> "Review & Resume"
             },
             color = modeAccent(mode),
             style = MaterialTheme.typography.titleMedium,
