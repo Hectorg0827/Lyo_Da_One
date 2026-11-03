@@ -36,6 +36,7 @@ import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 import SurfaceLoading from '@/components/ui/SurfaceLoading';
 import { classroomSpeaker, speakingClassmates, teacherForTopic } from '@/lib/classroom-cast.mjs';
+import { classroomNextAction } from '@/lib/classroom-navigation.mjs';
 
 type ClassroomDisplayMode = 'focus' | 'live' | 'review';
 
@@ -142,7 +143,7 @@ function ClassroomStage() {
     progressCurrent, progressTotal, error, notice, stallPhase, resumable, soundOn, voiceOn,
     speechRate, languageCode,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
-    askQuestion, signal, takeFloor, requestHint, continueLesson, toggleSound, toggleVoice,
+    askQuestion, signal, takeFloor, requestHint, continueLesson, skipTurn, toggleSound, toggleVoice,
     setSpeechRate, viewBoard, interruptPrompt,
     nudgeTeacher, restartLesson, resumeLesson, dismissNotice,
   } = useClassroomStore();
@@ -278,16 +279,16 @@ function ClassroomStage() {
     : primaryContinue;
 
   // History and narration transport are shown only when actionable.
-  const canGoBack = viewingBoard === -1 ? totalBoards > 0 : viewingBoard > 0;
+  const canGoBack = viewingBoard === -1 ? totalBoards > 0 || board.length > 1 : viewingBoard > 0;
   const goBack = () => {
-    if (viewingBoard === -1) viewBoard(totalBoards - 1);
+    if (viewingBoard === -1 && totalBoards > 0) viewBoard(totalBoards - 1);
+    else if (viewingBoard === -1) boardScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     else viewBoard(viewingBoard - 1);
   };
   const goNext = () => {
     if (viewingBoard === -1) return;
     viewBoard(viewingBoard >= totalBoards - 1 ? -1 : viewingBoard + 1);
   };
-  const canAdvanceStep = viewingBoard !== -1 || readyToContinue;
   const chooseDisplayMode = (selected: ClassroomDisplayMode) => {
     setDisplayMode(selected);
     setPendingDisplayMode(selected);
@@ -325,6 +326,24 @@ function ClassroomStage() {
   // Every desk control needs an open socket, so gate them on the session
   // actually being live rather than letting the click vanish.
   const live = status === 'live';
+  const nextAction = classroomNextAction({
+    viewingHistory: viewingBoard !== -1,
+    readyToContinue,
+    narrating: isNarrating,
+    stalled: stallPhase === 'stalled',
+    live,
+    waiting: waitingForScene,
+    hasCheckpoint: pendingCheckpoint,
+    hasPrompt: Boolean(prompt),
+  });
+  const handleNextAction = () => {
+    switch (nextAction.type) {
+      case 'history': goNext(); break;
+      case 'continue': continueLesson(); break;
+      case 'skip': skipTurn(); break;
+      case 'retry': nudgeTeacher(); break;
+    }
+  };
   const deskDisabledReason = status === 'connecting'
     ? 'Walking to class — one moment…'
     : status === 'ended'
@@ -871,11 +890,12 @@ function ClassroomStage() {
           {viewingBoard === -1 ? `Live · ${Math.max(1, totalBoards + 1)}` : `${viewingBoard + 1} / ${Math.max(1, totalBoards)}`}
         </span>
         <button type="button"
-          onClick={() => { if (viewingBoard !== -1) goNext(); else if (readyToContinue) continueLesson(); }}
-          disabled={!canAdvanceStep}
+          onClick={handleNextAction}
+          disabled={nextAction.disabled}
           className="min-h-10 flex-1 rounded-xl bg-gradient-to-r from-[#655bfa] to-[#aa50f5] px-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-none disabled:bg-white/5 disabled:text-white/35"
-          aria-label={viewingBoard !== -1 ? 'Next saved lesson step' : 'Continue lesson safely'}>
-          {viewingBoard !== -1 ? (viewingBoard >= totalBoards - 1 ? 'Resume' : 'Next') : displayedContinueLabel}
+          aria-label={nextAction.type === 'continue' ? displayedContinueLabel : nextAction.label}>
+          {nextAction.type === 'history' && viewingBoard >= totalBoards - 1 ? 'Resume' :
+            nextAction.type === 'continue' ? displayedContinueLabel : nextAction.label}
           <ChevronRight className="ml-1 inline h-4 w-4" />
         </button>
       </nav>
