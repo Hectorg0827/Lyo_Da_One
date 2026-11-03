@@ -64,7 +64,7 @@ fun ClassroomModeHero(
             ClassroomDisplayMode.REVIEW -> "Let's continue when you're ready."
         }
     val avatarSize = when (mode) {
-        ClassroomDisplayMode.SOLO -> 122.dp
+        ClassroomDisplayMode.SOLO -> 58.dp
         ClassroomDisplayMode.CLASSROOM -> 92.dp
         ClassroomDisplayMode.REVIEW -> 64.dp
     }
@@ -107,19 +107,19 @@ fun ClassroomModeHero(
             )
             TransparentClassroomPortrait(
                 drawableRes = teacher.portrait,
-                contentDescription = "${teacher.name} speaking",
+                contentDescription = "${teacher.displayName} speaking",
                 modifier = Modifier.size(avatarSize),
             )
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Text(
-                if (recovery) "TEACHER ${teacher.name.substringAfterLast(' ')}" else
-                    "${teacher.name} · ${if (mode == ClassroomDisplayMode.CLASSROOM) "Leading the lesson" else "AI Teacher"}",
+                if (mode == ClassroomDisplayMode.SOLO) teacher.displayName else if (recovery)
+                    teacher.displayName else "${teacher.displayName} · Leading the lesson",
                 color = accent,
                 style = MaterialTheme.typography.labelMedium,
                 maxLines = 1,
             )
-            if (!recovery) {
+            if (!recovery && mode != ClassroomDisplayMode.SOLO) {
                 Text("▂  ▄  ▆  ▃  ▇  ▄  ▂", color = accent, style = MaterialTheme.typography.labelMedium)
             }
             Box(
@@ -131,14 +131,14 @@ fun ClassroomModeHero(
                         RoundedCornerShape(17.dp),
                     )
                     .border(1.dp, accent.copy(alpha = .48f), RoundedCornerShape(17.dp))
-                    .padding(horizontal = 11.dp, vertical = 10.dp),
+                    .padding(horizontal = 11.dp, vertical = if (mode == ClassroomDisplayMode.SOLO) 6.dp else 10.dp),
             ) {
                 Text(
                     prompt,
                     color = White,
                     style = if (recovery) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Medium,
-                    maxLines = if (mode == ClassroomDisplayMode.SOLO) 3 else 2,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
