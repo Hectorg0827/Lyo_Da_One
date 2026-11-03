@@ -3,6 +3,12 @@ package com.lyo.app.ui.classroom
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -66,11 +72,14 @@ fun ClassroomModePicker(
             dismissOnBackPress = canDismiss,
             dismissOnClickOutside = canDismiss,
             usePlatformDefaultWidth = false,
+            // This dialog uses a full-screen, edge-to-edge window on Android 15+.
+            // Apply safeDrawing insets explicitly rather than drawing over the nav bar.
+            decorFitsSystemWindows = false,
         ),
     ) {
         Column(
             modifier = (if (fullScreen) Modifier.fillMaxSize()
-                else Modifier.fillMaxWidth(.94f))
+                else Modifier.fillMaxWidth(.94f).fillMaxHeight(.90f))
                 .background(
                     Brush.verticalGradient(
                         listOf(Color(0xFF101638), DeepBlue, Color(0xFF17103C)),
@@ -82,10 +91,21 @@ fun ClassroomModePicker(
                     Neon.copy(alpha = .58f),
                     RoundedCornerShape(if (fullScreen) 0.dp else 26.dp),
                 )
-                .padding(horizontal = 22.dp, vertical = if (fullScreen) 28.dp else 18.dp),
+                // Keep all interactive content above Samsung's system navigation area.
+                // We render behind system bars, so these are required.
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(start = 22.dp, end = 22.dp, top = if (fullScreen) 22.dp else 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
+            // The options scroll, while Remember and Start remain in a fixed
+            // safe-area footer, even on small phones and large font settings.
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -193,7 +213,14 @@ fun ClassroomModePicker(
                     }
                 }
             }
-            if (fullScreen) Spacer(modifier = Modifier.weight(1f))
+            }
+            // Fixed CTA footer has a guaranteed extra 18dp clearance even on
+            // Android devices that report zero navigation insets for dialogs.
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .padding(top = 12.dp, bottom = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -231,6 +258,7 @@ fun ClassroomModePicker(
                     textAlign = TextAlign.Center,
                     style = MaterialTheme.typography.labelSmall,
                 )
+            }
             }
         }
     }
