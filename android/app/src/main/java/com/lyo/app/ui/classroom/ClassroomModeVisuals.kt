@@ -1,15 +1,17 @@
 package com.lyo.app.ui.classroom
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,27 +21,28 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.google.gson.JsonElement
 import com.lyo.app.ui.classroom.catalog.cleanClassroomText
-import com.lyo.app.ui.theme.ClassroomTokens
-import com.lyo.app.ui.theme.TextPrimary
-import com.lyo.app.ui.theme.TextSecondary
 
-private val DeepIndigo = Color(0xFF121B42)
-private val Night = Color(0xFF0D1230)
-private val Violet = Color(0xFF8F60FF)
-private val Blue = Color(0xFF4D62E9)
-private val Mint = Color(0xFF44E8C1)
+private val Indigo = Color(0xFF141B43)
+private val Night = Color(0xFF0C1230)
+private val Violet = Color(0xFFB282FF)
+private val IceBlue = Color(0xFF83BBFF)
+private val Mint = Color(0xFF56F0CB)
 private val Amber = Color(0xFFFFC15B)
+private val White = Color(0xFFF5F4FF)
+private val SoftText = Color(0xFFC4C3E2)
 
-private fun modeAccent(mode: ClassroomDisplayMode): Color = when (mode) {
+private fun colorFor(mode: ClassroomDisplayMode): Color = when (mode) {
     ClassroomDisplayMode.SOLO -> Violet
-    ClassroomDisplayMode.CLASSROOM -> Blue
-    ClassroomDisplayMode.REVIEW -> Amber
+    ClassroomDisplayMode.CLASSROOM -> IceBlue
+    ClassroomDisplayMode.REVIEW -> Violet
 }
 
+/** Image-led hero that stays smaller than the actual interactive blackboard. */
 @Composable
 fun ClassroomModeHero(
     mode: ClassroomDisplayMode,
@@ -52,53 +55,98 @@ fun ClassroomModeHero(
         ?.get("speaker")?.takeIf { it.isJsonPrimitive }?.asString
     val phrase = caption?.takeIf { it.isJsonObject }?.asJsonObject
         ?.get("text")?.takeIf { it.isJsonPrimitive }?.asString
-    val teacher = ClassroomCast.teachers.firstOrNull { it.name == speaker || it.id == speaker }
+    val teacher = ClassroomCast.teachers.firstOrNull { it.id == speaker || it.name == speaker }
         ?: ClassroomCast.teacherFor(topic)
-    val accent = modeAccent(mode)
-    val label = when (mode) {
-        ClassroomDisplayMode.SOLO -> "YOUR TEACHER"
-        ClassroomDisplayMode.CLASSROOM -> "LIVE CLASSROOM"
-        ClassroomDisplayMode.REVIEW -> if (isPaused) "LESSON PAUSED" else "REVIEW YOUR LEARNING"
-    }
-    val prompt = phrase?.let(::cleanClassroomText)
-        ?.replace("$", "")?.takeIf { it.isNotBlank() }
+    val prompt = phrase?.let(::cleanClassroomText)?.replace("$", "")?.takeIf { it.isNotBlank() }
         ?: when (mode) {
-            ClassroomDisplayMode.SOLO -> "We'll learn this one step at a time."
-            ClassroomDisplayMode.CLASSROOM -> "Let's explore this together."
-            ClassroomDisplayMode.REVIEW -> "Revisit a step, then return to your class."
+            ClassroomDisplayMode.SOLO -> "Let's solve it together!"
+            ClassroomDisplayMode.CLASSROOM -> "Who wants to explain this?"
+            ClassroomDisplayMode.REVIEW -> "Let's continue when you're ready."
         }
-
+    val avatarSize = when (mode) {
+        ClassroomDisplayMode.SOLO -> 122.dp
+        ClassroomDisplayMode.CLASSROOM -> 92.dp
+        ClassroomDisplayMode.REVIEW -> 64.dp
+    }
+    val accent = colorFor(mode)
+    val recovery = mode == ClassroomDisplayMode.REVIEW
+    val cardShape = RoundedCornerShape(22.dp)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(
-                Brush.horizontalGradient(listOf(DeepIndigo, Night, accent.copy(alpha = 0.27f))),
-                RoundedCornerShape(22.dp),
-            )
-            .border(1.dp, accent.copy(alpha = 0.50f), RoundedCornerShape(22.dp))
-            .padding(horizontal = 12.dp, vertical = if (mode == ClassroomDisplayMode.SOLO) 6.dp else 10.dp),
+            .padding(horizontal = 13.dp, vertical = 4.dp)
+            .then(
+                if (recovery) Modifier
+                    .background(
+                        Brush.horizontalGradient(listOf(Indigo, Color(0xFF221C4F))),
+                        cardShape,
+                    )
+                    .border(1.dp, accent.copy(alpha = .55f), cardShape)
+                    .padding(horizontal = 9.dp, vertical = 7.dp)
+                else Modifier
+            ),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        TransparentClassroomPortrait(
-            drawableRes = teacher.portrait,
-            contentDescription = teacher.name + ", AI teacher",
-            modifier = Modifier.size(if (mode == ClassroomDisplayMode.SOLO) 48.dp else if (mode == ClassroomDisplayMode.CLASSROOM) 65.dp else 58.dp),
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, color = accent, style = MaterialTheme.typography.labelSmall)
-            Text(teacher.displayName, color = TextPrimary,
-                style = MaterialTheme.typography.labelLarge)
-            Text(prompt, color = TextSecondary, style = MaterialTheme.typography.bodySmall,
-                maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Box(
+            modifier = Modifier.size(avatarSize),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier.size(avatarSize * .88f)
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                accent.copy(alpha = .50f),
+                                accent.copy(alpha = .18f),
+                                Color.Transparent,
+                            ),
+                        ),
+                        RoundedCornerShape(99.dp),
+                    ),
+            )
+            TransparentClassroomPortrait(
+                drawableRes = teacher.portrait,
+                contentDescription = "${teacher.name} speaking",
+                modifier = Modifier.size(avatarSize),
+            )
         }
-        TextButton(onClick = onTranscript) {
-            Text("Notes", color = accent, style = MaterialTheme.typography.labelSmall)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(
+                if (recovery) "TEACHER ${teacher.name.substringAfterLast(' ')}" else
+                    "${teacher.name} · ${if (mode == ClassroomDisplayMode.CLASSROOM) "Leading the lesson" else "AI Teacher"}",
+                color = accent,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+            )
+            if (!recovery) {
+                Text("▂  ▄  ▆  ▃  ▇  ▄  ▂", color = accent, style = MaterialTheme.typography.labelMedium)
+            }
+            Box(
+                modifier = Modifier.fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(Color(0xFF2A255E), Color(0xFF19254C)),
+                        ),
+                        RoundedCornerShape(17.dp),
+                    )
+                    .border(1.dp, accent.copy(alpha = .48f), RoundedCornerShape(17.dp))
+                    .padding(horizontal = 11.dp, vertical = 10.dp),
+            ) {
+                Text(
+                    prompt,
+                    color = White,
+                    style = if (recovery) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = if (mode == ClassroomDisplayMode.SOLO) 3 else 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
 
+/** Real cast assets; no invented class participation when no one has spoken yet. */
 @Composable
 fun ClassroomModeCompanion(
     mode: ClassroomDisplayMode,
@@ -106,61 +154,87 @@ fun ClassroomModeCompanion(
     isReviewingPastStep: Boolean,
     isGroupSession: Boolean,
 ) {
-    val accent = modeAccent(mode)
-    val names = transcript.map { it.speaker }.toSet()
-    val speakingPeers = ClassroomCast.classmates.filter { it.name in names || it.id in names }
+    val accent = colorFor(mode)
+    val recentPeerLines = transcript.filter { line ->
+        ClassroomCast.classmates.any { it.name == line.speaker || it.id == line.speaker }
+    }
+    val recentPeer = recentPeerLines.lastOrNull()
+    val realPeers = ClassroomCast.classmates.filter { peer ->
+        recentPeerLines.any { it.speaker == peer.id || it.speaker == peer.name }
+    }
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(
-                Brush.horizontalGradient(listOf(Night, DeepIndigo, accent.copy(alpha = 0.18f))),
-                RoundedCornerShape(19.dp),
-            )
-            .border(1.dp, accent.copy(alpha = 0.26f), RoundedCornerShape(19.dp))
-            .padding(horizontal = 10.dp, vertical = 9.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 3.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
         if (mode == ClassroomDisplayMode.CLASSROOM) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                Text("Classmates", color = TextPrimary, style = MaterialTheme.typography.labelLarge)
-                speakingPeers.take(3).forEach { peer ->
-                    TransparentClassroomPortrait(
-                        drawableRes = peer.portrait,
-                        contentDescription = peer.name,
-                        modifier = Modifier.size(28.dp),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(listOf(Indigo, Night)),
+                        RoundedCornerShape(17.dp),
                     )
+                    .border(1.dp, accent.copy(alpha = .32f), RoundedCornerShape(17.dp))
+                    .padding(9.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "♟  Classmates",
+                        color = White,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    val avatars = if (isGroupSession) ClassroomCast.classmates.take(3) else realPeers.take(3)
+                    avatars.forEach { peer ->
+                        TransparentClassroomPortrait(peer.portrait, peer.name, Modifier.size(28.dp))
+                    }
                 }
+                Text(
+                    recentPeer?.let { "${it.speaker}: ${it.text}" }
+                        ?: if (isGroupSession) "Classmates join the conversation as they speak."
+                           else "Switching the layout does not create new participants.",
+                    color = SoftText,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
-            Text(
-                when {
-                    speakingPeers.isNotEmpty() -> "Voices participating: " + speakingPeers.joinToString { it.name }
-                    isGroupSession -> "Your classmates will appear as they participate."
-                    else -> "This lesson started solo; classmates join when you start a Live Class."
-                },
-                color = TextSecondary, style = MaterialTheme.typography.labelSmall,
-            )
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(listOf(Color(0xFF131B40), Color(0xFF1A1C4A))),
+                    RoundedCornerShape(17.dp),
+                )
+                .border(1.dp, accent.copy(alpha = .30f), RoundedCornerShape(17.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
             TransparentClassroomPortrait(
-                drawableRes = ClassroomCast.companion.portrait,
-                contentDescription = "Lyo, your study companion",
-                modifier = Modifier.size(36.dp),
+                ClassroomCast.companion.portrait,
+                "Lyo, your study companion",
+                Modifier.size(41.dp),
             )
             Column(modifier = Modifier.weight(1f)) {
-                Text("Lyo · Your companion", color = accent, style = MaterialTheme.typography.labelSmall)
+                Text("Lyo · Your companion", color = accent,
+                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                 Text(
                     when (mode) {
-                        ClassroomDisplayMode.SOLO -> "Take your time. You've got this."
-                        ClassroomDisplayMode.CLASSROOM -> "Great ideas. Keep going!"
-                        ClassroomDisplayMode.REVIEW -> if (isReviewingPastStep)
-                            "This is a saved step. Your live class is unchanged."
-                        else "Ready whenever you want to continue."
+                        ClassroomDisplayMode.SOLO -> "Take your time. You've got this. ✨"
+                        ClassroomDisplayMode.CLASSROOM -> "Great ideas. Keep going! ✨"
+                        ClassroomDisplayMode.REVIEW ->
+                            if (isReviewingPastStep) "Your earlier work is saved."
+                            else "No worries. We'll pick up where we left off."
                     },
-                    color = TextSecondary, style = MaterialTheme.typography.bodySmall,
+                    color = SoftText, style = MaterialTheme.typography.bodySmall,
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
             }
+            Text("✦", color = accent, style = MaterialTheme.typography.titleMedium)
         }
     }
 }
@@ -168,66 +242,24 @@ fun ClassroomModeCompanion(
 @Composable
 fun ClassroomBoardHeading(mode: ClassroomDisplayMode, paused: Boolean) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 15.dp, end = 12.dp, top = 13.dp, bottom = 9.dp),
+        modifier = Modifier.fillMaxWidth()
+            .padding(start = 15.dp, end = 14.dp, top = 15.dp, bottom = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("✧", color = modeAccent(mode), style = MaterialTheme.typography.titleLarge)
+        Text("▣", color = colorFor(mode), style = MaterialTheme.typography.titleMedium)
         Text(
             when {
-                paused -> "Your saved lesson"
+                paused -> "A quick pause"
                 mode == ClassroomDisplayMode.SOLO -> "Interactive Blackboard"
                 mode == ClassroomDisplayMode.CLASSROOM -> "Today's challenge"
-                else -> "Review & Resume"
+                else -> "What we learned"
             },
-            color = modeAccent(mode),
+            color = colorFor(mode),
+            fontWeight = FontWeight.Bold,
             style = MaterialTheme.typography.titleMedium,
             modifier = Modifier.weight(1f),
         )
-        Text(if (paused) "Paused" else "●", color = if (paused) Amber else Mint,
-            style = MaterialTheme.typography.labelSmall)
-    }
-}
-
-/** Temporary, dismissible Lyo insight. Never consumes a permanent content row. */
-@Composable
-fun FocusLyoTipOverlay(
-    message: String,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(
-                Brush.horizontalGradient(listOf(Color(0xFF1E265B), Color(0xFF281A60))),
-                RoundedCornerShape(20.dp),
-            )
-            .border(1.dp, Violet.copy(alpha = 0.72f), RoundedCornerShape(20.dp))
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-    ) {
-        TransparentClassroomPortrait(
-            drawableRes = com.lyo.app.R.drawable.mascot_reading_1,
-            contentDescription = "Lyo, your companion",
-            modifier = Modifier.size(40.dp),
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Lyo's tip", color = Violet, style = MaterialTheme.typography.labelSmall)
-            Text(
-                cleanClassroomText(message).take(160),
-                color = TextPrimary,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Text(
-            "✕",
-            color = TextSecondary,
-            modifier = Modifier.clickable(onClick = onDismiss).padding(6.dp),
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        if (paused) Text("●  Paused", color = Amber, style = MaterialTheme.typography.labelSmall)
     }
 }
