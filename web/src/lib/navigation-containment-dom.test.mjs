@@ -22,6 +22,7 @@ const mocks = {
   'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
   'next/image': { default: ({ priority, ...props }) => React.createElement('img', props) },
   '@/stores/auth-store': { useAuthStore: () => ({ user: null }) },
+  '@/stores/chat-store': { useChatStore: selector => selector({ voiceSessionActive: false }) },
   '@/components/chat/MascotAvatar': { default: () => React.createElement('span', { 'data-mascot': true }) },
   '@/components/create/CreateSheet': { default: ({ isOpen }) => isOpen ? React.createElement('div', { role: 'dialog' }, 'Create') : null },
 };
