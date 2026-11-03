@@ -128,7 +128,7 @@ private fun String.htmlEscape(): String =
     replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 /** One safe rich-text renderer for markdown prose with inline/display KaTeX. */
-private fun buildRichLessonHtml(source: String): String {
+internal fun buildRichLessonHtml(source: String): String {
     val fence = 96.toChar().toString().repeat(3)
     val safe = source.htmlEscape()
         .lineSequence().filterNot { it.trim().startsWith(fence) || it.trim().startsWith("~~~") }
