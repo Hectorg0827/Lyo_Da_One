@@ -108,3 +108,32 @@ jobs:
             picker-after.png
           if-no-files-found: warn
           retention-days: 3
+
+  web-mobile-parity:
+    if: github.head_ref == 'fix/web-mobile-classroom-live-parity-20261103'
+    name: Build and test premium mobile Web staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
+      NEXT_PUBLIC_COMMUNITY_LAUNCH_ENABLED: 'true'
+      NEXT_PUBLIC_DISCOVER_LAUNCH_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+      - name: Run web regression suite
+        working-directory: web
+        run: npm test
+      - name: Check TypeScript
+        working-directory: web
+        run: npx tsc --noEmit
+      - name: Build mobile web release
+        working-directory: web
+        run: npx next build
