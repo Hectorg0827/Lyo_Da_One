@@ -55,7 +55,7 @@ fun ClassroomModeHero(
         ?: ClassroomCast.teacherFor(topic)
     val accent = modeAccent(mode)
     val label = when (mode) {
-        ClassroomDisplayMode.SOLO -> "YOUR PERSONAL TEACHER"
+        ClassroomDisplayMode.SOLO -> "YOUR TEACHER"
         ClassroomDisplayMode.CLASSROOM -> "LIVE CLASSROOM"
         ClassroomDisplayMode.REVIEW -> if (isPaused) "LESSON PAUSED" else "REVIEW YOUR LEARNING"
     }
@@ -76,18 +76,18 @@ fun ClassroomModeHero(
                 RoundedCornerShape(22.dp),
             )
             .border(1.dp, accent.copy(alpha = 0.50f), RoundedCornerShape(22.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = if (mode == ClassroomDisplayMode.SOLO) 6.dp else 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         TransparentClassroomPortrait(
             drawableRes = teacher.portrait,
             contentDescription = teacher.name + ", AI teacher",
-            modifier = Modifier.size(if (mode == ClassroomDisplayMode.CLASSROOM) 65.dp else 58.dp),
+            modifier = Modifier.size(if (mode == ClassroomDisplayMode.SOLO) 48.dp else if (mode == ClassroomDisplayMode.CLASSROOM) 65.dp else 58.dp),
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(label, color = accent, style = MaterialTheme.typography.labelSmall)
-            Text(teacher.name + " · AI Teacher", color = TextPrimary,
+            Text(teacher.displayName, color = TextPrimary,
                 style = MaterialTheme.typography.labelLarge)
             Text(prompt, color = TextSecondary, style = MaterialTheme.typography.bodySmall,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
