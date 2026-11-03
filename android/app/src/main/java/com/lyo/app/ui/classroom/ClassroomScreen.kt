@@ -76,11 +76,20 @@ fun ClassroomScreen(
     var resumeSeat by remember(topic, courseId) { mutableStateOf<ClassroomSavedSession?>(null) }
     // The teacher's server mode is selected only once at entry. Switching
     // visual modes later leaves this live session and graded evidence intact.
-    var activeDisplayMode by remember(topic, courseId) {
-        mutableStateOf<ClassroomDisplayMode?>(null)
+    val suggestedMode = ClassroomDisplayMode.fromTeachingMode(teachingMode)
+    val preferredMode = remember(context, topic, courseId) {
+        ClassroomPreferences.savedDisplayMode(context)
     }
-    var showModePicker by remember(topic, courseId) { mutableStateOf(true) }
-    var backendTeachingMode by remember(topic, courseId) { mutableStateOf(teachingMode) }
+    val initialMode = if (reviewConceptId != null) ClassroomDisplayMode.REVIEW else preferredMode
+    var activeDisplayMode by remember(topic, courseId) {
+        mutableStateOf<ClassroomDisplayMode?>(initialMode)
+    }
+    var showModePicker by remember(topic, courseId) { mutableStateOf(initialMode == null) }
+    var rememberModeChoice by remember(topic, courseId) { mutableStateOf(true) }
+    var backendTeachingMode by remember(topic, courseId) {
+        mutableStateOf(if (reviewConceptId != null && teachingMode == "review") "review"
+            else initialMode?.backendModeWhenStarting() ?: teachingMode)
+    }
 
     // Keyed on the attempt too: engine.dispose() closes this player, so a
     // rebuilt engine inheriting the old one would teach in silence.
@@ -126,6 +135,11 @@ fun ClassroomScreen(
     // Lesson controls and progress remain visible; auto-hiding the header
     // left an empty strip and confused learners during interaction.
     val chrome = rememberChromeVisibility(blockAutoHide = true)
+    // Recovery is an automatic temporary visual state; never overwrite the
+    // learner's chosen mode or saved device preference on a network error.
+    val isAutoRecovery = engine.stallPhase == ClassroomStallPhase.STALLED ||
+        engine.status == "error" || engine.lessonRecovery
+    val renderedMode = if (isAutoRecovery) ClassroomDisplayMode.REVIEW else activeDisplayMode
 
     Box(
         modifier = Modifier
@@ -194,12 +208,12 @@ fun ClassroomScreen(
                 ClassroomModeSwitcher(current) { showModePicker = true }
             }
             // Three distinct presentations use the same teacher and live engine.
-            activeDisplayMode?.let { mode ->
+            renderedMode?.let { mode ->
                 ClassroomModeHero(
                     mode = mode,
                     topic = topic,
                     caption = engine.surface.dataModel.resolvePointer("/caption"),
-                    isPaused = engine.isPaused || engine.stallPhase == ClassroomStallPhase.STALLED,
+                    isPaused = engine.isPaused || isAutoRecovery,
                     onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
                 )
             }
@@ -226,16 +240,24 @@ fun ClassroomScreen(
                         RoundedCornerShape(22.dp),
                     ),
             ) {
-                activeDisplayMode?.let { mode ->
+                renderedMode?.let { mode ->
                     ClassroomBoardHeading(
                         mode = mode,
-                        paused = engine.isPaused || engine.stallPhase == ClassroomStallPhase.STALLED,
+                        paused = engine.isPaused || isAutoRecovery,
                     )
                 }
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    if (engine.stallPhase == ClassroomStallPhase.STALLED) {
+                    if (isAutoRecovery && !engine.isReviewingPastStep &&
+                        (engine.stallPhase == ClassroomStallPhase.STALLED || engine.status == "error")
+                    ) {
                         StallRecoveryCard(
-                            onAskAgain = { engine.nudgeTeacher(); chrome.poke() },
+                            onAskAgain = {
+                                if (engine.status == "error") {
+                                    resumeSeat = null
+                                    sessionAttempt += 1
+                                } else engine.nudgeTeacher()
+                                chrome.poke()
+                            },
                             onStartOver = {
                                 resumeSeat = null
                                 sessionAttempt += 1
@@ -286,7 +308,7 @@ fun ClassroomScreen(
                 }
             }
 
-            activeDisplayMode?.let { mode ->
+            renderedMode?.let { mode ->
                 ClassroomModeCompanion(
                     mode = mode,
                     transcript = engine.transcript,
@@ -329,6 +351,9 @@ fun ClassroomScreen(
             ClassroomModePicker(
                 current = activeDisplayMode,
                 canDismiss = activeDisplayMode != null,
+                suggested = suggestedMode,
+                rememberChoice = rememberModeChoice,
+                onRememberChoiceChange = { rememberModeChoice = it },
                 onChoose = { selected ->
                     if (activeDisplayMode == null) {
                         // Backend mode is chosen before opening the socket.
@@ -336,7 +361,16 @@ fun ClassroomScreen(
                         backendTeachingMode = if (teachingMode == "review" && reviewConceptId != null)
                             "review" else selected.backendModeWhenStarting()
                     }
+                    if (selected == ClassroomDisplayMode.REVIEW && !engine.isReviewingPastStep) {
+                        engine.previousStep()
+                    } else if (activeDisplayMode == ClassroomDisplayMode.REVIEW &&
+                        selected != ClassroomDisplayMode.REVIEW
+                    ) {
+                        engine.returnToLiveStep()
+                    }
                     activeDisplayMode = selected
+                    if (rememberModeChoice) ClassroomPreferences.saveDisplayMode(context, selected)
+                    else ClassroomPreferences.saveDisplayMode(context, null)
                     showModePicker = false
                 },
                 onDismiss = { showModePicker = false },
