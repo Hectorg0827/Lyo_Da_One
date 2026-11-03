@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import CourseCard from '@/components/courses/CourseCard';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
+import { listCourseStacks, type StackItem } from '@/lib/stack';
 
 // ── Adapter: backend course → frontend Course type ──────────────────────────
 
@@ -108,6 +109,16 @@ export default function CoursesPage() {
     [difficultyFilter],
   );
   const { data: rawCourses, isLoading, error, refetch } = useApi<Record<string, unknown>[]>(fetcher, [difficultyFilter]);
+
+  // AI-taught sessions are saved in Stacks, not the published course catalog.
+  const fetchSavedClasses = useCallback(listCourseStacks, []);
+  const { data: savedClasses } = useApi<StackItem[]>(fetchSavedClasses, []);
+  const visibleSavedClasses = useMemo(
+    () => (savedClasses ?? []).filter((item) =>
+      item.title.toLowerCase().includes(searchQuery.trim().toLowerCase())
+    ),
+    [savedClasses, searchQuery],
+  );
 
   // Adapt raw API data to frontend Course type
   const courses = useMemo<Course[]>(() => {
@@ -246,6 +257,40 @@ export default function CoursesPage() {
             ))}
           </div>
         </motion.div>
+
+        {/* AI Classroom sessions and catalog courses have different IDs.
+            Present saved lessons separately, with resume links to Classroom. */}
+        {activeTab !== 'completed' && visibleSavedClasses.length > 0 && (
+          <section className="mb-8 rounded-2xl border border-violet-400/20 bg-violet-500/[0.06] p-4 sm:p-5">
+            <h2 className="font-rounded text-xl font-semibold text-white">Saved AI classes</h2>
+            <p className="mb-4 mt-1 text-sm text-white/50">
+              Pick up your live lessons where you left off.
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {visibleSavedClasses.map((item) => {
+                const id = (item.content_id || item.title).trim();
+                const href = /^[0-9]+$/.test(id)
+                  ? `/courses/${id}`
+                  : `/classroom?${new URLSearchParams({
+                      topic: item.title || id,
+                      courseId: id,
+                      resume: '1',
+                    }).toString()}`;
+                return (
+                  <Link
+                    key={item.id}
+                    href={href}
+                    className="group flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-4 transition-colors hover:border-violet-300/50 hover:bg-white/[0.1]"
+                  >
+                    <BookOpen className="h-5 w-5 shrink-0 text-violet-300" />
+                    <span className="min-w-0 flex-1 truncate font-medium text-white">{item.title}</span>
+                    <span className="shrink-0 text-xs font-semibold text-violet-300 group-hover:text-white">Resume →</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* ── Loading State ── */}
         {isLoading && (
