@@ -159,7 +159,7 @@ fun HomeScreen(nav: NavHostController) {
         if (BuildConfig.DEBUG) {
             item {
                 Text(
-                    text = "LYO CLASSROOM · REFERENCE DESIGN 2026.11.02",
+                    text = "LYO CLASSROOM · RECOVERY FIX 2026.11.03",
                     color = Color(0xFFC8AFFF),
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
