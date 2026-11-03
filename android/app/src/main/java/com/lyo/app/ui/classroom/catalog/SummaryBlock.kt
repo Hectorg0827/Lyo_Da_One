@@ -33,7 +33,7 @@ import com.lyo.app.ui.theme.TextSecondary
 @Composable
 fun A2uiRenderScope.SummaryBlockRenderer() {
     val title = resolveString("title") ?: "Summary"
-    val content = resolveString("content")?.let(::cleanClassroomText)
+    val content = resolveString("content")
     val items = resolveStringList("items")
     val retrievalScheduled = resolveBoolean("retrievalScheduled", false)
     val role = resolveString("role", "board") ?: "board"
@@ -62,10 +62,10 @@ fun A2uiRenderScope.SummaryBlockRenderer() {
         if (expanded && document != null) {
             BoardDocumentView(document)
         } else if (expanded && content != null) {
-            if (looksLikeMathLesson(content)) NativeMathNote(content) else Text(text = content, color = TextPrimary, modifier = Modifier.padding(top = 4.dp))
+            LessonRichText(content, modifier = Modifier.padding(top = 4.dp))
         }
         if (expanded) items.forEach { item ->
-            Text(text = "•  " + cleanClassroomText(item), color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
+            LessonRichText("•  $item", modifier = Modifier.padding(top = 2.dp))
         }
         if (retrievalScheduled) {
             Text(
