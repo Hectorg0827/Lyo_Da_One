@@ -159,7 +159,7 @@ fun HomeScreen(nav: NavHostController) {
         if (BuildConfig.DEBUG) {
             item {
                 Text(
-                    text = "LYO PREMIUM CLASSROOM · WS FIX 2026.11.02",
+                    text = "LYO PREMIUM CLASSROOM · MATH & VISUALS 2026.11.02",
                     color = Color(0xFFC8AFFF),
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier
