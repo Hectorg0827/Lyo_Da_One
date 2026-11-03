@@ -171,6 +171,7 @@ class ClassroomEngine(
         activeCheckpoint = hasActiveCheckpoint,
         failed = status == "error" || stallPhase == ClassroomStallPhase.STALLED,
         paused = isPaused,
+        awaitingResponse = awaitingStep,
     )
 
     fun nextLessonStep() {
