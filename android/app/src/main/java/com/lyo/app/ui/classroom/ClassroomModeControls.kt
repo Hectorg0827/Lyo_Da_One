@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -29,6 +30,9 @@ import com.lyo.app.ui.theme.TextSecondary
 fun ClassroomModePicker(
     current: ClassroomDisplayMode?,
     canDismiss: Boolean,
+    suggested: ClassroomDisplayMode,
+    rememberChoice: Boolean,
+    onRememberChoiceChange: (Boolean) -> Unit,
     onChoose: (ClassroomDisplayMode) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -39,6 +43,9 @@ fun ClassroomModePicker(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Switch how your lesson looks without losing your place.",
                     color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                Text("Suggested for this lesson: ${suggested.label}",
+                    color = ClassroomTokens.AccentPurple,
+                    style = MaterialTheme.typography.labelSmall)
                 ClassroomDisplayMode.entries.forEach { mode ->
                     OutlinedButton(
                         onClick = { onChoose(mode) },
@@ -47,7 +54,8 @@ fun ClassroomModePicker(
                     ) {
                         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                             Text(
-                                (if (mode == current) "✓  " else "") + mode.label,
+                                (if (mode == current) "✓  " else "") + mode.label +
+                                    (if (mode == suggested) "  ·  Suggested" else ""),
                                 style = MaterialTheme.typography.titleSmall,
                                 color = ClassroomTokens.AccentPurple,
                             )
@@ -56,6 +64,14 @@ fun ClassroomModePicker(
                                 color = TextSecondary)
                         }
                     }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = rememberChoice,
+                        onCheckedChange = onRememberChoiceChange,
+                    )
+                    Text("Remember this mode on this device",
+                        style = MaterialTheme.typography.bodySmall, color = TextPrimary)
                 }
                 Text(
                     "Past steps are read-only. New steps and answers remain controlled by your live teacher.",
