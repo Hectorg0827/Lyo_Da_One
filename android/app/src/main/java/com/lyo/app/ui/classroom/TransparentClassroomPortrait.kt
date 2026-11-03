@@ -13,8 +13,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 
 /**
- * Some of the legacy teacher PNGs include a white studio matte.
- * Convert near-white backdrop pixels to alpha at display time, keeping the
+ * Teacher PNGs embed a pale checkerboard in RGB pixels rather than real alpha.
+ * Flood-fill the two-tone background to alpha at display time, keeping the
  * actual character artwork unchanged. This only affects classroom portraits.
  */
 @Composable
@@ -31,22 +31,8 @@ fun TransparentClassroomPortrait(
             val height = bitmap.height
             val pixels = IntArray(width * height)
             bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-            for (i in pixels.indices) {
-                val value = pixels[i]
-                val red = (value shr 16) and 255
-                val green = (value shr 8) and 255
-                val blue = value and 255
-                val low = minOf(red, green, blue)
-                val high = maxOf(red, green, blue)
-                // Only neutral, near-white matte. Never remove mascot highlights
-                // that are saturated orange or purple.
-                if (low >= 232 && high - low <= 18) {
-                    val sourceAlpha = (value ushr 24) and 255
-                    val matteAlpha = ((255 - low) * 255 / 23).coerceIn(0, 255)
-                    pixels[i] = (sourceAlpha * matteAlpha / 255 shl 24) or (value and 0x00ffffff)
-                }
-            }
-            bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+            val cleaned = removeConnectedLightBackdrop(pixels, width, height)
+            bitmap.setPixels(cleaned, 0, width, 0, 0, width, height)
             bitmap.asImageBitmap()
         }
     }
