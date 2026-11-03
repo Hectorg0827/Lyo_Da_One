@@ -50,14 +50,16 @@ fun ClassroomModeHero(
         ?.get("speaker")?.takeIf { it.isJsonPrimitive }?.asString
     val phrase = caption?.takeIf { it.isJsonObject }?.asJsonObject
         ?.get("text")?.takeIf { it.isJsonPrimitive }?.asString
-    val teacher = ClassroomCast.speaker(speaker, topic)
+    val teacher = ClassroomCast.teachers.firstOrNull { it.name == speaker || it.id == speaker }
+        ?: ClassroomCast.teacherFor(topic)
     val accent = modeAccent(mode)
     val label = when (mode) {
         ClassroomDisplayMode.SOLO -> "YOUR PERSONAL TEACHER"
         ClassroomDisplayMode.CLASSROOM -> "LIVE CLASSROOM"
         ClassroomDisplayMode.REVIEW -> if (isPaused) "LESSON PAUSED" else "REVIEW YOUR LEARNING"
     }
-    val prompt = phrase?.replace("**", "")?.replace("$", "")?.takeIf { it.isNotBlank() }
+    val prompt = phrase?.let(com.lyo.app.ui.classroom.catalog::cleanClassroomText)
+        ?.replace("$", "")?.takeIf { it.isNotBlank() }
         ?: when (mode) {
             ClassroomDisplayMode.SOLO -> "We'll learn this one step at a time."
             ClassroomDisplayMode.CLASSROOM -> "Let's explore this together."
