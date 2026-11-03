@@ -2,6 +2,10 @@ package com.lyo.app.ui.classroom.catalog
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -60,9 +64,13 @@ fun A2uiRenderScope.QuizCardRenderer() {
     }
     val actionName = literalString("action") ?: "submitQuiz"
 
-    Column(modifier = Modifier.padding(vertical = 6.dp)) {
-        Text("YOUR TURN", color = com.lyo.app.ui.theme.LyoVioletLight, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-        Text(text = question, color = TextPrimary)
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(11.dp),
+    ) {
+        Text("✦  YOUR TURN", color = com.lyo.app.ui.theme.LyoVioletLight,
+            style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        LessonRichText(question, modifier = Modifier.fillMaxWidth())
         ClassroomChipRow(
             options = options.map { it.label },
             stateFor = { label ->

@@ -35,15 +35,7 @@ import {
 import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 import SurfaceLoading from '@/components/ui/SurfaceLoading';
-
-// ─── The cast ─────────────────────────────────────────────────────────────────
-
-const CAST: { name: string; emoji: string; accent: string }[] = [
-  { name: 'Maya', emoji: '👩🏽‍🎓', accent: 'ring-accent-teal text-accent-teal' },
-  { name: 'Sam', emoji: '🧑🏻‍🎓', accent: 'ring-accent-orange text-accent-orange' },
-  { name: 'Rio', emoji: '🧑🏾‍🎓', accent: 'ring-accent-green text-accent-green' },
-  { name: 'Zack', emoji: '👨🏼‍🎓', accent: 'ring-accent-gold text-accent-gold' },
-];
+import { classroomSpeaker, speakingClassmates, teacherForTopic } from '@/lib/classroom-cast.mjs';
 
 const LYO_STATE_IMG: Record<string, string> = {
   reading: '/mascot/mascot_reading_1.png',
@@ -134,6 +126,9 @@ function ClassroomStage() {
     setSpeechRate, viewBoard, interruptPrompt,
     nudgeTeacher, restartLesson, resumeLesson, dismissNotice,
   } = useClassroomStore();
+  const instructor = teacherForTopic(topic);
+  const currentCharacter = classroomSpeaker(activeSpeaker || 'Teacher', topic) || instructor;
+  const visibleClassmates = speakingClassmates(transcript, mode);
   const lessonConcepts = useMemo(
     () => conceptsShownInClass(board, boardHistory),
     [board, boardHistory],
@@ -398,7 +393,7 @@ function ClassroomStage() {
     >
 
       {/* ── Top bar ── */}
-      <div className="flex items-start gap-3 px-3 py-2.5 sm:px-4">
+      <div className="flex items-start gap-2 border-b border-lyo-400/10 bg-gradient-to-r from-lyo-500/10 via-transparent to-accent-purple/5 px-3 py-2 sm:gap-3 sm:px-4">
         <button
           onClick={() => router.back()}
           aria-label="Leave classroom"
@@ -412,8 +407,8 @@ function ClassroomStage() {
             <h1 className="truncate text-[15px] font-bold tracking-tight text-white sm:text-base">{topic}</h1>
             <button type="button" title={objective} aria-label={`Learning goal: ${objective}`} className="shrink-0 rounded-full border border-white/15 px-1.5 text-[10px] font-bold text-white/65 hover:bg-white/10 hover:text-white">i</button>
           </div>
-          <p className="truncate text-[11px] font-medium text-white/65">
-            {lessonId ? `Lesson ${lessonId}` : 'Guided lesson'} · {objective}
+          <p className="truncate text-[11px] font-medium text-lyo-200/85">
+            LYO Classroom · {instructor.name} · {lessonId ? `Lesson ${lessonId}` : 'Guided lesson'}
           </p>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em]">
             {status === 'live' ? lessonPaused
@@ -539,28 +534,26 @@ function ClassroomStage() {
         </div>
       )}
 
-      {/* One teacher, one synchronized transcript. ClassroomCaptionSync owns
+      {/* A real teacher character, not Lyo. ClassroomCaptionSync owns
           the visual text; this component owns the semantic live region. */}
       <div className={cn(
-        'mx-3 mb-3 flex min-h-[92px] shrink-0 items-center gap-3 rounded-2xl border bg-[var(--surface-2)] px-3 py-2 shadow-[0_12px_32px_rgba(2,6,23,0.28)] backdrop-blur-xl sm:mx-4 sm:px-4',
-        'border-lyo-400/30',
+        'mx-3 mb-2 flex min-h-[68px] shrink-0 items-center gap-2.5 rounded-2xl border bg-gradient-to-r from-[#17203F] to-[#0D142E] px-3 py-1.5 shadow-[0_8px_22px_rgba(2,6,23,0.24)] sm:mx-4 sm:gap-3 sm:px-4',
+        'border-lyo-400/25',
       )}>
         <motion.img
-          key={lyoState}
-          src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
-          alt={`Lyo is ${lyoState}`}
-          className="h-12 w-12 shrink-0 object-contain drop-shadow-[0_6px_16px_rgba(0,0,0,0.55)]"
+          key={currentCharacter.id}
+          src={currentCharacter.image}
+          alt={`${currentCharacter.name} — ${currentCharacter.id.startsWith('student_') ? 'AI classmate' : 'AI teacher'}`}
+          className="h-10 w-10 shrink-0 rounded-xl border border-white/10 bg-white/95 object-contain shadow-[0_6px_16px_rgba(0,0,0,0.25)] sm:h-12 sm:w-12"
           initial={animationsOff ? false : { scale: 0.7 }}
-          animate={animationsOff
-            ? { scale: 1, rotate: 0, y: 0 }
-            : lyoState === 'celebrating'
-              ? { scale: [1, 1.25, 1], rotate: [0, 10, -10, 0], y: [0, -10, 0] }
-              : { scale: 1, rotate: 0, y: 0 }}
-          transition={{ duration: animationsOff ? 0 : 0.6 }}
+          animate={{ scale: 1, rotate: 0, y: 0 }}
+          transition={{ duration: animationsOff ? 0 : 0.3 }}
         />
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-0.5">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-lyo-300">{activeSpeaker && activeSpeaker !== 'Teacher' ? `${activeSpeaker} speaks` : 'Lyo explains'}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-lyo-300">
+              {currentCharacter.id.startsWith('student_') ? `${currentCharacter.name} · AI classmate` : `${instructor.name} · AI teacher`}
+            </p>
             {caption && <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }} className="min-h-11 text-[11px] text-[var(--text-secondary)] underline underline-offset-2">Full transcript</button>}
           </div>
           <div data-classroom-caption-target className={cn('relative overflow-hidden', voiceOn ? 'h-10 sm:h-[44px]' : 'h-[72px] sm:h-[84px]')}>
@@ -573,25 +566,35 @@ function ClassroomStage() {
                 ? CLASSROOM_STALL_NOTICE
                 : waitingForScene || status === 'connecting'
                 ? board.some((el) => (el.kind === 'quiz' && el.answered) || (el.kind === 'transfer' && el.submitted))
-                  ? 'Lyo is checking your answer…' : 'Lyo is preparing the next step…'
-                : pendingCheckpoint || prompt ? 'Your turn — respond to Lyo' : 'Lyo is ready'}
+                  ? 'Your teacher is checking your answer…' : 'Your teacher is preparing the next step…'
+                : pendingCheckpoint || prompt ? 'Your turn — respond to your teacher' : 'Your teacher is ready'}
             </p>
           )}
           </div>
         </div>
       </div>
 
+      {/* Lyo is the learner's companion. Never use this image as the teacher. */}
+      <div className="mx-3 mb-1.5 flex shrink-0 items-center gap-2 rounded-xl border border-lyo-400/15 bg-lyo-500/5 px-2.5 py-1 sm:mx-4">
+        <img src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
+          alt="Lyo, your study companion" className="h-6 w-6 object-contain" />
+        <span className="min-w-0 flex-1 truncate text-[11px] text-white/65"><strong className="text-lyo-200">Lyo</strong> · Your study companion</span>
+        {visibleClassmates.length > 0 && <div className="flex items-center gap-1.5" aria-label="AI classmates who have spoken">
+          {visibleClassmates.map((peer) => <img key={peer.id} src={peer.image} alt={`${peer.name}, AI classmate`}
+            title={peer.name} className="h-6 w-6 rounded-full border border-white/15 bg-white object-cover" />)}
+        </div>}
+      </div>
+
       {/* The board grows with the lesson. Only this area scrolls when a scene
           is longer than the available phone height; the teacher stays visible. */}
       {(shownBoard.length > 0 || !prompt || error) && (
-      <div ref={boardScrollRef} className="mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2 sm:mx-4">
+      <div ref={boardScrollRef} className="mx-2 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1 sm:mx-4" aria-label="Interactive blackboard" role="region">
         <div className={cn(
-          'flex min-h-[180px] flex-col rounded-[22px] border border-white/10 overflow-hidden',
-          'bg-[var(--surface)]',
-          'shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_0_70px_rgba(2,6,23,0.45),0_18px_50px_rgba(2,6,23,0.42)]',
+          'flex min-h-[240px] flex-col overflow-hidden rounded-[22px] border border-lyo-400/30',
+          'bg-gradient-to-b from-[#17203F] via-[#0D142E] to-[#0A0F24]',
+          'shadow-[inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_70px_rgba(2,6,23,0.35),0_14px_40px_rgba(2,6,23,0.36)]',
         )}>
-          {(canGoBack || canGoNext || viewingBoard !== -1) && (
-            <div className="flex min-h-11 shrink-0 items-center justify-between gap-1 border-b border-white/5 bg-black/25 px-2 py-1">
+            <div className="flex min-h-11 shrink-0 items-center justify-between gap-1 border-b border-lyo-400/20 bg-lyo-500/10 px-2 py-1">
               <div className="min-w-20">
                 {canGoBack && (
                   <button onClick={goBack} title="Previous board"
@@ -600,8 +603,10 @@ function ClassroomStage() {
                   </button>
                 )}
               </div>
-              <span className="text-[10px] font-mono text-white/60">
-                {viewingBoard === -1 ? 'CURRENT BOARD' : `${viewingBoard + 1}/${totalBoards}`}
+              <span className="flex min-w-0 items-center gap-1.5 truncate text-[10px] font-bold uppercase tracking-[0.13em] text-lyo-200">
+                <NotebookPen className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span className="truncate">Interactive blackboard</span>
+                {viewingBoard !== -1 && <span className="text-white/50">{viewingBoard + 1}/{totalBoards}</span>}
               </span>
               <div className="flex min-w-20 justify-end">
                 {canGoNext && (
@@ -612,9 +617,8 @@ function ClassroomStage() {
                 )}
               </div>
             </div>
-          )}
 
-          <div className="space-y-4 px-4 py-4 sm:space-y-5 sm:px-7 sm:py-6">
+          <div className="space-y-3 px-3 py-3 sm:space-y-5 sm:px-7 sm:py-6">
             {(status === 'error' || status === 'ended' || error) && (
               <div
                 role="alert"
@@ -827,7 +831,7 @@ function ClassroomStage() {
              Everything here needs a live socket. When the class is not in
              session the controls are disabled rather than silently swallowing
              input, and the reason is stated instead of implied. */}
-      <div className="space-y-2 px-3 pb-2 pt-2 sm:px-4">
+      <div className="space-y-1.5 px-3 pb-1.5 pt-1.5 sm:px-4">
         {!live && (
           <p className="text-[11px] text-white/45 text-center">
             {deskDisabledReason}
@@ -836,7 +840,7 @@ function ClassroomStage() {
         {readyToContinue && (
           <button
             onClick={continueLesson}
-            className="min-h-12 w-full rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.22)] transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-h-11 w-full rounded-xl bg-gradient-to-r from-lyo-600 to-accent-purple py-2 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(124,58,237,0.22)] transition-all hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
           >
             {displayedContinueLabel} →
           </button>
@@ -997,7 +1001,7 @@ function ClassroomStage() {
                       <p key={line.id} className="text-[13px] leading-relaxed text-white/80">
                         <span className={cn('font-bold mr-1.5',
                           line.speaker === 'You' ? 'text-accent-gold'
-                            : CAST.find((c) => c.name === line.speaker)?.accent.split(' ')[1] ?? 'text-white/60')}>
+                            : classroomSpeaker(line.speaker, topic)?.accent ?? 'text-white/60')}>
                           {line.speaker}:
                         </span>
                         {line.text}

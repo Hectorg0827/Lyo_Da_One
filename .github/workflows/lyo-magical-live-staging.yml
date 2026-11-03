@@ -2,20 +2,22 @@ name: LYO Magical Live — staging Android test APK
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, feat/lyo-live-magical-ui-20261031, codex/classroom-blackboard-premium-ui-20261102]
 
 permissions:
   contents: read
 
 jobs:
   staging-apk:
-    if: github.head_ref == 'feat/lyo-live-magical-ui-20261031' && github.event.pull_request.head.repo.full_name == github.repository
+    if: (github.head_ref == 'feat/lyo-live-magical-ui-20261031' || github.head_ref == 'codex/classroom-image-match-20261102') && github.event.pull_request.head.repo.full_name == github.repository
     name: Build locked staging Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app/
       LYO_GPT_LIVE_TRIAL_UI: 'false'
+      LYO_VERSION_CODE: '2026110311'
+      LYO_VERSION_NAME: '2026.11.03-classroom-recovery-v4'
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 17
@@ -34,10 +36,75 @@ jobs:
       - name: Build staging-targeted debug APK and Android unit tests
         working-directory: android
         run: gradle assembleDebug testDebugUnitTest --no-daemon
-      - name: Upload staging-only APK for Samsung validation
+      - name: Verify preview version and label
+        run: |
+          set -euo pipefail
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          BADGING="$("$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK")"
+          printf '%s\\n' "$BADGING" | grep "^package: name='com.lyo.app' versionCode='2026110311' versionName='2026.11.03-classroom-recovery-v4'"
+          printf '%s\\n' "$BADGING" | grep "^application-label:'LYO Premium Preview'"
+          cp "$APK" android/app/build/outputs/apk/debug/LYO-PREMIUM-CLASSROOM-RECOVERY-V4-20261103.apk
+      - name: Upload identifiable staging APK for Samsung validation
         uses: actions/upload-artifact@v4
         with:
-          name: lyo-magical-live-staging-android-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          name: LYO-PREMIUM-CLASSROOM-RECOVERY-V4-20261103
+          path: android/app/build/outputs/apk/debug/LYO-PREMIUM-CLASSROOM-RECOVERY-V4-20261103.apk
           if-no-files-found: error
           retention-days: 7
+
+  emulator-launch:
+    needs: staging-apk
+    if: github.head_ref == 'codex/classroom-image-match-20261102'
+    name: Smoke-launch premium APK in Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: LYO-PREMIUM-CLASSROOM-RECOVERY-V4-20261103
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Boot Android emulator and inspect fatal crashes
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7_pro
+          disable-animations: true
+          script: |
+            set -eu
+            adb install -r LYO-PREMIUM-CLASSROOM-RECOVERY-V4-20261103.apk
+            adb logcat -c
+            adb shell am start -W -n com.lyo.app/.MainActivity
+            sleep 12
+            adb logcat -d -s AndroidRuntime:E > preview-crash-logcat.txt
+            adb exec-out screencap -p > preview-startup.png
+            cat preview-crash-logcat.txt
+            ! grep -q 'Process: com.lyo.app' preview-crash-logcat.txt
+            adb shell pidof com.lyo.app
+            # Reproduce the Samsung three-button navigation geometry in an
+            # unauthenticated, debug-only classroom mode-picker screen.
+            adb shell cmd overlay enable --user 0 com.android.internal.systemui.navbar.threebutton || true
+            adb shell am start -W -n com.lyo.app/.ClassroomPickerPreviewActivity
+            sleep 4
+            adb exec-out screencap -p > picker-before.png
+            python3 .github/scripts/verify_classroom_picker.py
+      - name: Upload emulator crash diagnostics and startup screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-preview-emulator-smoke
+          path: |
+            preview-crash-logcat.txt
+            preview-startup.png
+            picker-before.png
+            picker-before.xml
+            picker-after.xml
+            picker-after.png
+          if-no-files-found: warn
+          retention-days: 3

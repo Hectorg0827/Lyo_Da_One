@@ -1,10 +1,14 @@
 package com.lyo.app.ui.classroom.catalog
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -28,23 +32,49 @@ fun BoardDocumentView(document: ClassroomBoardDocument) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             document.blocks.forEach { block ->
                 when (block.kind) {
-                    "code" -> Column(Modifier.background(Background, RoundedCornerShape(12.dp)).padding(12.dp)) {
-                        if (block.language.isNotBlank()) Text(block.language.uppercase(), color = LyoVioletLight, style = MaterialTheme.typography.labelSmall)
-                        Text(block.text, fontFamily = FontFamily.Monospace, color = TextPrimary, modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp))
+                    "code" -> Column(
+                        Modifier.fillMaxWidth()
+                            .background(
+                                Brush.horizontalGradient(listOf(Color(0xFF202252), Color(0xFF181F45))),
+                                RoundedCornerShape(16.dp),
+                            )
+                            .border(1.dp, LyoVioletLight.copy(alpha = .30f), RoundedCornerShape(16.dp))
+                            .padding(14.dp),
+                    ) {
+                        if ((looksLikeMathLesson(block.text) || containsLessonMath(block.text)) && (block.language.isBlank() || block.language in listOf("text", "plain", "math", "latex"))) {
+                            LessonRichText(block.text)
+                        } else {
+                            if (block.language.isNotBlank()) Text(block.language.uppercase(), color = LyoVioletLight, style = MaterialTheme.typography.labelSmall)
+                            Text(block.text, fontFamily = FontFamily.Monospace, color = TextPrimary, modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp))
+                        }
                     }
-                    "table" -> Column(Modifier.horizontalScroll(rememberScrollState()).background(Background, RoundedCornerShape(12.dp)).padding(12.dp)) {
-                        Row { block.headers.forEach { Text(it, color = LyoVioletLight, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(140.dp).padding(8.dp)) } }
-                        block.rows.forEach { row -> Row { row.forEach { Text(it, color = TextPrimary, modifier = Modifier.width(140.dp).padding(8.dp)) } } }
+                    "table" -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // Mobile-friendly table cards: never crop the final columns
+                        // or treat math/Markdown in cells as literal source code.
+                        block.rows.forEach { row ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth()
+                                    .background(Color(0xFF1A2148), RoundedCornerShape(15.dp))
+                                    .border(1.dp, LyoVioletLight.copy(alpha = .24f), RoundedCornerShape(15.dp))
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                row.forEachIndexed { col, cell ->
+                                    Text(block.headers[col], color = LyoVioletLight, style = MaterialTheme.typography.labelSmall)
+                                    LessonRichText(cell, modifier = Modifier.fillMaxWidth())
+                                }
+                            }
+                        }
                     }
                     "steps", "bullets" -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         block.items.forEachIndexed { i, item ->
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text(if (block.kind == "steps") "${i + 1}." else "•", color = LyoVioletLight)
-                                Text(item, color = TextPrimary, modifier = Modifier.weight(1f))
+                                LessonRichText(item, modifier = Modifier.weight(1f))
                             }
                         }
                     }
-                    else -> Text(block.text, color = TextSecondary)
+                    else -> LessonRichText(block.text, modifier = Modifier.fillMaxWidth())
                 }
             }
         }

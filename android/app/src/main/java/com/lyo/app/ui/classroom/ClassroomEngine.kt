@@ -3,6 +3,7 @@ package com.lyo.app.ui.classroom
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import com.google.gson.JsonPrimitive
 import com.lyo.app.data.StackRepository
@@ -144,6 +145,60 @@ class ClassroomEngine(
     private val turnQueue = ArrayDeque<DirectorTurn>()
     private var boardChildren: List<String> = emptyList()
     private var pendingErase = false
+    /**
+     * Completed board scenes are immutable read-only snapshots. Review mode
+     * navigates them locally; it NEVER resends answers or rewinds the socket.
+     * The latest step continues to be the actual live A2UI surface.
+     */
+    data class ReviewStep(val snapshot: A2uiSurfaceState, val title: String)
+    val completedSteps = mutableStateListOf<ReviewStep>()
+    var viewedStepIndex by mutableIntStateOf(0)
+        private set
+
+    val stepCount: Int get() = completedSteps.size + 1
+    val isReviewingPastStep: Boolean get() = viewedStepIndex < completedSteps.size
+    val shownSurface: A2uiSurfaceState get() =
+        completedSteps.getOrNull(viewedStepIndex)?.snapshot ?: surface
+
+    fun previousStep() { if (viewedStepIndex > 0) viewedStepIndex-- }
+    fun nextRecordedStep() { if (viewedStepIndex < completedSteps.size) viewedStepIndex++ }
+    fun returnToLiveStep() { viewedStepIndex = completedSteps.size }
+
+    /** True only when it is safe to ask the backend to generate a new step. */
+    val mayAdvanceLiveStep: Boolean get() = canAdvanceLiveLesson(
+        reviewingPast = isReviewingPastStep,
+        canContinue = canContinue,
+        activeCheckpoint = hasActiveCheckpoint,
+        failed = status == "error" || stallPhase == ClassroomStallPhase.STALLED,
+        paused = isPaused,
+        awaitingResponse = awaitingStep,
+    )
+
+    fun nextLessonStep() {
+        if (isReviewingPastStep) nextRecordedStep()
+        else if (mayAdvanceLiveStep) continueLesson()
+    }
+
+    private fun archiveBoardBeforeScene() {
+        if (boardChildren.isEmpty()) return
+        val wasFollowingLive = !isReviewingPastStep
+        val copy = A2uiSurfaceState(surface.surfaceId)
+        copy.applyCreateSurface(
+            A2uiMessage.CreateSurface(
+                surfaceId = surface.surfaceId,
+                components = surface.components.values.toList(),
+                dataModel = surface.dataModel.deepCopy(),
+            ),
+        )
+        completedSteps.add(ReviewStep(copy, "Step ${completedSteps.size + 1}"))
+        // A bounded history prevents unbounded memory use in long classrooms.
+        if (completedSteps.size > 30) {
+            completedSteps.removeAt(0)
+            if (!wasFollowingLive) viewedStepIndex = (viewedStepIndex - 1).coerceAtLeast(0)
+        }
+        if (wasFollowingLive) viewedStepIndex = completedSteps.size
+    }
+
 
     var status by mutableStateOf("connecting"); private set
     var errorMessage by mutableStateOf<String?>(null); private set
@@ -505,6 +560,7 @@ class ClassroomEngine(
     private fun eraseIfPending() {
         if (!pendingErase) return
         pendingErase = false
+        archiveBoardBeforeScene()
         applyMutation(ClassroomBridge.clearBoard())
     }
 
@@ -563,14 +619,14 @@ class ClassroomEngine(
                         // estimate that can cut a slow response off mid-sentence.
                         withTimeoutOrNull(180_000L) {
                             suspendCancellableCoroutine<Unit> { continuation ->
-                                voicePlayer.play(spoken, voiceLanguage) {
+                                voicePlayer.play(spoken, voiceLanguage, ClassroomCast.speaker(turn.speaker, topic).id) {
                                     if (continuation.isActive) continuation.resume(Unit)
                                 }
                                 continuation.invokeOnCancellation { voicePlayer.stop() }
                             }
                         }
                     } else {
-                        voicePlayer?.play(spoken, voiceLanguage)
+                        voicePlayer?.play(spoken, voiceLanguage, ClassroomCast.speaker(turn.speaker, topic).id)
                     }
                 }
             }

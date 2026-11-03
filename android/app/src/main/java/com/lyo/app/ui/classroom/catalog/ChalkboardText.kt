@@ -6,6 +6,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -26,8 +27,13 @@ import com.lyo.app.ui.theme.TextPrimary
  */
 @Composable
 fun A2uiRenderScope.ChalkboardTextRenderer() {
-    val text = resolveString("text") ?: return
+    val rawText = resolveString("text") ?: return
     val highlightedTerm = resolveString("highlightedTerm")
+    if (containsLessonMath(rawText) && highlightedTerm.isNullOrBlank()) {
+        LessonRichText(rawText)
+        return
+    }
+    val text = cleanClassroomText(rawText)
 
     val transition = rememberInfiniteTransition(label = "chalk-highlight-pulse")
     val pulseAlpha by transition.animateFloat(
@@ -60,5 +66,5 @@ fun A2uiRenderScope.ChalkboardTextRenderer() {
         }
     }
 
-    Text(text = annotated, color = TextPrimary)
+    Text(text = annotated, color = TextPrimary, softWrap = true, modifier = androidx.compose.ui.Modifier.fillMaxWidth())
 }

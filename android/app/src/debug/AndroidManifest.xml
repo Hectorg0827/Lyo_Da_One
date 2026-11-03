@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Only in debug APK. No personal content or backend connections. -->
+    <activity
+      android:name=".ClassroomPickerPreviewActivity"
+      android:exported="true"
+      android:theme="@style/Theme.Lyo" />
+  </application>
+</manifest>

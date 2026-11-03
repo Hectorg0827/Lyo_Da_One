@@ -530,6 +530,8 @@ object ClassroomBridge {
         return when (turn.action) {
             "image" -> {
                 if (turn.query.isNullOrBlank() && turn.content.isNullOrBlank()) return unchanged(boardChildren)
+                // Direct image URLs can render immediately; query-only search needs a resolver.
+                val directImageUrl = turn.content?.trim()?.takeIf { it.startsWith("https://", ignoreCase = true) && it.substringAfter("https://").substringBefore("/").isNotBlank() }
                 val id = UUID.randomUUID().toString()
                 appendLeaf(
                     boardChildren = boardChildren,
@@ -548,9 +550,9 @@ object ClassroomBridge {
                         // wired to a search backend in this v1, so the
                         // "finding a picture of…" placeholder is the
                         // resting state (see ImageBlockRenderer).
-                        "/board/elements/image_$id/url" to JsonNull.INSTANCE,
+                        "/board/elements/image_$id/url" to (directImageUrl?.let { JsonPrimitive(it) } ?: JsonNull.INSTANCE),
                         "/board/elements/image_$id/caption" to (turn.caption?.let { JsonPrimitive(it) } ?: JsonNull.INSTANCE),
-                        "/board/elements/image_$id/query" to JsonPrimitive(turn.query ?: turn.content ?: ""),
+                        "/board/elements/image_$id/query" to JsonPrimitive(turn.query ?: if (directImageUrl != null) "lesson image" else turn.content ?: ""),
                     ),
                 )
             }
@@ -967,10 +969,11 @@ object ClassroomBridge {
     /** Ported verbatim (same 4 rules, same order) from web's
      *  `classifyBoardContent()` in classroom-store.ts. */
     private fun classifyBoardContent(content: String): BoardContentKind {
-        val firstLine = content.lineSequence().firstOrNull() ?: ""
+        val firstLine = content.lineSequence().firstOrNull()?.trim().orEmpty()
+        val fencedMermaid = firstLine.startsWith(96.toChar().toString().repeat(3) + "mermaid", ignoreCase = true)
         return when {
-            MERMAID_PREFIX.containsMatchIn(firstLine) -> BoardContentKind.MERMAID
-            LATEX_SIGNAL.containsMatchIn(content) -> BoardContentKind.LATEX
+            fencedMermaid || MERMAID_PREFIX.containsMatchIn(firstLine) -> BoardContentKind.MERMAID
+            (content.trim().startsWith("$") && content.trim().endsWith("$")) || LATEX_SIGNAL.containsMatchIn(content) -> BoardContentKind.LATEX
             content.contains('\n') && CODE_SIGNAL.containsMatchIn(content) -> BoardContentKind.CODE
             else -> BoardContentKind.CHALK
         }

@@ -7,6 +7,9 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lyo.app.data.api.LearnerConceptRecordDto
@@ -103,6 +107,8 @@ fun ClassroomTopBar(
     onToggleVoice: () -> Unit,
     onToggleNotebook: () -> Unit,
     onToggleSettings: () -> Unit,
+    focusModeLabel: String? = null,
+    onToggleMode: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -114,14 +120,21 @@ fun ClassroomTopBar(
         IconButton(onClick = onBack) {
             Icon(Icons.Filled.ArrowBack, contentDescription = "Leave classroom", tint = TextPrimary)
         }
-        Text(
-            text = topic,
-            color = TextPrimary,
-            style = MaterialTheme.typography.titleSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(topic, color = TextPrimary, style = MaterialTheme.typography.titleSmall,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (focusModeLabel != null) {
+                Text(
+                    text = focusModeLabel + " ▾",
+                    color = ClassroomTokens.AccentPurple,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.clickable(onClick = onToggleMode).padding(vertical = 3.dp),
+                )
+            } else {
+                Text("LYO CLASSROOM", color = ClassroomTokens.AccentPurple,
+                    style = MaterialTheme.typography.labelSmall)
+            }
+        }
         IconButton(onClick = onToggleNotebook) {
             Icon(Icons.Filled.MenuBook, contentDescription = "Your notebook", tint = TextPrimary)
         }
@@ -391,6 +404,7 @@ fun BottomActionDock(
     modifier: Modifier = Modifier,
 ) {
     var handRaised by remember { mutableStateOf(false) }
+    var moreOpen by remember { mutableStateOf(false) }
     var question by remember { mutableStateOf("") }
     val context = LocalContext.current
     val speechLauncher = rememberLauncherForActivityResult(
@@ -429,7 +443,7 @@ fun BottomActionDock(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp),
     ) {
         if (canContinue) {
             Button(
@@ -437,39 +451,80 @@ fun BottomActionDock(
                 colors = ButtonDefaults.buttonColors(containerColor = ClassroomTokens.AccentPurple, contentColor = androidx.compose.ui.graphics.Color.White),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp),
+                    .padding(bottom = 5.dp),
             ) {
                 Text("$continueLabel →")
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onHint, modifier = Modifier.heightIn(min = 48.dp)) { Text("Help") }
-            OutlinedButton(onClick = onTooEasy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Challenge") }
-            if (handRaised) {
+        // The four actions are equally sized; the question editor is
+        // deliberately separate so it never squeezes the action buttons.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Button(
+                onClick = { handRaised = true; startDictation() },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ClassroomTokens.AccentPurple,
+                    contentColor = androidx.compose.ui.graphics.Color.White,
+                ),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 6.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 60.dp),
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Filled.Mic, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text("Speak", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            OutlinedButton(
+                onClick = { handRaised = !handRaised },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 6.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 60.dp),
+            ) {
+                Text("Raise hand", style = MaterialTheme.typography.labelSmall)
+            }
+            OutlinedButton(
+                onClick = onTooEasy,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 6.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 60.dp),
+            ) {
+                Text("Challenge", style = MaterialTheme.typography.labelSmall)
+            }
+            OutlinedButton(
+                onClick = { moreOpen = !moreOpen },
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 3.dp, vertical = 6.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 60.dp),
+            ) {
+                Text("More", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        if (handRaised) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            ) {
                 androidx.compose.material3.OutlinedTextField(
                     value = question,
                     onValueChange = { question = it },
                     placeholder = { Text("Ask the teacher…", color = TextSecondary) },
                     modifier = Modifier.weight(1f),
+                    maxLines = 3,
                 )
-                IconButton(onClick = { startDictation() }) {
-                    Icon(
-                        Icons.Filled.Mic,
-                        contentDescription = "Speak your question",
-                        tint = ClassroomTokens.AccentPurple,
-                    )
-                }
-                IconButton(onClick = {
-                    onAskQuestion(question)
-                    question = ""
-                    handRaised = false
-                }) {
-                    Icon(Icons.Filled.Send, contentDescription = "Send", tint = ClassroomTokens.AccentPurple)
-                }
-            } else {
-                OutlinedButton(onClick = { handRaised = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                    Text("Raise hand", color = LyoGold)
-                }
+                IconButton(
+                    enabled = question.isNotBlank(),
+                    onClick = {
+                        onAskQuestion(question.trim())
+                        question = ""
+                        handRaised = false
+                    },
+                ) { Icon(Icons.Filled.Send, contentDescription = "Send your question", tint = ClassroomTokens.AccentPurple) }
+            }
+        }
+        if (moreOpen) {
+            OutlinedButton(onClick = { onHint(); moreOpen = false }, modifier = Modifier.fillMaxWidth()) {
+                Text("Help · Show me a hint")
             }
         }
     }
@@ -482,43 +537,65 @@ fun BottomActionDock(
  *  per course, matching web/iOS's `TEACHER_VARIANTS[stableHash(courseId)]`
  *  pattern), never driven by a wire-contract field. */
 @Composable
-fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, modifier: Modifier = Modifier, mascotState: String = "reading", lessonRecovery: Boolean = false, onTranscript: () -> Unit = {}) {
+fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, topic: String, modifier: Modifier = Modifier, lessonRecovery: Boolean = false, onTranscript: () -> Unit = {}) {
     val speaker = caption?.takeIf { it.isJsonObject }?.asJsonObject?.get("speaker")
         ?.takeIf { it.isJsonPrimitive }?.asString
     val text = caption?.takeIf { it.isJsonObject }?.asJsonObject?.get("text")
         ?.takeIf { it.isJsonPrimitive }?.asString
+    val character = ClassroomCast.speaker(speaker, topic)
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 12.dp, vertical = 3.dp)
             .background(Surface, RoundedCornerShape(16.dp))
-            .padding(12.dp),
+            .padding(horizontal = 8.dp, vertical = 5.dp),
     ) {
-        val frame = com.lyo.app.ui.classroom.catalog.rememberMascotFrame(state = mascotState, variant = "lyo")
-        androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(frame.drawableRes),
-            contentDescription = "Lyo is $mascotState",
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            modifier = frame.modifier
-                .size(40.dp)
-                .background(Surface, CircleShape),
+        TransparentClassroomPortrait(
+            drawableRes = character.portrait,
+            contentDescription = character.name + ", AI teacher or classmate",
+            modifier = Modifier.size(48.dp),
         )
         if (text != null) {
             Column(modifier = Modifier.weight(1f)) {
                 if (speaker != null) {
-                    Text(text = if (speaker == "Teacher") "Lyo explains" else "$speaker speaks", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
+                    Text(text = "${character.name} · ${if (character.id.startsWith("student_")) "AI classmate" else "AI teacher"}", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
                 }
-                Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(text = text.replace("**", "").replace("*", "").replace("$", ""), color = TextPrimary, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         } else {
-            Text("Lyo is preparing the next step…", color = TextSecondary, modifier = Modifier.weight(1f))
+            Text("Your teacher is preparing the next step…", color = TextSecondary, modifier = Modifier.weight(1f))
         }
         Column {
             if (lessonRecovery) Text("Paused", color = ClassroomTokens.Gold, style = MaterialTheme.typography.labelSmall)
             androidx.compose.material3.TextButton(onClick = onTranscript) { Text("Transcript", color = ClassroomTokens.AccentPurple) }
+        }
+    }
+}
+
+/** Lyo remains beside the learner, not in the teacher's seat. */
+@Composable
+fun LyoCompanionBadge(state: String, spokenClassmates: List<String>, modifier: Modifier = Modifier) {
+    val frame = com.lyo.app.ui.classroom.catalog.rememberMascotFrame(state = state, variant = "lyo")
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp)
+            .background(Surface.copy(alpha = 0.78f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Image(painter = painterResource(frame.drawableRes), contentDescription = "Lyo, your companion",
+            modifier = frame.modifier.size(24.dp))
+        Text("LYO  ·  Your study companion", color = TextSecondary,
+            style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+        ClassroomCast.classmates.filter { it.name in spokenClassmates }.forEach { peer ->
+            TransparentClassroomPortrait(
+                drawableRes = peer.portrait,
+                contentDescription = peer.name + ", AI classmate",
+                modifier = Modifier.size(24.dp),
+            )
         }
     }
 }
@@ -597,32 +674,32 @@ fun StallRecoveryCard(
     modifier: Modifier = Modifier,
 ) {
     Column(
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 4.dp)
-            .background(Surface, RoundedCornerShape(12.dp))
-            .padding(12.dp),
+            .padding(10.dp)
+            .border(1.dp, ClassroomTokens.Gold, RoundedCornerShape(18.dp))
+            .background(Surface, RoundedCornerShape(18.dp))
+            .padding(18.dp),
     ) {
-        Text("This step is stuck", color = TextPrimary, style = MaterialTheme.typography.labelLarge)
+        Text("A quick pause", color = TextPrimary, style = MaterialTheme.typography.titleLarge)
         Text(
-            ClassroomSessionContract.STALL_RECOVERY,
+            "The next step didn't load. Try again, or restart this lesson if it stays stuck.",
             color = TextSecondary,
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 4.dp),
+            style = MaterialTheme.typography.bodyMedium,
         )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 10.dp),
-        ) {
-            Button(
-                onClick = onAskAgain,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ClassroomTokens.AccentPurple,
-                    contentColor = TextPrimary,
-                ),
-            ) { Text("Ask Lyo again") }
-            OutlinedButton(onClick = onStartOver) { Text("Start this lesson over") }
-        }
+        Button(
+            onClick = onAskAgain,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = ClassroomTokens.AccentPurple,
+                contentColor = TextPrimary,
+            ),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+        ) { Text("Try again →") }
+        OutlinedButton(
+            onClick = onStartOver,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+        ) { Text("Start lesson over") }
     }
 }
 
