@@ -153,6 +153,7 @@ fun ClassroomModeCompanion(
     transcript: List<TranscriptLine>,
     isReviewingPastStep: Boolean,
     isGroupSession: Boolean,
+    lastLyoText: String? = null,
 ) {
     val accent = colorFor(mode)
     val recentPeerLines = transcript.filter { line ->
@@ -224,7 +225,10 @@ fun ClassroomModeCompanion(
                     style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                 Text(
                     when (mode) {
-                        ClassroomDisplayMode.SOLO -> "Take your time. You've got this. ✨"
+                        ClassroomDisplayMode.SOLO ->
+                            lastLyoText?.let(::cleanClassroomText)?.take(160)
+                                ?.takeIf(String::isNotBlank)
+                                ?: "Take your time. You've got this. ✨"
                         ClassroomDisplayMode.CLASSROOM -> "Great ideas. Keep going! ✨"
                         ClassroomDisplayMode.REVIEW ->
                             if (isReviewingPastStep) "Your earlier work is saved."
