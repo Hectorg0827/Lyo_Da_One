@@ -230,7 +230,7 @@ fun ClassroomScreen(
                     .padding(horizontal = 12.dp, vertical = 5.dp)
                     .background(
                         Brush.verticalGradient(
-                            listOf(Color(0xFF182044), ClassroomTokens.BoardBackground, Color(0xFF0D1335)),
+                            listOf(Color(0xFF182044), Color(0xFF121A3B), Color(0xFF0D1335)),
                         ),
                         RoundedCornerShape(22.dp),
                     )
