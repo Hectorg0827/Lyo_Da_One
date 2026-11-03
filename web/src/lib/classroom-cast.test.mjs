@@ -23,3 +23,9 @@ test('classmate rail only shows people with actual speaking turns', () => {
   assert.deepEqual(speakingClassmates(realTurns, 'classroom').map((p) => p.name), ['Maya']);
   assert.deepEqual(speakingClassmates([], 'classroom'), []);
 });
+
+test('Android and web share the same named teacher personalities without changing server identities', () => {
+  assert.deepEqual(TEACHERS.map(person => person.displayName), ['Mira', 'Nova', 'Atlas', 'Sage']);
+  assert.deepEqual(TEACHERS.map(person => person.name), ['Teacher 1', 'Teacher 2', 'Teacher 3', 'Teacher 4']);
+  assert.equal(teacherForTopic('math').displayName, 'Atlas');
+});
