@@ -214,11 +214,11 @@ fun ClassroomModePicker(
                 }
             }
             }
-            // Fixed CTA footer has a guaranteed extra 18dp clearance even on
+            // Fixed CTA footer has a guaranteed extra 28dp clearance even on
             // Android devices that report zero navigation insets for dialogs.
             Column(
                 modifier = Modifier.fillMaxWidth()
-                    .padding(top = 12.dp, bottom = 18.dp),
+                    .padding(top = 12.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
             Row(
