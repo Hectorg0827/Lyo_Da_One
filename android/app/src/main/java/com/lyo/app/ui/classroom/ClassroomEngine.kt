@@ -165,9 +165,13 @@ class ClassroomEngine(
     fun returnToLiveStep() { viewedStepIndex = completedSteps.size }
 
     /** True only when it is safe to ask the backend to generate a new step. */
-    val mayAdvanceLiveStep: Boolean get() =
-        !isReviewingPastStep && canContinue && !hasActiveCheckpoint &&
-            status != "error" && !isPaused && stallPhase != ClassroomStallPhase.STALLED
+    val mayAdvanceLiveStep: Boolean get() = canAdvanceLiveLesson(
+        reviewingPast = isReviewingPastStep,
+        canContinue = canContinue,
+        activeCheckpoint = hasActiveCheckpoint,
+        failed = status == "error" || stallPhase == ClassroomStallPhase.STALLED,
+        paused = isPaused,
+    )
 
     fun nextLessonStep() {
         if (isReviewingPastStep) nextRecordedStep()
