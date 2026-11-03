@@ -23,9 +23,9 @@ test('Classroom mode switching is a presentation change after the lesson starts'
 });
 
 test('Step navigation never skips a live answer checkpoint', () => {
-  assert.match(classroom, /const canAdvanceStep = viewingBoard !== -1 \|\| readyToContinue/);
-  assert.match(classroom, /disabled=\{!canAdvanceStep\}/);
-  assert.match(classroom, /if \(readyToContinue\) continueLesson\(\)/);
+  assert.match(classroom, /const nextAction = classroomNextAction/);
+  assert.match(classroom, /disabled=\{nextAction.disabled\}/);
+  assert.match(classroom, /case 'continue': continueLesson\(\); break;/);
   assert.match(classroom, /aria-label="Classroom step navigation"/);
 });
 
