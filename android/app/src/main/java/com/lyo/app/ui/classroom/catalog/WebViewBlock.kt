@@ -2,6 +2,10 @@ package com.lyo.app.ui.classroom.catalog
 
 import android.annotation.SuppressLint
 import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
@@ -18,22 +22,30 @@ import org.json.JSONObject
  *
  * Device-level WebView validation is still required before deployment.
  */
-enum class WebViewBlockKind { MERMAID, LATEX }
+enum class WebViewBlockKind { MERMAID, LATEX, RICH }
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebViewBlock(kind: WebViewBlockKind, source: String, modifier: Modifier = Modifier) {
     val html = remember(kind, source) { buildHtml(kind, source) }
+    var contentHeight by remember(kind, source) { mutableIntStateOf(if (kind == WebViewBlockKind.MERMAID) 220 else 90) }
     AndroidView(
         modifier = modifier
             .fillMaxWidth()
-            .height(220.dp), // fixed height: WebView can't natively report content-height back into Compose's layout pass without a JS bridge round-trip, which needs a real device to validate the timing of — see the class doc comment.
+            .height(contentHeight.coerceIn(64, 1000).dp),
         factory = { context ->
             WebView(context).apply {
                 settings.javaScriptEnabled = true
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        view?.evaluateJavascript("Math.max(document.body.scrollHeight,document.documentElement.scrollHeight).toString()") { result ->
+                            result.trim('"').toDoubleOrNull()?.let { contentHeight = (it + 24).toInt().coerceIn(64, 1000) }
+                        }
+                    }
+                }
             }
         },
         update = { webView ->
@@ -59,6 +71,7 @@ private fun buildHtml(kind: WebViewBlockKind, source: String): String {
     // LLM-generated source text (backslashes, quotes, newlines).
     val escapedSource = JSONObject.quote(source)
     return when (kind) {
+        WebViewBlockKind.RICH -> buildRichLessonHtml(source)
         WebViewBlockKind.MERMAID -> """
             <!DOCTYPE html><html><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -113,3 +126,41 @@ private fun buildHtml(kind: WebViewBlockKind, source: String): String {
 
 private fun String.htmlEscape(): String =
     replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+/** One safe rich-text renderer for markdown prose with inline/display KaTeX. */
+internal fun buildRichLessonHtml(source: String): String {
+    val fence = 96.toChar().toString().repeat(3)
+    val safe = source.htmlEscape()
+        .lineSequence().filterNot { it.trim().startsWith(fence) || it.trim().startsWith("~~~") }
+        .joinToString("<br>")
+        .replace(Regex("""\*\*([^*]+)\*\*"""), "<strong>$1</strong>")
+        .replace(Regex("""(^|<br>)#{1,4}\s+"""), "$1")
+    return """
+      <!DOCTYPE html><html><head><meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
+      <script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/contrib/auto-render.min.js"></script>
+      <style>
+       body{margin:0;padding:4px;background:transparent;color:#f4f1ff;font:16px/1.5 sans-serif;overflow-wrap:anywhere}
+       strong{font-weight:750;color:#fff}.katex-display{overflow-x:auto;overflow-y:hidden;text-align:center;margin:12px 0}
+       .katex{color:#fff}#lesson{white-space:normal}
+      </style></head><body><div id="lesson">$safe</div>
+      <script>
+       window.addEventListener('load',function(){
+         var el=document.getElementById('lesson');
+         if(typeof renderMathInElement==='function'){
+           renderMathInElement(el,{delimiters:[
+             {left:'$$',right:'$$',display:true},
+             {left:'\\[',right:'\\]',display:true},
+             {left:'\\(',right:'\\)',display:false},
+             {left:'$',right:'$',display:false}
+           ],throwOnError:false,strict:'ignore'});
+         } else {
+           el.innerHTML=el.innerHTML.replace(/\$\$/g,'').replace(/\$/g,'')
+             .replace(/\\frac\{([^{}]+)\}\{([^{}]+)\}/g,'($1 / $2)');
+         }
+       });
+      </script></body></html>
+    """.trimIndent()
+}

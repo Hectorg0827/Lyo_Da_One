@@ -8,6 +8,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,11 +35,19 @@ fun A2uiRenderScope.ImageBlockRenderer() {
     val caption = resolveString("caption")
     val query = resolveString("query")
     val attribution = resolveString("attribution")
+    var commonsResult by remember(query, url) { mutableStateOf<CommonsClassroomImage?>(null) }
+    LaunchedEffect(query, url) {
+        if (url == null && !query.isNullOrBlank()) {
+            commonsResult = lookupCommonsClassroomImage(query)
+        }
+    }
+    val imageUrl = url ?: commonsResult?.url
+    val imageAttribution = attribution ?: commonsResult?.attribution
 
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
-        if (url != null) {
+        if (imageUrl != null) {
             AsyncImage(
-                model = url,
+                model = imageUrl,
                 contentDescription = caption ?: query,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
@@ -61,9 +74,9 @@ fun A2uiRenderScope.ImageBlockRenderer() {
         if (caption != null) {
             Text(text = caption, color = TextSecondary, modifier = Modifier.padding(top = 4.dp))
         }
-        if (attribution != null) {
+        if (imageAttribution != null) {
             Text(
-                text = attribution,
+                text = imageAttribution,
                 color = TextSecondary.copy(alpha = 0.6f),
                 style = MaterialTheme.typography.labelSmall,
             )

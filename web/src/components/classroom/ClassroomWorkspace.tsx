@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, type ComponentProps } from 'react';
-import { PenLine, Bookmark, Pencil, MessageCircle } from 'lucide-react';
+import { Bookmark, Pencil, MessageCircle } from 'lucide-react';
 import { workspaceGroups } from '@/lib/board-presentation.mjs';
 import type { BoardElement } from '@/stores/classroom-store';
 import { BoardElementView } from './BoardElementView';
@@ -15,11 +15,11 @@ export function ClassroomWorkspace({ elements, ...actions }: { elements: BoardEl
   ));
   const hasVisual = groups.board.some(el => el.kind !== 'summary');
   return (
-    <div className="space-y-5" data-classroom-workspace>
+    <div className="space-y-3 sm:space-y-5" data-classroom-workspace>
       {groups.recovery.length > 0 && <section aria-label="Lesson recovery" className="space-y-3">{render(groups.recovery)}</section>}
       {groups.board.length > 0 && (
         <section aria-label="Teaching workspace" className="space-y-3">
-          <h2 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-lyo-300"><PenLine className="h-4 w-4" /> Teaching workspace</h2>
+          <h2 className="sr-only">Lesson on the interactive blackboard</h2>
           {render(groups.board, hasVisual)}
         </section>
       )}

@@ -618,10 +618,10 @@ function SummaryView({ el, compactText }: { el: Extract<BoardElement, { kind: 's
   const collapse = compactText && proseOnly && (el.content?.length ?? 0) > 240 && !recovery;
   const content = <BoardDocumentView document={el.boardDocument} fallback={el.content} />;
   return (
-    <section className={cn('space-y-3 rounded-xl border p-4', recovery
-      ? 'border-[var(--warning)] bg-[var(--surface-2)]'
+    <section className={cn('space-y-2 rounded-xl border p-3 sm:p-4', recovery
+      ? 'border-amber-400/60 bg-amber-300/[0.06]'
       : 'border-[var(--border)] bg-[var(--surface)]')} role={recovery ? 'status' : undefined}>
-      <h3 className="flex items-start gap-2 text-base font-semibold text-[var(--text-primary)]">
+      <h3 className="flex items-start gap-2 text-sm font-semibold text-[var(--text-primary)] sm:text-base">
         <BookOpenCheck className={cn('mt-0.5 h-4 w-4 shrink-0', recovery ? 'text-[var(--warning)]' : 'text-lyo-300')} /> {el.title}
       </h3>
       {collapse ? <details className="text-sm text-[var(--text-secondary)]"><summary className="cursor-pointer">Read supporting notes</summary><div className="mt-3">{content}</div></details> : content}

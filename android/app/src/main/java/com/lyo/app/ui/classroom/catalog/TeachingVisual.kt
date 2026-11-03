@@ -76,11 +76,13 @@ fun TeachingVisualCard(visual: ClassroomBlock, id: String, readOnly: Boolean = f
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (readOnly) Text("KEEP IN VIEW · REFERENCE", color = cyan, style = MaterialTheme.typography.labelSmall)
-        Text(visual.title.orEmpty(), color = Color.White, style = MaterialTheme.typography.titleMedium)
-        Text(visual.caption.orEmpty(), color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium)
+        Text(cleanClassroomText(visual.title.orEmpty()), color = Color.White, style = MaterialTheme.typography.titleMedium)
+        visual.caption?.takeIf { it.isNotBlank() }?.let { Text(cleanClassroomText(it), color = Color.White.copy(alpha = 0.85f), style = MaterialTheme.typography.bodyMedium) }
 
         if (!visual.isTeachingVisualValid()) {
-            Text(visual.description.orEmpty(), color = Color.White)
+            val description = visual.description.orEmpty()
+            if (looksLikeMathLesson(description)) NativeMathNote(description)
+            else Text(cleanClassroomText(description), color = Color.White)
         } else when (visual.kind) {
             "fraction_pie" -> FractionPieCard(visual, id, readOnly, onUpdate)
             "fraction_bar" -> {

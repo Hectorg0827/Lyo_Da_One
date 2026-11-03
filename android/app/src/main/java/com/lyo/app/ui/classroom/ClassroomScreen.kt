@@ -1,9 +1,8 @@
 package com.lyo.app.ui.classroom
 
-import android.app.Activity
-import android.content.pm.ActivityInfo
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,23 +11,26 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.navigation.NavHostController
 import com.lyo.app.data.StackRepository
 import com.lyo.app.data.a2ui.resolvePointer
@@ -37,6 +39,7 @@ import com.lyo.app.data.classroom.ClassroomStallPhase
 import com.lyo.app.ui.classroom.a2ui.A2uiSurface
 import com.lyo.app.ui.screens.classroom.ClassroomVoicePlayer
 import com.lyo.app.ui.theme.Background
+import com.lyo.app.ui.theme.ClassroomTokens
 import com.lyo.app.ui.theme.LyoRed
 import com.lyo.app.ui.theme.TextSecondary
 
@@ -70,18 +73,35 @@ fun ClassroomScreen(
     // cannot be argued out of it. Bumping this key is what rebuilds it.
     var sessionAttempt by remember(topic, courseId) { mutableIntStateOf(0) }
     var resumeSeat by remember(topic, courseId) { mutableStateOf<ClassroomSavedSession?>(null) }
+    // The teacher's server mode is selected only once at entry. Switching
+    // visual modes later leaves this live session and graded evidence intact.
+    val suggestedMode = ClassroomDisplayMode.fromTeachingMode(teachingMode)
+    val preferredMode = remember(context, topic, courseId) {
+        ClassroomPreferences.savedDisplayMode(context)
+    }
+    val initialMode = if (reviewConceptId != null) ClassroomDisplayMode.REVIEW else preferredMode
+    var activeDisplayMode by remember(topic, courseId) {
+        mutableStateOf<ClassroomDisplayMode?>(initialMode)
+    }
+    var showModePicker by remember(topic, courseId) { mutableStateOf(initialMode == null) }
+    var rememberModeChoice by remember(topic, courseId) { mutableStateOf(true) }
+    var backendTeachingMode by remember(topic, courseId) {
+        mutableStateOf(if (reviewConceptId != null && teachingMode == "review") "review"
+            else initialMode?.backendModeWhenStarting() ?: teachingMode)
+    }
+
     // Keyed on the attempt too: engine.dispose() closes this player, so a
     // rebuilt engine inheriting the old one would teach in silence.
-    val voicePlayer = remember(context, topic, courseId, teachingMode, courseBacked, sessionAttempt) {
+    val voicePlayer = remember(context, topic, courseId, backendTeachingMode, courseBacked, sessionAttempt) {
         ClassroomVoicePlayer(context)
     }
     val engine = remember(
-        topic, courseId, teachingMode, courseBacked, reviewConceptId, sessionAttempt,
+        topic, courseId, backendTeachingMode, courseBacked, reviewConceptId, sessionAttempt,
     ) {
         ClassroomEngine(
             topic = topic,
             sessionIdParam = courseId,
-            mode = teachingMode,
+            mode = backendTeachingMode,
             courseBacked = courseBacked,
             reviewConceptId = reviewConceptId,
             voicePlayer = voicePlayer,
@@ -89,34 +109,13 @@ fun ClassroomScreen(
             resumeSession = resumeSeat,
         )
     }
-    DisposableEffect(engine) {
-        engine.start()
-        onDispose { engine.dispose() }
+    DisposableEffect(engine, activeDisplayMode != null) {
+        if (activeDisplayMode != null) engine.start()
+        onDispose { if (activeDisplayMode != null) engine.dispose() }
     }
-    LaunchedEffect(courseId, topic, courseBacked) {
-        if (courseBacked) {
+    LaunchedEffect(courseId, topic, courseBacked, activeDisplayMode) {
+        if (activeDisplayMode != null && courseBacked) {
             StackRepository.upsertCourseOnStart(courseId, title = topic)
-        }
-    }
-
-    // Legacy Android classroom policy: landscape full-screen + immersive
-    // system bars. Web does not force orientation, so this is not parity.
-    // Modeled directly on ChatScreen.kt's TextToSpeech
-    // DisposableEffect shape: acquire in the effect body, capture the
-    // ORIGINAL orientation before mutating so onDispose restores it
-    // exactly rather than hardcoding a default (some other screen may
-    // already have set a non-UNSPECIFIED orientation elsewhere in the app).
-    val activity = context as? Activity
-    DisposableEffect(Unit) {
-        val originalOrientation = activity?.requestedOrientation
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-        val window = activity?.window
-        val insetsController = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
-        insetsController?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        insetsController?.hide(WindowInsetsCompat.Type.systemBars())
-        onDispose {
-            insetsController?.show(WindowInsetsCompat.Type.systemBars())
-            activity?.requestedOrientation = originalOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         }
     }
 
@@ -132,9 +131,25 @@ fun ClassroomScreen(
         if (notebookOpen) engine.refreshLearnerRecord()
     }
 
-    val chrome = rememberChromeVisibility(
-        blockAutoHide = engine.hasActiveCheckpoint || engine.lessonRecovery || settingsOpen || notebookOpen,
-    )
+    // Lesson controls and progress remain visible; auto-hiding the header
+    // left an empty strip and confused learners during interaction.
+    val chrome = rememberChromeVisibility(blockAutoHide = true)
+    // Recovery is an automatic temporary visual state; never overwrite the
+    // learner's chosen mode or saved device preference on a network error.
+    val isAutoRecovery = engine.stallPhase == ClassroomStallPhase.STALLED ||
+        engine.status == "error" || engine.lessonRecovery
+    val renderedMode = if (isAutoRecovery) ClassroomDisplayMode.REVIEW else activeDisplayMode
+    // The companion appears only after a real Lyo contribution, then leaves.
+    val lastLyoLine = engine.transcript.lastOrNull { it.speaker.equals("Lyo", ignoreCase = true) }
+    var showFocusLyoTip by remember(topic, courseId) { mutableStateOf(false) }
+    LaunchedEffect(lastLyoLine?.id) {
+        if (lastLyoLine != null) {
+            showFocusLyoTip = true
+            delay(5_500L)
+            showFocusLyoTip = false
+        }
+    }
+
 
     Box(
         modifier = Modifier
@@ -156,21 +171,28 @@ fun ClassroomScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(Unit) { detectTapGestures { chrome.toggle() } },
+                .pointerInput(Unit) { detectTapGestures { chrome.poke() } },
         )
 
         Column(modifier = Modifier.fillMaxSize()) {
             AnimatedVisibility(visible = chrome.visible) {
-                ClassroomTopBar(
-                    topic = topic,
-                    isPaused = engine.isPaused,
-                    isVoiceEnabled = engine.isVoiceEnabled,
-                    onBack = { nav.popBackStack() },
-                    onTogglePause = { engine.togglePause(); chrome.poke() },
-                    onToggleVoice = { engine.toggleVoice(); chrome.poke() },
-                    onToggleNotebook = { notebookOpen = !notebookOpen; settingsOpen = false; chrome.poke() },
-                    onToggleSettings = { settingsOpen = !settingsOpen; notebookOpen = false; chrome.poke() },
-                )
+                renderedMode?.let { mode ->
+                    PremiumClassroomHeader(
+                        topic = topic,
+                        mode = mode,
+                        stepNumber = engine.viewedStepIndex + 1,
+                        totalSteps = engine.stepCount,
+                        isPaused = engine.isPaused || isAutoRecovery,
+                        isConnecting = engine.status == "connecting",
+                        isVoiceEnabled = engine.isVoiceEnabled,
+                        onBack = { nav.popBackStack() },
+                        onPickMode = { showModePicker = true; chrome.poke() },
+                        onTogglePause = { engine.togglePause(); chrome.poke() },
+                        onToggleVoice = { engine.toggleVoice(); chrome.poke() },
+                        onNotebook = { notebookOpen = !notebookOpen; settingsOpen = false; chrome.poke() },
+                        onSettings = { settingsOpen = !settingsOpen; notebookOpen = false; chrome.poke() },
+                    )
+                }
             }
 
             // Independent of chrome.visible (matching web's settingsOpen/
@@ -198,80 +220,146 @@ fun ClassroomScreen(
                 )
             }
 
-            // One real Lyo mascot beside the explanation, above the teaching tools.
-            TeacherBadgeAndCaption(
-                caption = engine.surface.dataModel.resolvePointer("/caption"),
-                mascotState = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
-                lessonRecovery = engine.lessonRecovery,
-                onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
-            )
+            // Three distinct presentations use the same teacher and live engine.
+            renderedMode?.let { mode ->
+                ClassroomModeHero(
+                    mode = mode,
+                    topic = topic,
+                    caption = engine.surface.dataModel.resolvePointer("/caption"),
+                    isPaused = engine.isPaused || isAutoRecovery,
+                    onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
+                )
+            }
 
-            // Teaching tools scroll independently from the explanation and controls.
-            Box(
+            // Blackboard-first layout: the teacher and Lyo have compact identity
+            // badges above, while the real, server-driven lesson owns the space.
+            // The blackboard is the hero: own a dedicated title row and a
+            // separately scrolling content viewport. Never draw the heading
+            // over the dynamic A2UI lesson content.
+            Column(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
+                    .shadow(
+                        elevation = 9.dp,
+                        shape = RoundedCornerShape(22.dp),
+                        ambientColor = Color(0xFF7654FF).copy(alpha = .5f),
+                        spotColor = Color(0xFF7654FF).copy(alpha = .5f),
+                    )
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color(0xFF182044), Color(0xFF121A3B), Color(0xFF0D1335)),
+                        ),
+                        RoundedCornerShape(22.dp),
+                    )
+                    .border(
+                        1.dp,
+                        ClassroomTokens.AccentPurple.copy(alpha = 0.65f),
+                        RoundedCornerShape(22.dp),
+                    ),
             ) {
-                A2uiSurface(
-                    state = engine.surface,
-                    catalog = engine.catalog,
-                    onAction = { action -> engine.onAction(action); chrome.poke() },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(12.dp)
-                        .verticalScroll(rememberScrollState()),
+                renderedMode?.let { mode ->
+                    ClassroomBoardHeading(
+                        mode = mode,
+                        paused = engine.isPaused || isAutoRecovery,
+                    )
+                }
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    if (isAutoRecovery && !engine.isReviewingPastStep &&
+                        (engine.stallPhase == ClassroomStallPhase.STALLED || engine.status == "error")
+                    ) {
+                        PremiumClassroomRecovery(
+                            lastLessonText = engine.transcript.lastOrNull {
+                                !it.speaker.equals("You", ignoreCase = true)
+                            }?.text,
+                            canReviewPrevious = engine.stepCount > 1,
+                            isFatal = engine.status == "error",
+                            onRetry = {
+                                if (engine.status == "error") {
+                                    resumeSeat = null
+                                    sessionAttempt += 1
+                                } else engine.nudgeTeacher()
+                                chrome.poke()
+                            },
+                            onReviewPrevious = { engine.previousStep(); chrome.poke() },
+                            onRestart = {
+                                resumeSeat = null
+                                sessionAttempt += 1
+                                chrome.poke()
+                            },
+                        )
+                    } else {
+                    A2uiSurface(
+                        state = engine.shownSurface,
+                        catalog = engine.catalog,
+                        onAction = { action ->
+                            // Completed scenes may be inspected, not regraded.
+                            if (!engine.isReviewingPastStep) engine.onAction(action)
+                            chrome.poke()
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(start = 14.dp, end = 14.dp, bottom = 12.dp),
+                    )
+
+                    if (!engine.hasBoardContent) {
+                        OpeningCard(
+                            opening = engine.opening,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                        )
+                    }
+                    if (engine.status == "error") {
+                        Text(
+                            text = engine.errorMessage ?: "The classroom hit a snag.",
+                            color = LyoRed,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    } else if (engine.status == "connecting") {
+                        Text(
+                            text = "Preparing your classroom…",
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+                    }
+                    }
+                    if (activeDisplayMode == ClassroomDisplayMode.SOLO &&
+                        !isAutoRecovery && !engine.isReviewingPastStep &&
+                        showFocusLyoTip && lastLyoLine != null
+                    ) {
+                        FocusLyoTipOverlay(
+                            message = lastLyoLine.text,
+                            onDismiss = { showFocusLyoTip = false },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+
+            // Focus uses the temporary Lyo overlay in the blackboard instead.
+            renderedMode?.takeIf { it != ClassroomDisplayMode.SOLO &&
+                activeDisplayMode != ClassroomDisplayMode.SOLO }?.let { mode ->
+                ClassroomModeCompanion(
+                    mode = mode,
+                    transcript = engine.transcript,
+                    isReviewingPastStep = engine.isReviewingPastStep,
+                    isGroupSession = backendTeachingMode == "classroom",
                 )
-
-                // The cover page: what this class is, before any of it is
-                // taught. A learner should never be looking at a blank board
-                // wondering whether the class has begun, and after a resume
-                // they should be told that it is the middle of one.
-                // Gone as soon as the teacher puts anything on the board —
-                // not merely once something has been said. A scene opening on
-                // a QuizCard adds no transcript line, and this card is drawn
-                // over the board, so keying off narration left it covering
-                // the learner's first checkpoint.
-                if (!engine.hasBoardContent) {
-                    OpeningCard(
-                        opening = engine.opening,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(8.dp),
-                    )
-                }
-
-                if (engine.status == "error") {
-                    Text(
-                        text = engine.errorMessage ?: "The classroom hit a snag.",
-                        color = LyoRed,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(8.dp),
-                    )
-                } else if (engine.status == "connecting") {
-                    Text(
-                        text = "Preparing your classroom…",
-                        color = TextSecondary,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                }
             }
 
             // The step never arrived. The class says so, says it is not the
             // learner's fault, and gives them two things that actually move
             // it — asking again, and leaving the stuck session behind.
-            if (engine.stallPhase == ClassroomStallPhase.STALLED) {
-                StallRecoveryCard(
-                    onAskAgain = { engine.nudgeTeacher(); chrome.poke() },
-                    onStartOver = {
-                        resumeSeat = null
-                        sessionAttempt += 1
-                        chrome.poke()
-                    },
-                )
-            } else {
+            if (engine.stallPhase != ClassroomStallPhase.STALLED) {
                 engine.notice?.let { message ->
                     ClassroomNoticeCard(message = message, onDismiss = { engine.dismissNotice() })
                 }
@@ -284,16 +372,53 @@ fun ClassroomScreen(
                 }
             }
 
-            AnimatedVisibility(visible = chrome.visible || engine.canContinue) {
-                BottomActionDock(
-                    canContinue = engine.canContinue,
+            if (activeDisplayMode == ClassroomDisplayMode.SOLO) {
+                FocusStepNavigation(engine)
+            } else if (activeDisplayMode != null) {
+                ClassroomStepNavigation(engine)
+            }
+            renderedMode?.let { mode ->
+                PremiumClassroomDock(
+                    mode = mode,
+                    canContinue = engine.canContinue && !engine.isReviewingPastStep &&
+                        activeDisplayMode != ClassroomDisplayMode.SOLO,
                     continueLabel = engine.continueLabel,
-                    onContinue = { engine.continueLesson(); chrome.poke() },
+                    onContinue = { if (engine.mayAdvanceLiveStep) engine.continueLesson(); chrome.poke() },
                     onAskQuestion = { text -> engine.askQuestion(text); chrome.poke() },
                     onHint = { engine.requestHint("nudge"); chrome.poke() },
                     onTooEasy = { engine.signalTooEasy(); chrome.poke() },
+                    allowLiveActions = !engine.isReviewingPastStep && !isAutoRecovery && !engine.isPaused,
                 )
             }
+        }
+        if (showModePicker) {
+            ClassroomModePicker(
+                current = activeDisplayMode,
+                canDismiss = activeDisplayMode != null,
+                suggested = suggestedMode,
+                rememberChoice = rememberModeChoice,
+                onRememberChoiceChange = { rememberModeChoice = it },
+                onChoose = { selected ->
+                    if (activeDisplayMode == null) {
+                        // Backend mode is chosen before opening the socket.
+                        // A later UI mode change does not restart the class.
+                        backendTeachingMode = if (teachingMode == "review" && reviewConceptId != null)
+                            "review" else selected.backendModeWhenStarting()
+                    }
+                    if (selected == ClassroomDisplayMode.REVIEW && !engine.isReviewingPastStep) {
+                        engine.previousStep()
+                    } else if (activeDisplayMode == ClassroomDisplayMode.REVIEW &&
+                        selected != ClassroomDisplayMode.REVIEW
+                    ) {
+                        engine.returnToLiveStep()
+                    }
+                    activeDisplayMode = selected
+                    if (rememberModeChoice) ClassroomPreferences.saveDisplayMode(context, selected)
+                    else ClassroomPreferences.saveDisplayMode(context, null)
+                    showModePicker = false
+                },
+                onDismiss = { showModePicker = false },
+            )
         }
     }
 }

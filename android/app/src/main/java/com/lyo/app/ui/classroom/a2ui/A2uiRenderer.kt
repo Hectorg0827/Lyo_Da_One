@@ -32,13 +32,17 @@ fun A2uiSurface(
     // No surface created yet (e.g. before the classroom's first turn
     // arrives) — render nothing; ClassroomScreen owns its own
     // "preparing your classroom…" loading state for that gap.
-    RenderNode(
-        componentId = rootId,
-        state = state,
-        catalog = catalog,
-        scopePath = "/",
-        onAction = onAction,
-    )
+    // The caller owns viewport and scrolling. Previously the modifier was
+    // ignored, so long lessons could draw outside the visible blackboard.
+    androidx.compose.foundation.layout.Box(modifier = modifier) {
+        RenderNode(
+            componentId = rootId,
+            state = state,
+            catalog = catalog,
+            scopePath = "/",
+            onAction = onAction,
+        )
+    }
 }
 
 @Composable
