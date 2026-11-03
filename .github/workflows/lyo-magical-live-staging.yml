@@ -92,28 +92,7 @@ jobs:
             adb shell am start -W -n com.lyo.app/.ClassroomPickerPreviewActivity
             sleep 4
             adb exec-out screencap -p > picker-before.png
-            adb shell uiautomator dump /sdcard/classroom-picker.xml
-            adb pull /sdcard/classroom-picker.xml picker-before.xml
-            python3 - <<'PY'
-            import os, re, subprocess, xml.etree.ElementTree as ET
-            root = ET.parse('picker-before.xml').getroot()
-            nodes = [n for n in root.iter('node') if 'Start lesson' in (n.get('content-desc','') + ' ' + n.get('text',''))]
-            assert nodes, 'Missing accessible Start lesson CTA in picker'
-            bounds = nodes[-1].get('bounds', '')
-            numbers = list(map(int, re.findall('[0-9]+', bounds)))
-            assert len(numbers) == 4, 'CTA bounds not reported: '+bounds
-            x1,y1,x2,y2 = numbers
-            dimensions = subprocess.check_output(['adb','shell','wm','size'],text=True)
-            h = int(re.findall('[0-9]+', dimensions)[-1])
-            assert y2 < h-120, f'CTA overlaps navigation region: button bottom={y2}, screen={h}'
-            assert y2 > y1 and x2 > x1
-            subprocess.check_call(['adb','shell','input','tap',str((x1+x2)//2),str((y1+y2)//2)])
-            print('CTA clearance',h-y2,'px, tap', (x1+x2)//2,(y1+y2)//2)
-            PY
-            sleep 2
-            adb shell uiautomator dump /sdcard/classroom-after.xml
-            adb pull /sdcard/classroom-after.xml picker-after.xml
-            grep -q 'START_TAPPED' picker-after.xml
+            python3 .github/scripts/verify_classroom_picker.py
       - name: Upload emulator crash diagnostics and startup screenshot
         if: always()
         uses: actions/upload-artifact@v4
@@ -125,5 +104,6 @@ jobs:
             picker-before.png
             picker-before.xml
             picker-after.xml
+            picker-after.png
           if-no-files-found: warn
           retention-days: 3
