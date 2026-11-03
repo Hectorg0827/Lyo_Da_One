@@ -142,3 +142,64 @@ fun ClassroomStepNavigation(engine: ClassroomEngine) {
         }
     }
 }
+
+/**
+ * Focus-only unified lesson navigation. The right CTA replaces the former
+ * full-width "Next step" button, saving one entire bottom row.
+ */
+@Composable
+fun FocusStepNavigation(engine: ClassroomEngine) {
+    val reviewing = engine.isReviewingPastStep
+    val paused = engine.isPaused && !reviewing
+    val enabled = reviewing || paused || engine.mayAdvanceLiveStep
+    val label = when {
+        reviewing -> "Next ›"
+        paused -> "Resume ▶"
+        else -> if (engine.canContinue) "Next step ›" else "Next ›"
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 3.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Surface, RoundedCornerShape(18.dp))
+                .border(1.dp, ClassroomTokens.AccentPurple.copy(alpha = 0.45f), RoundedCornerShape(18.dp))
+                .padding(horizontal = 7.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            TextButton(
+                onClick = engine::previousStep,
+                enabled = engine.viewedStepIndex > 0,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 5.dp),
+            ) { Text("‹ Previous", style = MaterialTheme.typography.labelMedium) }
+            Text(
+                text = "${engine.viewedStepIndex + 1} of ${engine.stepCount}",
+                color = TextPrimary,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
+            )
+            Button(
+                onClick = {
+                    if (reviewing) engine.nextRecordedStep()
+                    else if (paused) engine.togglePause()
+                    else engine.nextLessonStep()
+                },
+                enabled = enabled,
+                modifier = Modifier,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = ClassroomTokens.AccentPurple),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+            ) {
+                Text(label, style = MaterialTheme.typography.labelMedium)
+            }
+        }
+        if (reviewing) {
+            TextButton(onClick = engine::returnToLiveStep, modifier = Modifier.fillMaxWidth()) {
+                Text("Return to live lesson")
+            }
+        }
+    }
+}
