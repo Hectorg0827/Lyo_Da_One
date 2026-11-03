@@ -12,7 +12,7 @@ import com.lyo.app.ui.theme.TextSecondary
 fun A2uiRenderScope.LatexBlockRenderer() {
     val raw = resolveString("latex") ?: return
     // KaTeX.render() expects an expression, not surrounding Markdown fences.
-    val latex = raw.trim().removeSurrounding("$").removeSurrounding("\\[", "\\]")
+    val latex = raw.trim().removeSurrounding("$" + "$").removeSurrounding("$").removeSurrounding("\\[", "\\]")
         .removeSurrounding("\\(", "\\)")
     Column {
         Text(text = "Math", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
