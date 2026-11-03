@@ -84,7 +84,7 @@ fun ClassroomModePicker(
                 // Keep all interactive content above Samsung's system navigation area.
                 // We render behind system bars, so these are required.
                 .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(start = 22.dp, end = 22.dp, top = if (fullScreen) 22.dp else 12.dp),
+                .padding(start = 22.dp, end = 22.dp, top = if (fullScreen) 22.dp else 12.dp, bottom = if (fullScreen) 88.dp else 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
