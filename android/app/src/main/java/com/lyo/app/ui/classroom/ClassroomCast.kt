@@ -10,14 +10,15 @@ data class ClassroomPerson(
     val name: String,
     val voice: String,
     @DrawableRes val portrait: Int,
+    val displayName: String = name,
 )
 
 object ClassroomCast {
     val teachers = listOf(
-        ClassroomPerson("teacher_1", "Teacher 1", "onyx", R.drawable.lyo_teacher_1),
-        ClassroomPerson("teacher_2", "Teacher 2", "echo", R.drawable.lyo_teacher_2),
-        ClassroomPerson("teacher_3", "Teacher 3", "fable", R.drawable.lyo_teacher_3),
-        ClassroomPerson("teacher_4", "Teacher 4", "shimmer", R.drawable.lyo_teacher_4),
+        ClassroomPerson("teacher_1", "Teacher 1", "onyx", R.drawable.lyo_teacher_1, "Mira"),
+        ClassroomPerson("teacher_2", "Teacher 2", "echo", R.drawable.lyo_teacher_2, "Nova"),
+        ClassroomPerson("teacher_3", "Teacher 3", "fable", R.drawable.lyo_teacher_3, "Atlas"),
+        ClassroomPerson("teacher_4", "Teacher 4", "shimmer", R.drawable.lyo_teacher_4, "Sage"),
     )
     val classmates = listOf(
         ClassroomPerson("student_maya", "Maya", "alloy", R.drawable.student_clever),
