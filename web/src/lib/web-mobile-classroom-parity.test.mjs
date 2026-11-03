@@ -52,5 +52,5 @@ test('web Classroom renders teacher prompts using the same math-aware component 
   assert.match(board, /ClassroomRichText text=\\{el\\.feedback\\}/);
   assert.match(rich, /remarkMath/);
   assert.match(rich, /rehypeKatex/);
-  assert.match(rich, /className=.*katex/);
+  assert.match(rich, /katex-display/);
 });
