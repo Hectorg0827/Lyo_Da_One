@@ -25,6 +25,7 @@ import {
   type HintLevel,
 } from '@/stores/classroom-store';
 import { ClassroomWorkspace } from '@/components/classroom/ClassroomWorkspace';
+import { ClassroomRichText } from '@/components/classroom/ClassroomRichText';
 import { classroomIsPaused, workspaceScrollAnchor } from '@/lib/board-presentation.mjs';
 import { upsertCourseOnStart } from '@/lib/stack';
 import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
@@ -148,6 +149,7 @@ function ClassroomStage() {
     nudgeTeacher, restartLesson, resumeLesson, dismissNotice,
   } = useClassroomStore();
   const instructor = teacherForTopic(topic);
+  const teacherDisplayName = instructor.displayName ?? instructor.name;
   const currentCharacter = classroomSpeaker(activeSpeaker || 'Teacher', topic) || instructor;
   const visibleClassmates = speakingClassmates(transcript, mode);
   const lessonConcepts = useMemo(
@@ -475,7 +477,7 @@ function ClassroomStage() {
             <button type="button" title={objective} aria-label={`Learning goal: ${objective}`} className="shrink-0 rounded-full border border-white/15 px-1.5 text-[10px] font-bold text-white/65 hover:bg-white/10 hover:text-white">i</button>
           </div>
           <p className="truncate text-[11px] font-medium text-lyo-200/85">
-            LYO Classroom · {instructor.name} · {lessonId ? `Lesson ${lessonId}` : 'Guided lesson'}
+            LYO Classroom · {teacherDisplayName} · {lessonId ? `Lesson ${lessonId}` : 'Guided lesson'}
           </p>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em]">
             {status === 'live' ? lessonPaused
@@ -613,7 +615,7 @@ function ClassroomStage() {
           key={displayMode === 'live' ? currentCharacter.id : instructor.id}
           src={displayMode === 'live' ? currentCharacter.image : instructor.image}
           alt={displayMode === 'live' && currentCharacter.id.startsWith('student_')
-            ? `${currentCharacter.name}, participating AI classmate` : `${instructor.name}, your AI teacher`}
+            ? `${currentCharacter.name}, participating AI classmate` : `${teacherDisplayName}, your AI teacher`}
           className={cn(
             'shrink-0 rounded-xl border border-white/10 bg-white/95 object-contain shadow-[0_6px_16px_rgba(0,0,0,0.25)]',
             displayMode === 'live' ? 'h-[74px] w-[74px] sm:h-24 sm:w-24'
@@ -627,8 +629,8 @@ function ClassroomStage() {
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-lyo-300">
               {displayMode === 'review' ? 'Review · your saved learning' :
-                displayMode === 'focus' ? `${instructor.name} · your teacher` :
-                currentCharacter.id.startsWith('student_') ? `${currentCharacter.name} · AI classmate` : `${instructor.name} · AI teacher`}
+                displayMode === 'focus' ? `${teacherDisplayName} · your teacher` :
+                currentCharacter.id.startsWith('student_') ? `${currentCharacter.name} · AI classmate` : `${teacherDisplayName} · AI teacher`}
             </p>
             {caption && <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }} className="min-h-11 text-[11px] text-[var(--text-secondary)] underline underline-offset-2">Full transcript</button>}
           </div>
@@ -664,7 +666,7 @@ function ClassroomStage() {
       {/* The board grows with the lesson. Only this area scrolls when a scene
           is longer than the available phone height; the teacher stays visible. */}
       {(shownBoard.length > 0 || !prompt || error) && (
-      <div ref={boardScrollRef} className="mx-2 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-1 sm:mx-4" aria-label="Interactive blackboard" role="region">
+      <div ref={boardScrollRef} className="mx-2 min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-pb-6 pb-6 sm:mx-4" aria-label="Interactive blackboard" role="region">
         <div className={cn(
           'flex min-h-[240px] flex-col overflow-hidden rounded-[22px] border',
           displayMode === 'live' ? 'border-[#83bbff]/35 bg-gradient-to-b from-[#18244c] via-[#121a3b] to-[#0d1335]'
@@ -840,7 +842,7 @@ function ClassroomStage() {
           >
             <p className="text-xs font-bold uppercase tracking-wide text-lyo-200">Your turn</p>
             {(engagedPromptId === prompt.id || !voiceOn) && (
-              <p className="text-sm font-medium leading-relaxed text-white">{prompt.text}</p>
+              <ClassroomRichText text={prompt.text} className="text-sm font-medium leading-relaxed text-white" />
             )}
             {prompt.options?.length ? (
               <div className="flex flex-wrap gap-2">
@@ -1038,32 +1040,32 @@ function ClassroomStage() {
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             role="dialog" aria-modal="true" aria-labelledby="classroom-mode-heading"
-            className="fixed inset-0 z-[80] flex justify-center overflow-y-auto bg-gradient-to-b from-[#101638] via-[#0a102c] to-[#17103c] px-4 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(6rem,env(safe-area-inset-bottom))]">
-            <div className="flex w-full max-w-xl flex-col gap-3">
-              <div className="flex items-center justify-between">
+            className="fixed inset-0 z-[80] flex h-[100dvh] max-h-[100dvh] min-h-0 justify-center overflow-hidden bg-gradient-to-b from-[#101638] via-[#0a102c] to-[#17103c] px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+            <div className="flex h-full min-h-0 w-full max-w-xl flex-col gap-2.5">
+              <div className="flex shrink-0 items-center justify-between">
                 <span className="text-sm font-bold tracking-[0.12em] text-white/80">✦ LYO CLASSROOM</span>
                 {hasStarted && <button type="button" onClick={() => setModePickerOpen(false)}
                   className="min-h-11 min-w-11 rounded-full bg-white/10 text-white"
                   aria-label="Close classroom mode selector"><X className="mx-auto h-5 w-5" /></button>}
               </div>
-              <h2 id="classroom-mode-heading" className="font-rounded text-3xl font-bold leading-tight text-white sm:text-4xl">
+              <h2 id="classroom-mode-heading" className="shrink-0 font-rounded text-2xl font-bold leading-tight text-white sm:text-4xl">
                 Choose your<br />classroom mode
               </h2>
-              <p className="text-sm leading-relaxed text-[#b8bbdc]">
+              <p className="shrink-0 text-sm leading-relaxed text-[#b8bbdc]">
                 Three ways to learn. You can switch anytime without losing your progress.
               </p>
-              <div role="radiogroup" aria-label="Classroom display mode" className="mt-1 flex flex-col gap-3">
+              <div role="radiogroup" aria-label="Classroom display mode" className="mt-1 flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-contain pb-2 pr-1" data-classroom-mode-options>
                 {DISPLAY_MODE_OPTIONS.map((option) => (
                   <button key={option.key} type="button" role="radio"
                     aria-checked={pendingDisplayMode === option.key}
                     onClick={() => setPendingDisplayMode(option.key)}
                     className={cn(
-                      'flex min-h-[104px] items-center gap-4 rounded-[20px] border px-4 py-3 text-left transition-colors',
+                      'flex min-h-[84px] shrink-0 items-center gap-3 rounded-[20px] border px-3 py-2.5 text-left transition-colors',
                       pendingDisplayMode === option.key
                         ? 'border-[#b282ff] bg-gradient-to-r from-[#2a2261] to-[#262054] shadow-[0_10px_30px_rgba(99,102,241,0.2)]'
                         : 'border-[#52528e]/70 bg-gradient-to-r from-[#131d42] to-[#101632] hover:border-[#b282ff]/70',
                     )}>
-                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#272252] text-2xl text-[#d7b8ff]">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#272252] text-2xl text-[#d7b8ff]">
                       {option.key === 'focus' ? <NotebookPen className="h-7 w-7" /> :
                         option.key === 'live' ? <AudioLines className="h-7 w-7" /> : '↻'}
                     </span>
@@ -1078,14 +1080,14 @@ function ClassroomStage() {
                   </button>
                 ))}
               </div>
-              <label className="mt-1 flex min-h-11 items-center gap-3 text-sm text-white">
+              <label className="flex min-h-10 shrink-0 items-center gap-3 text-sm text-white">
                 <input type="checkbox" checked={rememberMode} onChange={(event) => setRememberMode(event.target.checked)}
                   className="h-4 w-4 accent-[#8f5cf8]" />
                 Remember my choice on this device
               </label>
-              <div className="sticky bottom-0 mt-auto rounded-2xl bg-[#0a102c]/95 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
+              <div className="shrink-0 rounded-2xl border-t border-white/10 bg-[#0a102c]/95 pt-2 backdrop-blur-xl" data-classroom-mode-footer>
                 <button type="button" onClick={() => chooseDisplayMode(pendingDisplayMode)}
-                  className="min-h-14 w-full rounded-[17px] border border-[#d7b8ff]/55 bg-gradient-to-r from-[#655bfa] to-[#aa50f5] px-5 text-base font-bold text-white shadow-lg shadow-[#655bfa]/20"
+                  className="min-h-12 w-full rounded-[17px] border border-[#d7b8ff]/55 bg-gradient-to-r from-[#655bfa] to-[#aa50f5] px-5 text-base font-bold text-white shadow-lg shadow-[#655bfa]/20"
                   aria-label={hasStarted ? 'Switch classroom mode' : 'Start lesson'}>
                   {hasStarted ? 'Switch mode' : 'Start lesson'} →
                 </button>
