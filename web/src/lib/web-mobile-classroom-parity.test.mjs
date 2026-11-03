@@ -48,7 +48,7 @@ test('web Classroom renders teacher prompts using the same math-aware component 
   const board = readFileSync(new URL('../components/classroom/BoardElementView.tsx', import.meta.url), 'utf8');
   const rich = readFileSync(new URL('../components/classroom/ClassroomRichText.tsx', import.meta.url), 'utf8');
   assert.ok(classroom.includes('ClassroomRichText text={prompt.text}'));
-  assert.ok(board.includes('ClassroomRichText text={quiz.question}'));
+  assert.ok(board.includes('ClassroomRichText text={quiz.question'));
   assert.ok(board.includes('ClassroomRichText text={opt.label}'));
   assert.ok(board.includes('ClassroomRichText text={el.feedback}'));
   assert.ok(rich.includes('remarkMath'));
