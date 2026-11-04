@@ -87,10 +87,16 @@ export function isFinished(item) {
  * button says when no progress is recorded, which is not the same as
  * asserting the learner has done nothing.
  */
+function isSavedAIClass(item) {
+  const id = String(item?.content_id ?? '').trim();
+  // AI classroom sessions use text topic IDs; published catalog courses use numeric IDs.
+  return id.length > 0 && !/^[0-9]+$/.test(id);
+}
+
 export function actionFor(item) {
   if (isFinished(item)) return ACTION_REVIEW;
   if (item?.status === 'in_progress' || item?.status === 'paused') return ACTION_RESUME;
-  if (item?.status === 'not_started') return ACTION_START;
+  if (item?.status === 'not_started') return isSavedAIClass(item) ? ACTION_RESUME : ACTION_START;
   const progress = progressFor(item);
   if (progress.kind === PROGRESS_MEASURED && progress.percent > 0) return ACTION_RESUME;
   return ACTION_START;
@@ -112,6 +118,9 @@ export function actionLabel(action) {
 export function blurbFor(item) {
   const description = trimmed(item?.description);
   if (description) return { kind: BLURB_DESCRIPTION, text: description };
+  if (item?.status === 'not_started' && isSavedAIClass(item)) {
+    return { kind: BLURB_STATUS, text: 'Saved AI lesson — ready to resume' };
+  }
   const status = statusLabel(item?.status);
   if (status) return { kind: BLURB_STATUS, text: status };
   return { kind: BLURB_NONE };
