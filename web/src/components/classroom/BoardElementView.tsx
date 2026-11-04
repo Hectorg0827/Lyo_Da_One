@@ -678,6 +678,17 @@ function OpeningView({ opening }: { opening: ClassroomOpening }) {
           </span>
         ))}
       </div>
+      {!opening.resumed && (
+        <div className="mt-3 rounded-xl border border-teal-300/20 bg-teal-400/10 px-3 py-3" role="status" aria-live="polite">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-teal-200">
+            A quick hello from your teacher
+          </p>
+          <p className="mt-1 text-sm leading-relaxed text-white/85">
+            Welcome! Before we begin, think of one thing you're curious about.
+            I'll start with a quick question to see what you already know.
+          </p>
+        </div>
+      )}
       <p className="mt-3 text-xs leading-relaxed text-white/60">{opening.note}</p>
     </section>
   );
