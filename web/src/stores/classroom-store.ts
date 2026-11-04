@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { SpeechPreparationCache, playSpeechResponse, speakBrowserFallback, boardTransitionDelay } from '@/lib/classroom-audio.mjs';
+import { SpeechPreparationCache, playSpeechResponse, speakBrowserFallback, boardTransitionDelay, splitSpeechForStreaming } from '@/lib/classroom-audio.mjs';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import {
   CLASSROOM_STALL_NOTICE_MS,
@@ -479,8 +479,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     if (!get().voiceOn || typeof window === 'undefined' || !text.trim()) return;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
-    const key = speechCacheKey(speaker, text, language, rate);
-    prefetchedSpeech.prepare(key, (signal) => requestSpeechResponse(text, language, rate, signal, speaker));
+    // Prefetch only the fast opening segment. A full-length competing request
+    // would monopolize the single-CPU teacher voice service before speech starts.
+    const first = splitSpeechForStreaming(text)[0];
+    if (!first) return;
+    const key = speechCacheKey(speaker, first, language, rate);
+    prefetchedSpeech.prepare(key, (signal) => requestSpeechResponse(first, language, rate, signal, speaker));
   }
 
   function recordResponseLatency(phase: 'content' | 'audio') {
@@ -508,25 +512,50 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     const generation = ++speechGeneration;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
-    const prepared = prefetchedSpeech.take(speechCacheKey(speaker, text, language, rate));
+    const segments = splitSpeechForStreaming(text);
+    if (!segments.length) { onDone(); return; }
+    const prepared = prefetchedSpeech.take(speechCacheKey(speaker, segments[0], language, rate));
     const controller = prepared?.controller || new AbortController();
     speechAbort = controller;
-    const response = prepared?.response || requestSpeechResponse(text, language, rate, controller.signal, speaker);
-    void playSpeechResponse(response, {
-      signal: controller.signal,
-      onStarted: () => { if (generation === speechGeneration) recordResponseLatency('audio'); },
-    }).then(() => {
-      if (generation === speechGeneration) onDone();
+    let completedSegments = 0;
+    let voiceStarted = false;
+
+    // Each Kokoro request is short enough for the CPU service to deliver its
+    // first bytes. Never let an arbitrary 8-second deadline substitute the
+    // browser's robotic voice for a healthy but slower shared teacher voice.
+    const playSegments = async () => {
+      for (let index = 0; index < segments.length; index++) {
+        if (controller.signal.aborted || generation !== speechGeneration) return;
+        const segment = segments[index];
+        const response = index === 0 && prepared
+          ? prepared.response
+          : requestSpeechResponse(segment, language, rate, controller.signal, speaker);
+        await playSpeechResponse(response, {
+          signal: controller.signal,
+          startupTimeoutMs: 30000,
+          onStarted: () => {
+            voiceStarted = true;
+            if (generation === speechGeneration) recordResponseLatency('audio');
+          },
+        });
+        completedSegments += 1;
+      }
+    };
+
+    void playSegments().then(() => {
+      if (generation === speechGeneration && !controller.signal.aborted) onDone();
     }).catch(async (error: { playbackStarted?: boolean }) => {
       if (controller.signal.aborted || generation !== speechGeneration) return;
-      if (error.playbackStarted) {
+      if (error.playbackStarted || voiceStarted) {
+        // Do not replay already-heard words through a second, robotic voice.
+        set((state) => ({ notice: state.notice ?? CLASSROOM_VOICE_NOTICE }));
         onDone();
         return;
       }
       prefetchedSpeech.clear();
-      // A missing server speech service must not turn the entire lesson silent.
       try {
-        await speakBrowserFallback(text, {
+        const remaining = segments.slice(completedSegments).join(' ');
+        await speakBrowserFallback(remaining, {
           language, rate, signal: controller.signal,
           onStarted: () => {
             if (generation === speechGeneration) recordResponseLatency('audio');
