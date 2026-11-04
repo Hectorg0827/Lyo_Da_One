@@ -365,15 +365,21 @@ export default function CoursesPage() {
                   <BookOpen className="w-8 h-8 text-white/20" />
                 </div>
                 <div className="text-center">
-                  <p className="text-white/60 font-medium">No courses found</p>
+                  <p className="text-white/60 font-medium">
+                    {visibleSavedClasses.length > 0 && activeTab !== 'completed' && !searchQuery
+                      ? 'No published courses yet'
+                      : 'No courses found'}
+                  </p>
                   <p className="text-white/30 text-sm mt-1">
                     {searchQuery
-                      ? `No results for "${searchQuery}"`
+                      ? `No results for "${searchQuery}" in the course catalog.`
                       : activeTab === 'inProgress'
-                      ? 'You have no courses in progress yet.'
+                      ? 'No published courses in progress. Your saved AI lessons are listed above.'
                       : activeTab === 'completed'
-                      ? 'You have not completed any courses yet.'
-                      : 'No courses match the selected filters.'}
+                      ? 'You have not completed any published courses yet.'
+                      : visibleSavedClasses.length > 0
+                      ? 'Your saved AI lessons are listed above. Explore more lessons in LYO Classroom.'
+                      : 'No published courses match the selected filters.'}
                   </p>
                 </div>
                 {searchQuery && (
