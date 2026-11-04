@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { speakBrowserFallback } from './classroom-audio.mjs';
+import { speakBrowserFallback, splitSpeechForStreaming } from './classroom-audio.mjs';
 
 class FakeUtterance {
   constructor(text) { this.text = text; }
@@ -50,4 +50,14 @@ test('the backup voice cancels when the student interrupts', async () => {
     language: 'es-ES', synth, Utterance: FakeUtterance, signal: abort.signal,
   }), /Playback interrupted/);
   assert.ok(cancellations >= 1);
+});
+
+test('self-hosted teacher speech starts with a short chunk without losing words', () => {
+  const line = 'First we compare equivalent fractions, then we check the denominators and explain the result clearly.';
+  const chunks = splitSpeechForStreaming(line);
+  assert.ok(chunks.length >= 2);
+  assert.ok(chunks[0].length <= 40);
+  assert.equal(chunks.join(' '), line);
+  assert.deepEqual(splitSpeechForStreaming(''), []);
+  assert.deepEqual(splitSpeechForStreaming('One'), ['One']);
 });
