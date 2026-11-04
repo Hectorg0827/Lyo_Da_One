@@ -23,6 +23,29 @@ export class SpeechPreparationCache {
   }
 }
 
+/**
+ * Short first utterance lets self-hosted CPU speech begin while the teacher's
+ * full explanation is still being synthesized. Split only at word boundaries;
+ * the same voice and rate are used for every segment. Never trim content away.
+ */
+export function splitSpeechForStreaming(text, firstChars = 40, laterChars = 65) {
+  const words = (text || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const chunks = [];
+  let current = '';
+  for (const word of words) {
+    const limit = chunks.length === 0 ? firstChars : laterChars;
+    if (current && current.length + 1 + word.length > limit) {
+      chunks.push(current);
+      current = word;
+    } else {
+      current = current ? `${current} ${word}` : word;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 /** Board content remains visible while speech explains it; no fake reading wait. */
 export function boardTransitionDelay() { return 0; }
 
@@ -31,7 +54,7 @@ export function boardTransitionDelay() { return 0; }
  * Cancellation owns the fetch as well as the player; a late response cannot speak.
  */
 export async function playSpeechResponse(responsePromise, {
-  signal: externalSignal, onStarted = () => {}, startupTimeoutMs = 8000,
+  signal: externalSignal, onStarted = () => {}, startupTimeoutMs = 30000,
   createAudio = () => new Audio(),
   MediaSourceClass = globalThis.MediaSource,
   urls = URL,
@@ -140,4 +163,71 @@ export async function playSpeechResponse(responsePromise, {
     if (reader) void reader.cancel().catch(() => {});
     if (url) urls.revokeObjectURL(url);
   }
+}
+
+
+/**
+ * Accessible backup when the configured classroom speech service is offline.
+ * Prefer a local natural voice, keep the speaker's language, and let the
+ * classroom's AbortController own cancellation. This never calls a paid API.
+ */
+export function speakBrowserFallback(text, {
+  language = 'en', rate = 1, signal, onStarted = () => {},
+  synth = globalThis.speechSynthesis,
+  Utterance = globalThis.SpeechSynthesisUtterance,
+} = {}) {
+  if (!synth || !Utterance || !text?.trim()) {
+    return Promise.reject(new Error('No browser speech voice available'));
+  }
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Playback interrupted', 'AbortError'));
+      return;
+    }
+    const utterance = new Utterance(text);
+    const lang = language === 'auto' ? 'en' : language;
+    const voices = synth.getVoices?.() ?? [];
+    const sameLanguage = voices.filter((voice) =>
+      voice.lang?.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase()));
+    const preferred = [
+      /natural|neural|enhanced|premium/i,
+      /aria|jenny|samantha|karen|google us english|google español/i,
+    ];
+    utterance.voice = preferred.map((pattern) => sameLanguage.find((voice) =>
+      pattern.test(voice.name))).find(Boolean) || sameLanguage[0] || null;
+    utterance.lang = utterance.voice?.lang || lang;
+    utterance.rate = Math.max(0.8, Math.min(1.2, rate));
+    let settled = false;
+    let timeout;
+    const cleanup = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', interrupted);
+      utterance.onstart = utterance.onend = utterance.onerror = null;
+    };
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve();
+    };
+    const interrupted = () => {
+      synth.cancel();
+      finish(new DOMException('Playback interrupted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', interrupted, { once: true });
+    utterance.onstart = () => onStarted();
+    utterance.onend = () => finish();
+    utterance.onerror = (event) => finish(new Error(event?.error || 'Browser speech failed'));
+    timeout = setTimeout(() => {
+      synth.cancel();
+      finish(new Error('Browser speech timed out'));
+    }, Math.max(10000, text.length * 120));
+    try {
+      synth.cancel();
+      synth.speak(utterance);
+    } catch (error) {
+      finish(error);
+    }
+  });
 }
