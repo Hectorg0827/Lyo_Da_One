@@ -297,7 +297,7 @@ test('starting a lesson over leaves the stuck session behind', () => {
 
 // ─── A step that never arrives ───────────────────────────────────────────────
 
-test('a slow step is said out loud, asked after once, and then handed over', () => {
+test('a slow step becomes recoverable without automatically sending another request', () => {
   const { store, sockets, tick } = classroom({ connection: { topic: 'Minecraft' } });
   const socket = sockets[0];
   socket.onopen();
@@ -308,13 +308,12 @@ test('a slow step is said out loud, asked after once, and then handed over', () 
 
   const sentBefore = socket.sent.length;
   tick(20);
-  assert.equal(socket.sent.length, sentBefore + 1, 'the class asks after the step itself, once');
-  assert.equal(socket.sent.at(-1).action_intent, 'continue');
-  assert.equal(store.getState().stallPhase, 'slow');
+  assert.equal(socket.sent.length, sentBefore, 'no unsolicited request can interfere with grading');
+  assert.equal(store.getState().stallPhase, 'stalled', 'a recoverable stall is visible after the threshold');
 
   tick(31);
-  assert.equal(store.getState().stallPhase, 'stalled', 'the second wait is the admission');
-  assert.equal(socket.sent.length, sentBefore + 1, 'and it does not keep asking');
+  assert.equal(store.getState().stallPhase, 'stalled');
+  assert.equal(socket.sent.length, sentBefore, 'the class never retries by itself');
   store.getState().disconnect();
 });
 
@@ -329,7 +328,7 @@ test('a step that arrives clears the wait rather than leaving the warning up', (
   store.getState().disconnect();
 });
 
-test('a stalled answer is asked after with continue, never resubmitted', () => {
+test('a stalled answer offers manual continue without resubmitting the graded response', () => {
   const { store, sockets, tick } = classroom({ connection: { topic: 'Minecraft' } });
   const socket = sockets[0];
   socket.onopen();
@@ -342,6 +341,9 @@ test('a stalled answer is asked after with continue, never resubmitted', () => {
   tick(31);
   // The grader must not see this learner's answer twice because the first
   // one was slow coming back.
+  assert.equal(store.getState().stallPhase, 'stalled');
+  assert.equal(socket.sent.at(-1).action_intent, 'submit_answer');
+  store.getState().nudgeTeacher();
   assert.equal(socket.sent.at(-1).action_intent, 'continue');
   assert.equal(socket.sent.filter(m => m.action_intent === 'submit_answer').length, 1);
   store.getState().disconnect();
