@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { SpeechPreparationCache, playSpeechResponse, boardTransitionDelay } from '@/lib/classroom-audio.mjs';
+import { SpeechPreparationCache, playSpeechResponse, speakBrowserFallback, boardTransitionDelay, splitSpeechForStreaming } from '@/lib/classroom-audio.mjs';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import {
   CLASSROOM_STALL_NOTICE_MS,
@@ -19,6 +19,7 @@ import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
 import { parseBoardDocument, presentationRoleFor, type BoardDocument, type PresentationRole } from '@/lib/board-presentation.mjs';
 import { resolveCommonsImage } from '@/lib/commons-image.mjs';
+import { classroomSpeaker } from '@/lib/classroom-cast.mjs';
 import type {
   ClassroomContractConnection,
   ClassroomMode,
@@ -296,6 +297,8 @@ let playing = false;
 let playTimer: ReturnType<typeof setTimeout> | null = null;
 let speechAbort: AbortController | null = null;
 let speechGeneration = 0;
+// Do not retry a known-offline voice endpoint for every sentence.
+let serverVoiceUnavailableUntil = 0;
 let authToken: string | null = null;
 // Speech requests are started as soon as teacher turns arrive, not when the
 // previous line finishes. The cache is deliberately tiny and session-local:
@@ -385,6 +388,7 @@ function stopStallWatch() {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
+const CLASSROOM_VOICE_NOTICE = 'Teacher audio is temporarily unavailable. Captions will continue; tap the voice icon to retry.';
 
 function wsUrl(connection: ClassroomConnection, token: string | null): string {
   return buildClassroomWsUrl(API_URL, connection, token);
@@ -404,73 +408,6 @@ function stopSpeech() {
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     window.speechSynthesis.cancel();
   }
-}
-
-// Non-Latin scripts are decisive, but only in this order: Japanese prose mixes
-// kana with kanji, and Korean can carry hanja, so those language-specific
-// scripts must be checked before the CJK ideographs they share with Chinese.
-const SCRIPT_LANGUAGE_HINTS: { code: string; test: RegExp }[] = [
-  { code: 'ja', test: /[぀-ヿ]/ },   // hiragana + katakana
-  { code: 'ko', test: /[가-힯]/ },   // hangul syllables
-  { code: 'ar', test: /[؀-ۿ]/ },
-  { code: 'ru', test: /[Ѐ-ӿ]/ },
-  { code: 'hi', test: /[ऀ-ॿ]/ },
-  { code: 'zh', test: /[一-鿿]/ },   // shared ideographs — last resort
-];
-
-// Latin-script languages share an alphabet and much of their function-word
-// vocabulary ("la" is French and Spanish, "para" is Spanish and Portuguese),
-// so no single hint is decisive. Score every candidate across the whole sample
-// and take the strongest rather than returning on the first pattern that hits.
-const LATIN_LANGUAGE_HINTS: { code: string; unique?: RegExp; words: RegExp }[] = [
-  { code: 'es', unique: /[¿¡ñ]/g, words: /\b(el|los|las|que|para|con|una|uno|por|cómo|qué|cuál|más|así|pero|también|está)\b/gi },
-  { code: 'pt', unique: /[ãõ]/g, words: /\b(não|com|para|uma|isso|então|você|está|são|também|mais)\b/gi },
-  { code: 'fr', unique: /[œùêîôë]/g, words: /\b(le|la|les|des|est|une|avec|pour|qui|où|dans|nous|être|cette)\b/gi },
-  { code: 'de', unique: /[äöüß]/g, words: /\b(der|die|das|und|nicht|mit|für|eine|ist|auch|sich|wird)\b/gi },
-  { code: 'it', words: /\b(il|lo|gli|che|per|con|una|è|questo|come|sono|anche|della)\b/gi },
-];
-
-// A language-exclusive character is far stronger evidence than a function word
-// that several languages share.
-const UNIQUE_CHAR_WEIGHT = 3;
-// Below this, the evidence is as likely to be an English coincidence as a real
-// signal — fall back to the browser's default voice instead of guessing.
-const MIN_LANGUAGE_SCORE = 2;
-
-function scoreLatinLanguage(text: string, hint: { unique?: RegExp; words: RegExp }): number {
-  const uniqueHits = hint.unique ? (text.match(hint.unique)?.length ?? 0) : 0;
-  const distinctWords = new Set(
-    (text.match(hint.words) ?? []).map((word) => word.toLowerCase()),
-  ).size;
-  return uniqueHits * UNIQUE_CHAR_WEIGHT + distinctWords;
-}
-
-/**
- * Best-effort guess at the spoken-language code for `text`, so narration is
- * read in a matching voice instead of always defaulting to English. Returns
- * null (meaning: let the browser's default voice handle it) when the text is
- * too short or shows no language-specific signal.
- */
-function detectSpeechLanguage(text: string): string | null {
-  const trimmed = text.trim();
-  if (trimmed.length < 8) return null;
-
-  for (const { code, test } of SCRIPT_LANGUAGE_HINTS) {
-    if (test.test(trimmed)) return code;
-  }
-
-  let best: { code: string; score: number } | null = null;
-  for (const hint of LATIN_LANGUAGE_HINTS) {
-    const score = scoreLatinLanguage(trimmed, hint);
-    if (score > (best?.score ?? 0)) best = { code: hint.code, score };
-  }
-  return best && best.score >= MIN_LANGUAGE_SCORE ? best.code : null;
-}
-
-/** Picks an installed SpeechSynthesis voice matching a language code, if any. */
-function findVoiceForLanguage(code: string): SpeechSynthesisVoice | undefined {
-  return window.speechSynthesis.getVoices()
-    .find((voice) => voice.lang.toLowerCase().startsWith(code));
 }
 
 /** Classify a board "write"/"draw" payload into the right visual. */
@@ -497,8 +434,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   const sfx = (sound: AmbientSound) => { if (get().soundOn) playSound(sound); };
 
-  function speechCacheKey(text: string, language: string, rate: number) {
-    return `${language}|${rate.toFixed(2)}|${text}`;
+  function speechCacheKey(speaker: string, text: string, language: string, rate: number) {
+    return `${speaker}|${language}|${rate.toFixed(2)}|${text}`;
   }
 
   async function requestSpeechResponse(
@@ -506,10 +443,13 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     language: string,
     rate: number,
     signal?: AbortSignal,
+    speaker = 'Teacher',
   ): Promise<Response | null> {
+    if (Date.now() < serverVoiceUnavailableUntil) return null;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
     if (API_KEY) headers['X-API-Key'] = API_KEY;
+    const character = classroomSpeaker(speaker, get().topic);
     const response = await fetch(
       `${API_URL.replace(/\/$/, '')}/api/v1/tts/synthesize/stream`,
       {
@@ -518,7 +458,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         signal,
         body: JSON.stringify({
           text,
-          voice: 'nova',
+          voice: character?.voice ?? 'nova',
+          speaker_id: character?.id,
           format: 'mp3',
           speed: rate,
           content_type: 'explanation',
@@ -526,16 +467,24 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         }),
       },
     );
-    if (!response.ok) return null;
+    if (!response.ok) {
+      serverVoiceUnavailableUntil = Date.now() + 60_000;
+      return null;
+    }
+    serverVoiceUnavailableUntil = 0;
     return response;
   }
 
-  function prefetchSpeechLine(text: string) {
+  function prefetchSpeechLine(speaker: string, text: string) {
     if (!get().voiceOn || typeof window === 'undefined' || !text.trim()) return;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
-    const key = speechCacheKey(text, language, rate);
-    prefetchedSpeech.prepare(key, (signal) => requestSpeechResponse(text, language, rate, signal));
+    // Prefetch only the fast opening segment. A full-length competing request
+    // would monopolize the single-CPU teacher voice service before speech starts.
+    const first = splitSpeechForStreaming(text)[0];
+    if (!first) return;
+    const key = speechCacheKey(speaker, first, language, rate);
+    prefetchedSpeech.prepare(key, (signal) => requestSpeechResponse(first, language, rate, signal, speaker));
   }
 
   function recordResponseLatency(phase: 'content' | 'audio') {
@@ -554,45 +503,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     if (phase === 'audio') learnerActionStarted = null;
   }
 
-  function speakWithLocalizedDeviceVoice(
-    text: string,
-    language: string,
-    generation: number,
-    onDone: () => void,
-  ) {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      playTimer = setTimeout(onDone, speechDelay(text));
-      return;
-    }
-    try {
-      const utterance = new SpeechSynthesisUtterance(text);
-      const detectedLanguage = detectSpeechLanguage(text);
-      const resolvedLanguage = language === 'auto'
-        ? (detectedLanguage || window.navigator.language || 'en-US')
-        : language;
-      utterance.lang = resolvedLanguage;
-      const family = resolvedLanguage.split('-')[0].toLowerCase();
-      utterance.voice = findVoiceForLanguage(family) ?? null;
-      utterance.pitch = 1;
-      utterance.rate = get().speechRate;
-      let finished = false;
-      const done = () => {
-        if (!finished && generation === speechGeneration) {
-          finished = true;
-          onDone();
-        }
-      };
-      utterance.onstart = () => recordResponseLatency('audio');
-      utterance.onend = done;
-      utterance.onerror = done;
-      window.speechSynthesis.speak(utterance);
-      playTimer = setTimeout(done, Math.max(speechDelay(text) * 1.8, 9000));
-    } catch {
-      playTimer = setTimeout(onDone, speechDelay(text));
-    }
-  }
-
-  function speakLine(_speaker: string, text: string, onDone: () => void) {
+  function speakLine(speaker: string, text: string, onDone: () => void) {
     if (!get().voiceOn || typeof window === 'undefined') {
       playTimer = setTimeout(onDone, speechDelay(text));
       return;
@@ -601,20 +512,69 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     const generation = ++speechGeneration;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
-    const prepared = prefetchedSpeech.take(speechCacheKey(text, language, rate));
+    const segments = splitSpeechForStreaming(text);
+    if (!segments.length) { onDone(); return; }
+    const prepared = prefetchedSpeech.take(speechCacheKey(speaker, segments[0], language, rate));
     const controller = prepared?.controller || new AbortController();
     speechAbort = controller;
-    const response = prepared?.response || requestSpeechResponse(text, language, rate, controller.signal);
-    void playSpeechResponse(response, {
-      signal: controller.signal,
-      onStarted: () => { if (generation === speechGeneration) recordResponseLatency('audio'); },
-    }).then(() => {
-      if (generation === speechGeneration) onDone();
-    }).catch((error: { playbackStarted?: boolean }) => {
+    let completedSegments = 0;
+    let voiceStarted = false;
+
+    // Each Kokoro request is short enough for the CPU service to deliver its
+    // first bytes. Never let an arbitrary 8-second deadline substitute the
+    // browser's robotic voice for a healthy but slower shared teacher voice.
+    const playSegments = async () => {
+      for (let index = 0; index < segments.length; index++) {
+        if (controller.signal.aborted || generation !== speechGeneration) return;
+        const segment = segments[index];
+        const response = index === 0 && prepared
+          ? prepared.response
+          : requestSpeechResponse(segment, language, rate, controller.signal, speaker);
+        await playSpeechResponse(response, {
+          signal: controller.signal,
+          startupTimeoutMs: 30000,
+          onStarted: () => {
+            voiceStarted = true;
+            if (generation === speechGeneration) recordResponseLatency('audio');
+          },
+        });
+        completedSegments += 1;
+      }
+    };
+
+    void playSegments().then(() => {
+      if (generation === speechGeneration && !controller.signal.aborted) onDone();
+    }).catch(async (error: { playbackStarted?: boolean }) => {
       if (controller.signal.aborted || generation !== speechGeneration) return;
-      // Never replay a partially spoken sentence after a network failure.
-      if (error.playbackStarted) onDone();
-      else speakWithLocalizedDeviceVoice(text, language, generation, onDone);
+      if (error.playbackStarted || voiceStarted) {
+        // Do not replay already-heard words through a second, robotic voice.
+        set((state) => ({ notice: state.notice ?? CLASSROOM_VOICE_NOTICE }));
+        onDone();
+        return;
+      }
+      prefetchedSpeech.clear();
+      try {
+        const remaining = segments.slice(completedSegments).join(' ');
+        await speakBrowserFallback(remaining, {
+          language, rate, signal: controller.signal,
+          onStarted: () => {
+            if (generation === speechGeneration) recordResponseLatency('audio');
+          },
+        });
+        if (generation === speechGeneration) {
+          set((state) => ({
+            notice: state.notice ?? 'Using your device voice while the classroom voice reconnects.',
+          }));
+          onDone();
+        }
+      } catch {
+        if (controller.signal.aborted || generation !== speechGeneration) return;
+        set((state) => ({
+          voiceOn: false,
+          notice: state.notice ?? CLASSROOM_VOICE_NOTICE,
+        }));
+        playTimer = setTimeout(onDone, Math.min(speechDelay(text), 4000));
+      }
     }).finally(() => {
       controller.abort();
       if (speechAbort === controller) speechAbort = null;
@@ -880,7 +840,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     turns
       .filter((turn) => (turn.type === 'speech' || turn.type === 'user_prompt') && (turn.text ?? '').trim())
       .slice(0, 3)
-      .forEach((turn) => prefetchSpeechLine((turn.text ?? '').trim()));
+      .forEach((turn) => prefetchSpeechLine(turn.speaker || 'Teacher', (turn.text ?? '').trim()));
     turnQueue.push(...turns);
     waitingSince = null;
     stallNudged = false;
@@ -1117,10 +1077,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
    * One tick of the wait watchdog.
    *
    * A wait that is merely slow is said out loud and left alone. A wait that
-   * passes the recovery threshold is asked after once, with `continue` — the
-   * one intent that cannot be mistaken for a second answer — and only if that
-   * second wait also runs out does the class admit the step is not coming and
-   * put recovery controls in front of the learner.
+   * passes the recovery threshold is surfaced as a recoverable stall. Nothing
+   * is resent automatically because the server may still be grading an answer.
    */
   function stallTick() {
     const { waitingForScene, status, isPaused, stallPhase } = get();
@@ -1137,19 +1095,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
     const waited = now - waitingSince;
     if (waited >= CLASSROOM_STALL_RECOVERY_MS) {
-      if (!stallNudged) {
-        // One unprompted ask, then the learner decides. Resending the
-        // learner's own answer here would risk grading it twice, so the
-        // nudge is always `continue`.
-        stallNudged = true;
-        waitingSince = now;
-        if (!sendAction('continue', get().nextActionComponentId || 'web_continue')) {
-          set({ stallPhase: 'stalled' });
-        } else if (stallPhase !== 'slow') {
-          set({ stallPhase: 'slow' });
-        }
-        return;
-      }
+      // Let the learner decide whether to retry. Never dispatch an
+      // unsolicited action while the server might still grade the original.
       if (stallPhase !== 'stalled') set({ stallPhase: 'stalled' });
       return;
     }
@@ -1576,7 +1523,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     toggleSound: () => set((s) => ({ soundOn: !s.soundOn })),
     toggleVoice: () => {
       const next = !get().voiceOn;
-      set({ voiceOn: next });
+      set((state) => ({
+        voiceOn: next,
+        notice: next && state.notice === CLASSROOM_VOICE_NOTICE ? null : state.notice,
+      }));
       if (!next) {
         prefetchedSpeech.clear();
         if (playTimer) { clearTimeout(playTimer); playTimer = null; }

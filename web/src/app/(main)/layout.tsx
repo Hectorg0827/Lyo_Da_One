@@ -4,6 +4,9 @@ import { MobileNav } from '@/components/layout/MobileNav';
 import MainContent from '@/components/layout/MainContent';
 import ClassroomCaptionSync from '@/components/classroom/ClassroomCaptionSync';
 
+// Authenticated app pages must not serve year-old prerendered mobile shells.
+export const dynamic = 'force-dynamic';
+
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen h-[100dvh]">

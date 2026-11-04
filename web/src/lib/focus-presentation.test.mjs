@@ -79,6 +79,22 @@ test('the action reflects where the learner is', () => {
   assert.equal(actionFor(course({ status: 'completed' })), ACTION_REVIEW);
 });
 
+test('a saved AI classroom resumes even before skill mastery is measured', () => {
+  const aiLesson = course({
+    title: 'Teach me fractions', content_id: 'Teach me fractions',
+    status: 'not_started', progress: 0,
+  });
+  const published = course({ content_id: '123', status: 'not_started', progress: 0 });
+  assert.equal(actionFor(aiLesson), ACTION_RESUME);
+  assert.equal(actionFor(published), ACTION_START);
+  assert.deepEqual(blurbFor(aiLesson), {
+    kind: BLURB_STATUS, text: 'Saved AI lesson — ready to resume',
+  });
+  assert.equal(matchesFilter(aiLesson, FILTER_IN_PROGRESS), true);
+  assert.equal(matchesFilter(aiLesson, FILTER_NOT_STARTED), false);
+  assert.equal(matchesFilter(published, FILTER_NOT_STARTED), true);
+});
+
 test('an unmeasured course offers Start without asserting zero', () => {
   const item = course({ status: undefined, progress: undefined });
   assert.equal(actionFor(item), ACTION_START);

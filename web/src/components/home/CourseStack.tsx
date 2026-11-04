@@ -245,7 +245,16 @@ function CourseCard({
   const [flipped, setFlipped] = useState(false);
   const openBack = onBodyClick ?? (() => setFlipped(true));
 
-  const href = `/courses/${item.content_id || item.id}`;
+  // AI-created classroom sessions are saved to Stacks under their topic text,
+  // not as numeric IDs in the published course catalogue.
+  const courseId = (item.content_id || '').trim();
+  const href = /^[0-9]+$/.test(courseId)
+    ? `/courses/${courseId}`
+    : `/classroom?${new URLSearchParams({
+        topic: item.title || courseId || 'General Learning',
+        courseId: courseId || item.title || 'General Learning',
+        resume: '1',
+      }).toString()}`;
   const action = actionFor(item);
   const finished = isFinished(item);
   const blurb = blurbFor(item);
@@ -335,7 +344,7 @@ function CourseCard({
                   {finished
                     ? 'Complete'
                     : item.status === 'not_started' && progress.percent === 0
-                      ? 'Not started'
+                      ? (/^[0-9]+$/.test(courseId) ? 'Not started' : 'Ready to resume')
                       : `${progress.percent}%`}
                 </span>
               </div>

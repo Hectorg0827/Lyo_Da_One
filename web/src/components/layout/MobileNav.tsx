@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useChatStore } from '@/stores/chat-store';
 import MascotAvatar from '@/components/chat/MascotAvatar';
 import CreateSheet from '@/components/create/CreateSheet';
 import { LYO_MASCOT_LAYOUT_ID } from '@/lib/motion-ids';
@@ -70,7 +71,7 @@ function GhostTab({
       href={href}
       aria-label={label}
       aria-current={isActive ? 'page' : undefined}
-      className="flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-200"
+      className="flex min-w-0 flex-col items-center justify-center gap-1 px-1.5 py-2 transition-all duration-200 sm:px-3"
     >
       <Icon
         className={cn(
@@ -95,12 +96,13 @@ export function MobileNav() {
   const pathname = usePathname();
   const isChat = pathname.startsWith('/chat');
   const [createOpen, setCreateOpen] = useState(false);
+  const voiceSessionActive = useChatStore((state) => state.voiceSessionActive);
 
   const isItemActive = (href: string) => isActiveHref(href, pathname);
 
   // The classroom has its own teacher presence and exit control. Keeping the
   // global mascot FAB here duplicates Lyo and occupies the answer area.
-  if (isActiveHref('/classroom', pathname)) {
+  if (voiceSessionActive || isActiveHref('/classroom', pathname)) {
     return null;
   }
 
@@ -114,8 +116,8 @@ export function MobileNav() {
       )}
       aria-label="Mobile navigation"
     >
-      <div className="flex items-center justify-between h-20 px-6">
-        <div className="flex items-center gap-2">
+      <div className="flex h-[72px] items-center justify-between gap-1 px-2 sm:h-20 sm:px-6">
+        <div className="flex min-w-0 items-center justify-around gap-0 sm:gap-2">
           {leftItems.map((item) => (
             <GhostTab key={item.href} {...item} isActive={isItemActive(item.href)} />
           ))}
@@ -128,12 +130,12 @@ export function MobileNav() {
           href="/chat"
           aria-label={`${NAV.askLyo.label} chat`}
           aria-current={isChat ? 'page' : undefined}
-          className="relative flex items-center justify-center -mt-10"
+          className="relative flex shrink-0 items-center justify-center -mt-8 sm:-mt-10"
         >
-          <span className="absolute w-28 h-28 rounded-full mascot-fab-glow pointer-events-none" />
+          <span className="pointer-events-none absolute h-20 w-20 rounded-full mascot-fab-glow sm:h-28 sm:w-28" />
           <div
             className={cn(
-              'relative w-[70px] h-[70px] rounded-full flex items-center justify-center',
+              'relative flex h-[58px] w-[58px] items-center justify-center rounded-full sm:h-[70px] sm:w-[70px]',
               'animate-breathe transition-transform duration-200 active:scale-95',
               'drop-shadow-[0_5px_10px_rgba(167,139,250,0.6)]',
             )}
@@ -144,13 +146,13 @@ export function MobileNav() {
                 transition={{ layout: { type: 'spring', bounce: 0.35, duration: 0.6 } }}
                 className="flex items-center justify-center"
               >
-                <MascotAvatar idle size={64} />
+                <MascotAvatar idle size={56} />
               </motion.div>
             )}
           </div>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center justify-around gap-0 sm:gap-2">
           {rightItems.map((item) => (
             <GhostTab key={item.href} {...item} isActive={isItemActive(item.href)} />
           ))}
@@ -159,7 +161,7 @@ export function MobileNav() {
           <button
             onClick={() => setCreateOpen(true)}
             aria-label={NAV.create.label}
-            className="flex flex-col items-center justify-center gap-1 px-4 py-2 transition-all duration-200"
+            className="flex min-w-0 flex-col items-center justify-center gap-1 px-1.5 py-2 transition-all duration-200 sm:px-3"
           >
             <CreateIcon
               className={cn(

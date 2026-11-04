@@ -145,11 +145,11 @@ export function classroomSessionStart(courseKey, saved, { resume = false, now = 
  * RECOVERY: the step is not coming — resend it once, then hand the learner
  * controls that can actually get the class moving again.
  */
-export const CLASSROOM_STALL_NOTICE_MS = 12000;
-export const CLASSROOM_STALL_RECOVERY_MS = 30000;
+export const CLASSROOM_STALL_NOTICE_MS = 8000;
+export const CLASSROOM_STALL_RECOVERY_MS = 20000;
 
 export const CLASSROOM_STALL_NOTICE =
-  'This step is taking longer than it should. Still working on it…';
+  'Your teacher is still checking. Your answer is saved; you do not need to submit it again.';
 export const CLASSROOM_STALL_RECOVERY =
   "The next step didn't arrive. Nothing you've done is lost, and this is not a wrong answer.";
 

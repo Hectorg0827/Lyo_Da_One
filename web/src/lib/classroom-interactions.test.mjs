@@ -10,6 +10,7 @@ import * as learner from './learner-model.mjs';
 import * as visuals from './teaching-activity.mjs';
 import * as boardPresentation from './board-presentation.mjs';
 import * as commonsImage from './commons-image.mjs';
+import * as classroomCast from './classroom-cast.mjs';
 
 function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' } } = {}) {
   const sockets = [], timers = [], canceled = [], intervals = [];
@@ -38,6 +39,7 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     // stub: no test drives a board image, so it is never called, and a stub
     // would hide the day one does.
     '@/lib/commons-image.mjs': commonsImage,
+    '@/lib/classroom-cast.mjs': classroomCast,
   };
   // A real key/value store, not a stub that answers every key with a token:
   // the classroom now reads the session it last started out of the same
@@ -158,6 +160,22 @@ test('board rendering no longer inserts seconds of delay before narration', () =
   assert.equal(timers.at(-1).delay, 0);
   timers.at(-1).fn();
   assert.equal(store.getState().caption.text, 'Here is how these ideas connect.');
+  store.getState().disconnect();
+});
+
+test('unavailable natural teacher audio continues with captions instead of switching voices', async () => {
+  const { store, sockets, timers } = classroom();
+  // The harness begins muted to keep other teaching tests deterministic.
+  store.getState().toggleVoice();
+  sockets[0].onopen();
+  sockets[0].receive(component('TeacherMessage', { text: 'Let us learn with one clear example.' }));
+  await new Promise(resolve => setImmediate(resolve));
+
+  assert.equal(store.getState().voiceOn, false, 'never switch to the phone voice');
+  assert.match(store.getState().notice, /Teacher audio is temporarily unavailable/);
+  assert.equal(store.getState().caption.text, 'Let us learn with one clear example.');
+  assert.ok(timers.some(timer => !timer.canceled && timer.delay <= 4000),
+    'the caption remains on screen before the next turn');
   store.getState().disconnect();
 });
 
