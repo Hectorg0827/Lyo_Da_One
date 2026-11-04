@@ -4,6 +4,7 @@ export class SpeechPreparationCache {
   take(key: string): { controller: AbortController; response: Promise<Response | null> } | undefined;
   clear(): void;
 }
+export function splitSpeechForStreaming(text: string, firstChars?: number, laterChars?: number): string[];
 export function boardTransitionDelay(): number;
 export function playSpeechResponse(response: Promise<Response | null>, options: {
   signal: AbortSignal;
