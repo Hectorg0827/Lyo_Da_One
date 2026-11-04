@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { SpeechPreparationCache, playSpeechResponse, boardTransitionDelay } from '@/lib/classroom-audio.mjs';
+import { SpeechPreparationCache, playSpeechResponse, speakBrowserFallback, boardTransitionDelay } from '@/lib/classroom-audio.mjs';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import {
   CLASSROOM_STALL_NOTICE_MS,
@@ -297,6 +297,8 @@ let playing = false;
 let playTimer: ReturnType<typeof setTimeout> | null = null;
 let speechAbort: AbortController | null = null;
 let speechGeneration = 0;
+// Do not retry a known-offline voice endpoint for every sentence.
+let serverVoiceUnavailableUntil = 0;
 let authToken: string | null = null;
 // Speech requests are started as soon as teacher turns arrive, not when the
 // previous line finishes. The cache is deliberately tiny and session-local:
@@ -443,6 +445,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     signal?: AbortSignal,
     speaker = 'Teacher',
   ): Promise<Response | null> {
+    if (Date.now() < serverVoiceUnavailableUntil) return null;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
     if (API_KEY) headers['X-API-Key'] = API_KEY;
@@ -464,7 +467,11 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         }),
       },
     );
-    if (!response.ok) return null;
+    if (!response.ok) {
+      serverVoiceUnavailableUntil = Date.now() + 60_000;
+      return null;
+    }
+    serverVoiceUnavailableUntil = 0;
     return response;
   }
 
@@ -510,20 +517,33 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       onStarted: () => { if (generation === speechGeneration) recordResponseLatency('audio'); },
     }).then(() => {
       if (generation === speechGeneration) onDone();
-    }).catch((error: { playbackStarted?: boolean }) => {
+    }).catch(async (error: { playbackStarted?: boolean }) => {
       if (controller.signal.aborted || generation !== speechGeneration) return;
-      // A device TTS fallback changes the teacher's identity mid-lesson and
-      // sounds robotic on many phones. Keep the real cast voice or captions.
       if (error.playbackStarted) {
         onDone();
-      } else {
-        prefetchedSpeech.clear();
+        return;
+      }
+      prefetchedSpeech.clear();
+      // A missing server speech service must not turn the entire lesson silent.
+      try {
+        await speakBrowserFallback(text, {
+          language, rate, signal: controller.signal,
+          onStarted: () => {
+            if (generation === speechGeneration) recordResponseLatency('audio');
+          },
+        });
+        if (generation === speechGeneration) {
+          set((state) => ({
+            notice: state.notice ?? 'Using your device voice while the classroom voice reconnects.',
+          }));
+          onDone();
+        }
+      } catch {
+        if (controller.signal.aborted || generation !== speechGeneration) return;
         set((state) => ({
           voiceOn: false,
           notice: state.notice ?? CLASSROOM_VOICE_NOTICE,
         }));
-        // Leave this sentence visible for a readable beat, then advance.
-        // Never replay or duplicate a graded answer.
         playTimer = setTimeout(onDone, Math.min(speechDelay(text), 4000));
       }
     }).finally(() => {
@@ -1028,10 +1048,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
    * One tick of the wait watchdog.
    *
    * A wait that is merely slow is said out loud and left alone. A wait that
-   * passes the recovery threshold is asked after once, with `continue` — the
-   * one intent that cannot be mistaken for a second answer — and only if that
-   * second wait also runs out does the class admit the step is not coming and
-   * put recovery controls in front of the learner.
+   * passes the recovery threshold is surfaced as a recoverable stall. Nothing
+   * is resent automatically because the server may still be grading an answer.
    */
   function stallTick() {
     const { waitingForScene, status, isPaused, stallPhase } = get();
@@ -1048,19 +1066,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
     const waited = now - waitingSince;
     if (waited >= CLASSROOM_STALL_RECOVERY_MS) {
-      if (!stallNudged) {
-        // One unprompted ask, then the learner decides. Resending the
-        // learner's own answer here would risk grading it twice, so the
-        // nudge is always `continue`.
-        stallNudged = true;
-        waitingSince = now;
-        if (!sendAction('continue', get().nextActionComponentId || 'web_continue')) {
-          set({ stallPhase: 'stalled' });
-        } else if (stallPhase !== 'slow') {
-          set({ stallPhase: 'slow' });
-        }
-        return;
-      }
+      // Let the learner decide whether to retry. Never dispatch an
+      // unsolicited action while the server might still grade the original.
       if (stallPhase !== 'stalled') set({ stallPhase: 'stalled' });
       return;
     }
