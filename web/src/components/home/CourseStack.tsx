@@ -344,7 +344,7 @@ function CourseCard({
                   {finished
                     ? 'Complete'
                     : item.status === 'not_started' && progress.percent === 0
-                      ? 'Not started'
+                      ? (/^[0-9]+$/.test(courseId) ? 'Not started' : 'Ready to resume')
                       : `${progress.percent}%`}
                 </span>
               </div>
