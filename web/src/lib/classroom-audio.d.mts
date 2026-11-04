@@ -10,3 +10,9 @@ export function playSpeechResponse(response: Promise<Response | null>, options: 
   onStarted?: () => void;
   startupTimeoutMs?: number;
 }): Promise<void>;
+export function speakBrowserFallback(text: string, options?: {
+  language?: string;
+  rate?: number;
+  signal?: AbortSignal;
+  onStarted?: () => void;
+}): Promise<void>;
