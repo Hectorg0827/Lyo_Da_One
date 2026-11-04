@@ -23,6 +23,29 @@ export class SpeechPreparationCache {
   }
 }
 
+/**
+ * Short first utterance lets self-hosted CPU speech begin while the teacher's
+ * full explanation is still being synthesized. Split only at word boundaries;
+ * the same voice and rate are used for every segment. Never trim content away.
+ */
+export function splitSpeechForStreaming(text, firstChars = 40, laterChars = 65) {
+  const words = (text || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const chunks = [];
+  let current = '';
+  for (const word of words) {
+    const limit = chunks.length === 0 ? firstChars : laterChars;
+    if (current && current.length + 1 + word.length > limit) {
+      chunks.push(current);
+      current = word;
+    } else {
+      current = current ? `${current} ${word}` : word;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 /** Board content remains visible while speech explains it; no fake reading wait. */
 export function boardTransitionDelay() { return 0; }
 
@@ -31,7 +54,7 @@ export function boardTransitionDelay() { return 0; }
  * Cancellation owns the fetch as well as the player; a late response cannot speak.
  */
 export async function playSpeechResponse(responsePromise, {
-  signal: externalSignal, onStarted = () => {}, startupTimeoutMs = 8000,
+  signal: externalSignal, onStarted = () => {}, startupTimeoutMs = 30000,
   createAudio = () => new Audio(),
   MediaSourceClass = globalThis.MediaSource,
   urls = URL,
