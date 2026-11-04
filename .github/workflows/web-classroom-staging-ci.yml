@@ -28,7 +28,7 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Classroom behavior and real KaTeX rendering
         working-directory: web
-        run: node --test src/lib/classroom-cast.test.mjs src/lib/web-mobile-classroom-parity.test.mjs src/lib/classroom-rich-math.test.mjs
+        run: node --test src/lib/classroom-cast.test.mjs src/lib/web-mobile-classroom-parity.test.mjs src/lib/classroom-rich-math.test.mjs src/lib/classroom-audio.test.mjs
       - name: TypeScript compile
         working-directory: web
         run: npx tsc --noEmit
