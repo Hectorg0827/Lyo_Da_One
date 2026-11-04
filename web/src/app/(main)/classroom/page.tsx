@@ -765,7 +765,7 @@ function ClassroomStage() {
                 <div className="flex items-center gap-2">
                   <BookOpenCheck className="h-5 w-5 shrink-0 text-amber-200" aria-hidden="true" />
                   <p className="font-rounded text-sm font-bold text-amber-100">
-                    This step is stuck
+                    Your teacher is taking longer than expected
                   </p>
                 </div>
                 <p className="text-sm leading-relaxed text-amber-100/85">
@@ -776,7 +776,7 @@ function ClassroomStage() {
                     onClick={nudgeTeacher}
                     className="min-h-11 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#0A0D16]"
                   >
-                    Ask Lyo again
+                    Check for teacher response
                   </button>
                   <button
                     onClick={restartLesson}
