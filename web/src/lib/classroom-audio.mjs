@@ -141,3 +141,70 @@ export async function playSpeechResponse(responsePromise, {
     if (url) urls.revokeObjectURL(url);
   }
 }
+
+
+/**
+ * Accessible backup when the configured classroom speech service is offline.
+ * Prefer a local natural voice, keep the speaker's language, and let the
+ * classroom's AbortController own cancellation. This never calls a paid API.
+ */
+export function speakBrowserFallback(text, {
+  language = 'en', rate = 1, signal, onStarted = () => {},
+  synth = globalThis.speechSynthesis,
+  Utterance = globalThis.SpeechSynthesisUtterance,
+} = {}) {
+  if (!synth || !Utterance || !text?.trim()) {
+    return Promise.reject(new Error('No browser speech voice available'));
+  }
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('Playback interrupted', 'AbortError'));
+      return;
+    }
+    const utterance = new Utterance(text);
+    const lang = language === 'auto' ? 'en' : language;
+    const voices = synth.getVoices?.() ?? [];
+    const sameLanguage = voices.filter((voice) =>
+      voice.lang?.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase()));
+    const preferred = [
+      /natural|neural|enhanced|premium/i,
+      /aria|jenny|samantha|karen|google us english|google español/i,
+    ];
+    utterance.voice = preferred.map((pattern) => sameLanguage.find((voice) =>
+      pattern.test(voice.name))).find(Boolean) || sameLanguage[0] || null;
+    utterance.lang = utterance.voice?.lang || lang;
+    utterance.rate = Math.max(0.8, Math.min(1.2, rate));
+    let settled = false;
+    let timeout;
+    const cleanup = () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', interrupted);
+      utterance.onstart = utterance.onend = utterance.onerror = null;
+    };
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve();
+    };
+    const interrupted = () => {
+      synth.cancel();
+      finish(new DOMException('Playback interrupted', 'AbortError'));
+    };
+    signal?.addEventListener('abort', interrupted, { once: true });
+    utterance.onstart = () => onStarted();
+    utterance.onend = () => finish();
+    utterance.onerror = (event) => finish(new Error(event?.error || 'Browser speech failed'));
+    timeout = setTimeout(() => {
+      synth.cancel();
+      finish(new Error('Browser speech timed out'));
+    }, Math.max(10000, text.length * 120));
+    try {
+      synth.cancel();
+      synth.speak(utterance);
+    } catch (error) {
+      finish(error);
+    }
+  });
+}
