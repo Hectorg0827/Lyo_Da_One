@@ -300,17 +300,23 @@ if (fs.existsSync(chatStore)) {
   }
 }
 
-// Live voice renders inside the chat input, so its effects run first: a
-// passive effect would start the live recognizer before dictation released the
-// microphone. The handover has to be ordered by the control itself.
+// Android and Web both expose a single continuous-voice microphone control.
+// Two separate recognizers competed for the microphone on Chrome for Android,
+// leaving the voice session stuck before it could submit a turn.
 const chatInput = 'web/src/components/chat/ChatInputBar.tsx';
 if (fs.existsSync(chatInput)) {
   const source = fs.readFileSync(chatInput, 'utf8');
-  if (!/if \(!voiceSessionActive\) stopDictation\(\);/.test(source)) {
+  if (!/onClick=\{toggleVoiceSession\}/.test(source)
+    || !/aria-label=\{voiceSessionActive \? 'End live voice' : 'Start live voice'\}/.test(source)) {
     failures.push(
-      'Web chat input: the live-conversation control must stop dictation '
-      + 'before activating the session, not through an effect afterwards',
+      'Web chat input: provide one accessible Android-parity live voice control',
     );
+  }
+  if (/toggleDictation|startDictation|recognitionRef/.test(source)) {
+    failures.push('Web chat input: do not start a second competing microphone recognizer');
+  }
+  if (!/aria-label="Attach an image or document"/.test(source)) {
+    failures.push('Web chat input: media attachments must remain inside the input island');
   }
 }
 

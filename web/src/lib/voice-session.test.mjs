@@ -157,6 +157,7 @@ async function harness(t, { android = true, delayed = false, monitor = 'failed' 
 
 test('Android plays its answer without another mic capture or phantom echo turn', async (t) => {
   const h = await harness(t);
+  assert.match(document.querySelector('[role="status"]')?.textContent || '', /Listening/);
   const oldRecognizer = h.recognizers.at(-1);
   await h.say('Explain gravity.');
   await h.emit({ type: 'voice_text_segment', text: 'Gravity attracts matter.', sequence: 0 });

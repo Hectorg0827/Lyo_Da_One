@@ -2,18 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback, KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowUp, Plus, Mic, X, FileText, Loader2, AudioLines } from 'lucide-react';
+import { ArrowUp, Plus, Mic, Square, X, FileText, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
 import { api } from '@/lib/api';
 import type { ChatAttachment } from '@/types';
-import {
-  configureDictation,
-  createBrowserSpeechRecognition,
-  type BrowserSpeechRecognition,
-} from '@/lib/browser-speech';
-import { createTranscriptAccumulator, tidyTranscript } from '@/lib/speech-transcript.mjs';
+import { createBrowserSpeechRecognition } from '@/lib/browser-speech';
 import ConversationalVoiceLayer from './ConversationalVoiceLayer';
 
 const MAX_CHARS = 4000;
@@ -63,24 +58,15 @@ export default function ChatInputBar() {
   } = useChatStore();
   const isCourseAdjustable = isGenerating && generationActivity === 'course';
   const [value, setValue] = useState('');
-  const [listening, setListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
-  const dictationBaseRef = useRef('');
-  const transcriptRef = useRef(createTranscriptAccumulator());
-  const dictatingRef = useRef(false);
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
-    return () => {
-      dictatingRef.current = false;
-      recognitionRef.current?.stop();
-    };
   }, []);
 
   const adjustHeight = useCallback(() => {
@@ -97,112 +83,10 @@ export default function ChatInputBar() {
     adjustHeight();
   };
 
-  // ── Voice dictation (Web Speech API) ──────────────────────────────────────
-
-  const stopDictation = useCallback(() => {
-    // Clear the indicator here as well as in onend: a tap that lands in the
-    // gap between two recognizers has no live recognizer left to end.
-    dictatingRef.current = false;
-    setListening(false);
-    try { recognitionRef.current?.stop(); } catch { /* already stopped */ }
-  }, []);
-
-  /**
-   * Start one recognizer for the dictation in progress.
-   *
-   * Recognizers end themselves after a pause, so a long sentence spans
-   * several of them. The transcript is accumulated outside the recognizer and
-   * carried across each restart; only the user pressing the mic ends it.
-   */
-  const startDictation = useCallback((continuing = false): boolean => {
-    const recognition = createBrowserSpeechRecognition();
-    if (!recognition) return false;
-    recognitionRef.current = recognition;
-    configureDictation(recognition);
-
-    if (continuing) transcriptRef.current.carryOver();
-
-    recognition.onresult = (event) => {
-      // A recognizer that has handed over may still deliver a queued result.
-      if (recognitionRef.current !== recognition) return;
-      const { combined } = transcriptRef.current.push(event);
-      const base = dictationBaseRef.current;
-      const dictated = tidyTranscript(combined, { capitalize: !base });
-      setValue((base + dictated).slice(0, MAX_CHARS));
-      adjustHeight();
-    };
-
-    recognition.onend = () => {
-      if (recognitionRef.current !== recognition) return;
-      recognitionRef.current = null;
-      if (!dictatingRef.current) {
-        setListening(false);
-        return;
-      }
-      // Silence, not a stop: pick the dictation back up where it left off.
-      window.setTimeout(() => {
-        if (!dictatingRef.current) return;
-        if (!startDictation(true)) {
-          dictatingRef.current = false;
-          setListening(false);
-        }
-      }, 120);
-    };
-
-    recognition.onerror = (event) => {
-      if (recognitionRef.current !== recognition) return;
-      // A pause with no words in it is not a failure; onend restarts us.
-      if (event?.error === 'no-speech' || event?.error === 'aborted') return;
-      recognitionRef.current = null;
-      dictatingRef.current = false;
-      setListening(false);
-      toast.error("Couldn't access the microphone");
-    };
-
-    try {
-      recognition.start();
-      return true;
-    } catch {
-      recognitionRef.current = null;
-      return false;
-    }
-  }, [adjustHeight]);
-
-  /**
-   * Hand the microphone to a live conversation.
-   *
-   * Dictation is stopped here rather than in an effect because the live voice
-   * layer renders inside this component: its effects run before this one's, so
-   * by the time a passive effect reacted it would already have started its own
-   * recognizer against a microphone dictation still held — and a browser that
-   * refuses the second recognizer leaves the session in an error it never
-   * retries. Stopping first keeps the handover ordered.
-   */
+  // Android parity: one microphone control means one continuous voice session.
+  // A second dictation recognizer competes for the microphone on mobile Chrome.
   const toggleVoiceSession = () => {
-    if (!voiceSessionActive) stopDictation();
     setVoiceSessionActive(!voiceSessionActive);
-  };
-
-  // Backstop for a live conversation started anywhere but the control above.
-  useEffect(() => {
-    if (voiceSessionActive) stopDictation();
-  }, [voiceSessionActive, stopDictation]);
-
-  const toggleDictation = () => {
-    if (listening) {
-      stopDictation();
-      return;
-    }
-    if (!createBrowserSpeechRecognition()) return;
-    transcriptRef.current.reset();
-    dictationBaseRef.current = value ? value.replace(/\s*$/, ' ') : '';
-    dictatingRef.current = true;
-    if (startDictation()) {
-      setListening(true);
-    } else {
-      dictatingRef.current = false;
-      toast.error('Voice input is unavailable');
-    }
   };
 
   // ── Attachments (shared consumer media API) ───────────────────────────────
@@ -274,14 +158,15 @@ export default function ChatInputBar() {
       || (isGenerating && !isCourseAdjustable)
       || uploading
     ) return;
-    stopDictation();
-
     setValue('');
     const sentAttachments = attachments;
     setAttachments([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
+    // Text or attachments switch back to regular Chat without creating a
+    // second thread. The voice layer releases its recognizer and playback.
+    if (voiceSessionActive) setVoiceSessionActive(false);
     if (isCourseAdjustable) {
       await reviseActiveCourse(trimmed);
     } else {
@@ -337,133 +222,110 @@ export default function ChatInputBar() {
         </AnimatePresence>
       </div>
 
-      {/* Input island — mirrors iOS HybridInputBar: black rounded-24 card,
-          rotating angular-gradient border tinted by AI state, text field on
-          top, controls row below (+ / Chat pill · mic / send). */}
+      {/* Android parity: attachment, live mic, message field and send share a row. */}
       <div
         className={cn(
-          'input-island px-4 pt-3 pb-2.5 max-w-3xl mx-auto',
+          'input-island flex items-end gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 max-w-3xl mx-auto',
           isGenerating && 'input-island--thinking'
         )}
       >
-        {/* Textarea */}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          placeholder={
-            isCourseAdjustable
-              ? 'Adjust the course while it builds…'
-              : isGenerating
-              ? 'Lyo is thinking…'
-              : listening
-              ? 'Listening…'
-              : 'Message Lyo...'
-          }
-          disabled={isGenerating && !isCourseAdjustable}
-          rows={1}
-          className={cn(
-            'w-full resize-none bg-transparent text-base text-white placeholder-white/35',
-            'focus:outline-none leading-6 py-0.5 max-h-36 scrollbar-thin scrollbar-thumb-white/10',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            isCourseAdjustable && 'placeholder:text-lyo-300/45'
-          )}
-          style={{ lineHeight: `${LINE_HEIGHT}px` }}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic,.pdf,.txt,.md,.csv,.json"
+          multiple
+          className="hidden"
+          onChange={handleFilePicked}
+          aria-label="Choose an image or document"
         />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading || isGenerating || attachments.length >= MAX_ATTACHMENTS}
+          className="h-11 w-9 sm:w-10 rounded-full flex items-center justify-center text-white/85 hover:bg-white/10 transition-colors shrink-0 disabled:opacity-40"
+          aria-label="Attach an image or document"
+          title="Attach an image or document"
+        >
+          {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" strokeWidth={1.8} />}
+        </button>
 
-        {/* Controls row */}
-        <div className="flex items-center gap-2 mt-2">
-          {/* Attachment ("+") */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,.pdf,.txt,.md,.csv,.json"
-            multiple
-            className="hidden"
-            onChange={handleFilePicked}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading || isGenerating || attachments.length >= MAX_ATTACHMENTS}
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/90 hover:bg-white/15 transition-all duration-200 shrink-0 disabled:opacity-50"
-            title="Attach an image or document"
-          >
-            {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-[18px] h-[18px]" strokeWidth={1.5} />}
-          </button>
+        <button
+          type="button"
+          onClick={toggleVoiceSession}
+          disabled={!speechSupported}
+          aria-label={voiceSessionActive ? 'End live voice' : 'Start live voice'}
+          aria-pressed={voiceSessionActive}
+          className={cn(
+            'h-11 w-9 sm:w-10 rounded-full flex items-center justify-center transition-colors shrink-0',
+            voiceSessionActive ? 'bg-lyo-500/20 text-lyo-300' : 'text-white/75 hover:bg-white/10',
+            !speechSupported && 'opacity-40 cursor-not-allowed'
+          )}
+          title={speechSupported
+            ? (voiceSessionActive ? 'End live voice' : 'Start live voice')
+            : 'Live voice is unavailable in this browser'}
+        >
+          {voiceSessionActive ? <Square className="w-4 h-4" fill="currentColor" /> : <Mic className="w-5 h-5" />}
+        </button>
 
-          {/* Mode pill — voice is a delivery layer over the same Chat contract. */}
-          <button
-            type="button"
-            onClick={toggleVoiceSession}
-            disabled={!speechSupported}
+        <div className="relative min-w-0 flex-1">
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            aria-label="Message Lyo"
+            placeholder={
+              isCourseAdjustable
+                ? 'Adjust the course while it builds…'
+                : isGenerating
+                  ? 'Lyo is thinking…'
+                  : 'Ask Lyo anything…'
+            }
+            disabled={isGenerating && !isCourseAdjustable}
+            rows={1}
             className={cn(
-              'flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-semibold select-none transition-colors',
-              voiceSessionActive
-                ? 'bg-lyo-500/20 text-lyo-200 border border-lyo-500/25'
-                : 'bg-white/10 text-white hover:bg-white/15',
-              !speechSupported && 'opacity-40 cursor-not-allowed'
+              'w-full min-h-11 max-h-36 resize-none rounded-3xl border border-white/20 bg-white/5',
+              'px-3.5 py-2.5 text-base leading-6 text-white placeholder-white/40',
+              'focus:outline-none focus:border-lyo-400 focus:ring-1 focus:ring-lyo-400/40',
+              'scrollbar-thin scrollbar-thumb-white/10',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
+              isCourseAdjustable && 'placeholder:text-lyo-300/45'
             )}
-            title={speechSupported ? (voiceSessionActive ? 'End live voice conversation' : 'Talk with Lyo out loud') : 'Voice is unavailable in this browser'}
-          >
-            <AudioLines className="w-3.5 h-3.5" />
-            {voiceSessionActive ? 'Stop' : 'Talk'}
-          </button>
-
-          <div className="flex-1" />
-
-          {/* Character count */}
+            style={{ lineHeight: `${LINE_HEIGHT}px` }}
+          />
           <AnimatePresence>
             {showCount && (
               <motion.span
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
+                initial={{ opacity: 0, y: 3 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 3 }}
                 className={cn(
-                  'text-[11px] font-mono',
-                  charCount > MAX_CHARS * 0.95 ? 'text-red-400' : 'text-white/30'
+                  'absolute -top-5 right-2 text-[11px] font-mono',
+                  charCount > MAX_CHARS * 0.95 ? 'text-red-400' : 'text-white/40'
                 )}
               >
                 {MAX_CHARS - charCount}
               </motion.span>
             )}
           </AnimatePresence>
-
-          {/* Voice dictation — hidden entirely when the browser can't do it */}
-          {speechSupported && !voiceSessionActive && (
-            <button
-              type="button"
-              onClick={toggleDictation}
-              className={cn(
-                'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
-                listening
-                  ? 'text-accent-orange bg-accent-orange/15 animate-pulse'
-                  : 'text-white/90 hover:bg-white/10'
-              )}
-              title={listening ? 'Stop dictating' : 'Dictate your message'}
-            >
-              <Mic className="w-[18px] h-[18px]" />
-            </button>
-          )}
-
-          {/* Send — white circle, dark arrow (iOS) */}
-          <motion.button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!canSend}
-            whileTap={canSend ? { scale: 0.9 } : {}}
-            className={cn(
-              'w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
-              canSend
-                ? 'bg-white text-black shadow-lg shadow-black/30 hover:opacity-90'
-                : 'bg-white/10 text-white/25 cursor-not-allowed'
-            )}
-            title="Send message"
-          >
-            <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
-          </motion.button>
         </div>
+
+        <motion.button
+          type="button"
+          onClick={handleSubmit}
+          disabled={!canSend}
+          whileTap={canSend ? { scale: 0.9 } : {}}
+          className={cn(
+            'h-11 w-11 rounded-full flex items-center justify-center transition-all shrink-0',
+            canSend
+              ? 'bg-lyo-600 text-white shadow-lg shadow-lyo-900/30 hover:bg-lyo-500'
+              : 'bg-lyo-600/30 text-white/35 cursor-not-allowed'
+          )}
+          aria-label="Send message"
+          title="Send message"
+        >
+          <ArrowUp className="w-5 h-5" strokeWidth={2.5} />
+        </motion.button>
       </div>
 
       {/* Hint (desktop only) */}
