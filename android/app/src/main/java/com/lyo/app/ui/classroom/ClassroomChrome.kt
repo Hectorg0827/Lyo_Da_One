@@ -147,18 +147,19 @@ fun ClassroomTopBar(
 
 /**
  * Inline settings row (ported from web's classroom/page.tsx settingsOpen
- * panel), trimmed to what's actually wireable on Android v1: reduced
- * motion is the only setting that previously existed as a wire-contract
- * param (ClassroomSocketClient.connect's reducedMotion) with no user
- * control at all — ClassroomEngine.start() hardcoded `false`. Mode/
- * duration/voice-speed are not exposed here because they would require a
- * reconnect or a voice-player speed contract. Teacher voice itself is live
- * and can be muted from the top bar without changing instructional state.
+ * panel). Reduced motion is applied on the next session; spoken captions
+ * are immediate. Lesson length is a server session parameter, so choosing
+ * a different length explicitly starts a new lesson rather than silently
+ * extending or shortening the current one.
  */
 @Composable
 fun SettingsPanel(
     reducedMotion: Boolean,
     onReducedMotionChange: (Boolean) -> Unit,
+    captionsEnabled: Boolean,
+    onCaptionsEnabledChange: (Boolean) -> Unit,
+    durationMinutes: Int,
+    onDurationChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -189,6 +190,34 @@ fun SettingsPanel(
                 onCheckedChange = onReducedMotionChange,
                 colors = SwitchDefaults.colors(checkedTrackColor = ClassroomTokens.AccentPurple),
             )
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Spoken captions", color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+                Text("Brief captions; full lesson in the notebook", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+            }
+            Switch(
+                checked = captionsEnabled,
+                onCheckedChange = onCaptionsEnabledChange,
+                colors = SwitchDefaults.colors(checkedTrackColor = ClassroomTokens.AccentPurple),
+            )
+        }
+        Text("Lesson length", color = TextPrimary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp))
+        Text("Selecting a new length starts a fresh lesson.", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+            ClassroomLessonDuration.choices.forEach { minutes ->
+                OutlinedButton(
+                    onClick = { onDurationChange(minutes) },
+                    enabled = minutes != durationMinutes,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("$minutes min", color = if (minutes == durationMinutes) ClassroomTokens.AccentPurple else TextPrimary)
+                }
+            }
         }
     }
 }
@@ -475,7 +504,7 @@ fun BottomActionDock(
     }
 }
 
-/** The permanent Teacher badge (never hides with the rest of chrome) sitting
+/** A contextual teacher badge sitting
  *  next to the caption — reuses MascotAvatar's rendering machinery directly
  *  via rememberMascotFrame rather than going through the A2UI tree, since
  *  the Teacher's identity here is 100% locally computed (a fixed portrait
@@ -514,7 +543,7 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, topic: String,
                 Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         } else {
-            Text("Your teacher is preparing the next step…", color = TextSecondary, modifier = Modifier.weight(1f))
+            Text("Your teacher is speaking", color = TextSecondary, modifier = Modifier.weight(1f))
         }
         Column {
             if (lessonRecovery) Text("Paused", color = ClassroomTokens.Gold, style = MaterialTheme.typography.labelSmall)
@@ -525,8 +554,10 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, topic: String,
 
 /** Lyo remains beside the learner, not in the teacher's seat. */
 @Composable
-fun LyoCompanionBadge(state: String, spokenClassmates: List<String>, modifier: Modifier = Modifier) {
+fun LyoCompanionBadge(state: String, spokenClassmates: List<String>, modifier: Modifier = Modifier, caption: com.google.gson.JsonElement? = null) {
     val frame = com.lyo.app.ui.classroom.catalog.rememberMascotFrame(state = state, variant = "lyo")
+    val text = caption?.takeIf { it.isJsonObject }?.asJsonObject?.get("text")
+        ?.takeIf { it.isJsonPrimitive }?.asString
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -536,8 +567,10 @@ fun LyoCompanionBadge(state: String, spokenClassmates: List<String>, modifier: M
     ) {
         Image(painter = painterResource(frame.drawableRes), contentDescription = "Lyo, your companion",
             modifier = frame.modifier.size(30.dp))
-        Text("LYO  ·  Your study companion", color = TextSecondary,
-            style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text("LYO  ·  Your study companion", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+            if (text != null) Text(text, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+        }
         ClassroomCast.classmates.filter { it.name in spokenClassmates }.forEach { peer ->
             Image(painter = painterResource(peer.portrait), contentDescription = "${peer.name}, AI classmate",
                 modifier = Modifier.size(28.dp).background(androidx.compose.ui.graphics.Color.White, CircleShape))

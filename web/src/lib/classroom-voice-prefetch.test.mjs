@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SpeechPreparationCache, playSpeechResponse } from './classroom-audio.mjs';
+import { SpeechPreparationCache, SpeechLookaheadQueue, playSpeechResponse } from './classroom-audio.mjs';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 class FakeAudio extends EventTarget {
@@ -46,6 +46,42 @@ test('prefetch is bounded, deduplicated, and canceled when the learner changes d
   assert.equal(active.controller.signal.aborted, false); // player owns it now
   assert.equal(signals[2].aborted, true);
   active.controller.abort();
+});
+
+test('one-ahead speech synthesis starts while the current phrase plays, not before', async () => {
+  const calls = [];
+  const segments = ['This is the variable.', 'Now solve the equation.', 'Explain your answer.'];
+  const initial = Promise.resolve(new Response('first'));
+  const queue = new SpeechLookaheadQueue(segments, async (text, index) => {
+    calls.push([text, index]);
+    return new Response(text);
+  }, initial);
+
+  assert.equal(await queue.take(0), await initial);
+  assert.deepEqual(calls, [], 'no competing TTS request before first audio begins');
+  const prefetched = queue.warmNext(0);
+  assert.equal(queue.warmNext(0), prefetched, 'concurrent warm calls are deduplicated');
+  await tick();
+  assert.deepEqual(calls, [['Now solve the equation.', 1]]);
+  assert.equal(await queue.take(1), await prefetched);
+  assert.equal(queue.warmNext(1) !== null, true);
+  await tick();
+  assert.deepEqual(calls, [
+    ['Now solve the equation.', 1], ['Explain your answer.', 2],
+  ]);
+  assert.equal(queue.warmNext(2), null);
+  queue.clear();
+});
+
+test('canceled lookahead is safely consumed without an unhandled rejection', async () => {
+  const controller = new AbortController();
+  const queue = new SpeechLookaheadQueue(['First phrase.', 'Second phrase.'], async () => {
+    if (controller.signal.aborted) throw new DOMException('Stopped', 'AbortError');
+    return new Response('unexpected');
+  });
+  queue.warmNext(0);
+  controller.abort();
+  assert.equal(await queue.take(1), null);
 });
 
 test('speech starts before the final bytes arrive; download completion does not advance the lesson', async () => {

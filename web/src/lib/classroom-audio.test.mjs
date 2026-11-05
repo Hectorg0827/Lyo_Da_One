@@ -52,12 +52,41 @@ test('the backup voice cancels when the student interrupts', async () => {
   assert.ok(cancellations >= 1);
 });
 
-test('self-hosted teacher speech starts with a short chunk without losing words', () => {
+test('teacher narration uses natural clause boundaries without losing or repeating words', () => {
   const line = 'First we compare equivalent fractions, then we check the denominators and explain the result clearly.';
   const chunks = splitSpeechForStreaming(line);
-  assert.ok(chunks.length >= 2);
-  assert.ok(chunks[0].length <= 40);
+  assert.deepEqual(chunks, [
+    'First we compare equivalent fractions,',
+    'then we check the denominators and explain the result clearly.',
+  ]);
   assert.equal(chunks.join(' '), line);
   assert.deepEqual(splitSpeechForStreaming(''), []);
   assert.deepEqual(splitSpeechForStreaming('One'), ['One']);
+});
+
+test('speech preserves whole sentences instead of cutting a natural explanation every few words', () => {
+  const line = 'An equation shows two expressions are equal and helps us find the missing number.';
+  assert.deepEqual(splitSpeechForStreaming(line), [line]);
+});
+
+test('math notation, decimals, abbreviation, and quoted sentence boundaries remain intact', () => {
+  const line = 'Dr. Rivera asks: "What is 4x + 7 when x is 3.5?" We can substitute the value and solve.';
+  const chunks = splitSpeechForStreaming(line);
+  assert.equal(chunks.join(' '), line);
+  assert.ok(chunks.every((chunk) => !chunk.endsWith('Dr.')));
+  assert.ok(chunks.some((chunk) => chunk.endsWith('?"')));
+  assert.ok(chunks.some((chunk) => chunk.includes('3.5?')));
+});
+
+test('long punctuation-free speech remains bounded and all words are retained', () => {
+  const line = Array.from({ length: 52 }, (_, i) => `fraction${i}`).join(' ');
+  const chunks = splitSpeechForStreaming(line);
+  assert.ok(chunks.length > 1);
+  assert.ok(chunks.every((chunk) => chunk.length <= 190));
+  assert.equal(chunks.join(' '), line);
+});
+
+test('brief acknowledgments and Spanish questions remain one natural utterance', () => {
+  assert.deepEqual(splitSpeechForStreaming('Exactly!'), ['Exactly!']);
+  assert.deepEqual(splitSpeechForStreaming('¿Cuál es la variable?'), ['¿Cuál es la variable?']);
 });

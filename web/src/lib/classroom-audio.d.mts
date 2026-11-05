@@ -4,6 +4,13 @@ export class SpeechPreparationCache {
   take(key: string): { controller: AbortController; response: Promise<Response | null> } | undefined;
   clear(): void;
 }
+export class SpeechLookaheadQueue {
+  constructor(segments: string[], load: (text: string, index: number) => Promise<Response | null>, firstResponse?: Promise<Response | null>);
+  get(index: number): Promise<Response | null> | null;
+  take(index: number): Promise<Response | null> | null;
+  warmNext(index: number): Promise<Response | null> | null;
+  clear(): void;
+}
 export function splitSpeechForStreaming(text: string, firstChars?: number, laterChars?: number): string[];
 export function boardTransitionDelay(): number;
 export function playSpeechResponse(response: Promise<Response | null>, options: {

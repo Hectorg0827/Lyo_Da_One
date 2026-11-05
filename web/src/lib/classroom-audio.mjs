@@ -24,9 +24,63 @@ export class SpeechPreparationCache {
 }
 
 /**
- * Short first utterance lets self-hosted CPU speech begin while the teacher's
- * full explanation is still being synthesized. Split only at word boundaries;
- * the same voice and rate are used for every segment. Never trim content away.
+ * A bounded speech pipeline for a single teacher turn. The caller starts the
+ * next request only AFTER the current segment actually begins playing, so the
+ * single-CPU voice server is free to produce the first audible words first.
+ * The next segment can then synthesize while the student hears the current one.
+ * An externally owned AbortController cancels all requests when interrupted.
+ */
+export class SpeechLookaheadQueue {
+  constructor(segments, load, firstResponse) {
+    this.segments = segments;
+    this.load = load;
+    this.pending = new Map();
+    if (firstResponse !== undefined) this.pending.set(0, firstResponse);
+  }
+
+  get(index) {
+    if (index < 0 || index >= this.segments.length) return null;
+    if (!this.pending.has(index)) {
+      // A prefetched request may be canceled while the current segment plays.
+      // Catch it now so there is no unhandled rejection before take() awaits it.
+      const response = Promise.resolve()
+        .then(() => this.load(this.segments[index], index))
+        .catch(() => null);
+      this.pending.set(index, response);
+    }
+    return this.pending.get(index);
+  }
+
+  take(index) {
+    const response = this.get(index);
+    this.pending.delete(index);
+    return response;
+  }
+
+  warmNext(index) { return this.get(index + 1); }
+  clear() { this.pending.clear(); }
+}
+
+/**
+ * Identify a safe end of a spoken thought, rather than a fixed number of words.
+ * A voice model loses its prosody when a sentence is split in two TTS calls;
+ * punctuation gives it the context to finish clauses naturally. Preserve math
+ * decimals and common abbreviations, which are not sentence boundaries.
+ */
+function speechBoundaryStrength(word) {
+  const end = word.replace(/["'”’\])}]+$/u, '');
+  if (/^(?:mr|mrs|ms|dr|prof|sr|jr|vs|etc|e\.g|i\.e)\.$/iu.test(end) ||
+      /^(?:[A-Z]\.){2,}$/u.test(end) || /^[A-Z]\.$/u.test(end)) return 0;
+  if (/[.!?]$/u.test(end)) return 2;
+  if (/[,;:]$/u.test(end)) return 1;
+  return 0;
+}
+
+/**
+ * The first *complete* clause can be spoken quickly while later speech loads.
+ * firstChars/laterChars are preferred response-size hints, not hard cut points:
+ * never chop a natural sentence simply because it crossed 40/65 characters.
+ * Only punctuation-free run-ons fall back to a bounded word-boundary cut.
  */
 export function splitSpeechForStreaming(text, firstChars = 40, laterChars = 65) {
   const words = (text || '').trim().split(/\s+/).filter(Boolean);
@@ -34,15 +88,29 @@ export function splitSpeechForStreaming(text, firstChars = 40, laterChars = 65) 
   const chunks = [];
   let current = '';
   for (const word of words) {
-    const limit = chunks.length === 0 ? firstChars : laterChars;
-    if (current && current.length + 1 + word.length > limit) {
+    const isFirst = chunks.length === 0;
+    const target = Math.max(24, isFirst ? firstChars : laterChars);
+    // A rare run-on sentence still must not monopolize a CPU speech service.
+    const hardLimit = Math.max(isFirst ? 120 : 180, Math.round(target * 2.5));
+    if (current && current.length + 1 + word.length > hardLimit) {
       chunks.push(current);
       current = word;
     } else {
       current = current ? `${current} ${word}` : word;
     }
+    const boundary = speechBoundaryStrength(word);
+    const naturalMinimum = Math.max(24, Math.floor(target * 0.7));
+    if (boundary && current.length >= naturalMinimum) {
+      chunks.push(current);
+      current = '';
+    }
   }
-  if (current) chunks.push(current);
+  if (current) {
+    // A separate tiny last utterance is more jarring than including the last
+    // words in the previous phrase; this is safe because audio has not started.
+    if (chunks.length && current.length < 20) chunks[chunks.length - 1] += ` ${current}`;
+    else chunks.push(current);
+  }
   return chunks;
 }
 

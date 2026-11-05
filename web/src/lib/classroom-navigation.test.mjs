@@ -9,6 +9,15 @@ test('answered question stays navigable without resubmitting an answer', () => {
   assert.deepEqual(classroomNextAction({ live: true, readyToContinue: true }), {
     type: 'continue', label: 'Continue', disabled: false,
   });
+  assert.deepEqual(classroomNextAction({ live: true, readyToContinue: true, continueLabel: 'Retry this step' }), {
+    type: 'continue', label: 'Retry this step', disabled: false,
+  });
+});
+
+test('interrupted transport does not pretend to prepare a new teaching step', () => {
+  assert.deepEqual(classroomNextAction({ waiting: true, live: false }), {
+    type: 'waiting', label: 'Restoring lesson…', disabled: true,
+  });
 });
 
 test('history navigation is always local and takes precedence over loading', () => {

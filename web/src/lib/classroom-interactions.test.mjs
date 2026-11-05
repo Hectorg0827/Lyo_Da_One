@@ -25,9 +25,10 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     static OPEN = 1;
     readyState = 1;
     sent = [];
-    constructor() { sockets.push(this); }
+    constructor(url) { this.url = url; sockets.push(this); }
     send(message) { this.sent.push(JSON.parse(message)); }
     close() {}
+    interrupt() { this.readyState = 3; this.onclose?.({ code: 1006 }); }
     receive(message) { this.onmessage({ data: JSON.stringify(message) }); }
   }
   const deps = {
@@ -346,6 +347,115 @@ test('a stalled answer offers manual continue without resubmitting the graded re
   store.getState().nudgeTeacher();
   assert.equal(socket.sent.at(-1).action_intent, 'continue');
   assert.equal(socket.sent.filter(m => m.action_intent === 'submit_answer').length, 1);
+  store.getState().disconnect();
+});
+
+test('a dropped socket reattaches to the same lesson without replaying a submitted answer', () => {
+  const { store, sockets, timers } = classroom({ connection: { topic: 'Algebra', courseId: 'course-algebra' } });
+  const firstSocket = sockets[0];
+  firstSocket.onopen();
+  firstSocket.receive(component('QuizCard', {
+    component_id: 'algebra-quiz-1', question: 'What is the variable?',
+    options: [{ id: 'x', label: 'x' }],
+  }));
+  store.getState().answerQuiz('algebra-quiz-1', { id: 'x', label: 'x' });
+  firstSocket.receive({ event_type: 'answer_feedback', session_id: store.getState().sessionId, data: {
+    component_id: 'algebra-quiz-1', verdict: 'correct', feedback: 'Exactly: x is the variable.',
+  } });
+  const sessionId = store.getState().sessionId;
+  const before = taught(store)[0];
+  firstSocket.interrupt();
+  assert.equal(store.getState().status, 'connecting');
+  assert.match(store.getState().notice, /answers are saved/i);
+  assert.equal(store.getState().board.find(el => el.id === before.id)?.feedback, before.feedback);
+  assert.equal(firstSocket.sent.filter(message => message.action_intent === 'submit_answer').length, 1);
+
+  const reconnect = timers.find(timer => !timer.canceled && timer.delay === 500);
+  assert.ok(reconnect, 'bounded reconnect scheduled after the first disconnect');
+  reconnect.fn();
+  assert.equal(sockets.length, 2);
+  const secondSocket = sockets[1];
+  assert.equal(new URL(secondSocket.url).searchParams.get('session_id'), sessionId);
+  assert.equal(new URL(secondSocket.url).searchParams.get('resume'), '1');
+  secondSocket.onopen();
+  secondSocket.receive({ event_type: 'scene_start', session_id: sessionId, scene: {} });
+  secondSocket.receive(component('QuizCard', {
+    component_id: 'algebra-quiz-1', question: 'What is the variable?', options: [{ id: 'x', label: 'x' }],
+  }));
+  assert.equal(taught(store)[0].answered, 'x', 'replayed question retains submission acknowledgement');
+  assert.equal(taught(store)[0].feedback, before.feedback, 'correct feedback survives transport replay');
+  store.getState().answerQuiz('algebra-quiz-1', { id: 'x', label: 'x' });
+  assert.equal(secondSocket.sent.filter(message => message.action_intent === 'submit_answer').length, 0);
+  assert.equal(store.getState().notice, null);
+  store.getState().disconnect();
+});
+
+test('a repeated network failure eventually stops reconnecting and keeps student work visible', () => {
+  const { store, sockets, timers } = classroom();
+  sockets[0].onopen();
+  sockets[0].receive(component('QuizCard', {
+    component_id: 'q-1', question: 'What is one half?', options: [{ id: 'a', label: '1/2' }],
+  }));
+  for (const delay of [500, 1400, 3200]) {
+    sockets.at(-1).interrupt();
+    const retry = timers.find(timer => !timer.canceled && timer.delay === delay);
+    assert.ok(retry, `retry scheduled at ${delay} ms`);
+    retry.fn();
+  }
+  sockets.at(-1).interrupt();
+  assert.equal(sockets.length, 4, 'three retries maximum');
+  assert.equal(store.getState().status, 'error');
+  assert.match(store.getState().error, /answers are saved/i);
+  assert.equal(taught(store)[0].quiz.question, 'What is one half?');
+  store.getState().disconnect();
+});
+
+test('an old component id cannot accidentally mark a different question answered', () => {
+  const { store, sockets } = classroom();
+  const first = component('QuizCard', {
+    component_id: 'question', question: 'Which is larger?', options: [{ id: 'a', label: 'A' }],
+  });
+  sockets[0].receive(first);
+  store.getState().answerQuiz('question', { id: 'a', label: 'A' });
+  sockets[0].receive({ event_type: 'scene_start', scene: {} });
+  sockets[0].receive(component('QuizCard', {
+    component_id: 'question', question: 'Which is smaller?', options: [{ id: 'b', label: 'B' }],
+  }));
+  assert.equal(taught(store)[0].answered, undefined);
+  store.getState().answerQuiz('question', { id: 'b', label: 'B' });
+  assert.equal(sockets[0].sent.filter(message => message.action_intent === 'submit_answer').length, 2);
+  store.getState().disconnect();
+});
+
+test('an intentional lesson restart cancels the previous socket retry', () => {
+  const { store, sockets, timers } = classroom();
+  sockets[0].onopen();
+  sockets[0].interrupt();
+  const staleRetry = timers.find(timer => timer.delay === 500);
+  assert.ok(staleRetry && !staleRetry.canceled);
+  store.getState().restartLesson();
+  assert.ok(staleRetry.canceled);
+  assert.equal(sockets.length, 2);
+  assert.notEqual(store.getState().sessionId, 'lesson');
+  store.getState().disconnect();
+});
+
+test('backend capacity recovery displays a pause and a real Retry CTA, not endless waiting', () => {
+  const { store, sockets } = classroom();
+  sockets[0].onopen();
+  sockets[0].receive({ event_type: 'scene_start', scene: {} });
+  sockets[0].receive(component('ExampleBlock', {
+    component_id: 'classroom-recovery/notice', title: 'Your lesson is paused',
+    content: 'The teacher cannot generate the next lesson step right now. Your work is saved.',
+  }));
+  sockets[0].receive(component('CTAButton', {
+    component_id: 'classroom-recovery/retry', label: 'Retry this step', action_intent: 'retry',
+  }));
+  assert.equal(store.getState().waitingForScene, false);
+  assert.equal(store.getState().stallPhase, 'none');
+  assert.match(store.getState().notice, /cannot generate/i);
+  assert.equal(store.getState().continueLabel, 'Retry this step');
+  assert.equal(store.getState().nextActionIntent, 'retry');
   store.getState().disconnect();
 });
 
