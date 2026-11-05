@@ -138,7 +138,7 @@ export default function ClassroomCaptionSync() {
     };
   }, [active]);
 
-  const spokenCaption = spoken?.speaker === caption?.speaker && spoken.lineText === caption?.text
+  const spokenCaption = spoken && spoken.speaker === caption?.speaker && spoken.lineText === caption?.text
     ? spoken : null;
   const visualText = !voiceOn || caption?.speaker === 'You' || spokenCaption?.outcome === 'unavailable'
     ? (caption?.text ?? '')
