@@ -53,14 +53,14 @@ test('Web chat exposes the same one-row live mic, attachment and send controls a
     return React.createElement(element, rest);
   } });
   const { default: ChatInputBar } = compile('../components/chat/ChatInputBar.tsx', {
-    'framer-motion': { motion, AnimatePresence: React.Fragment },
+    'framer-motion': { motion, AnimatePresence: ({ children }) => React.createElement(React.Fragment, null, children) },
     'lucide-react': Object.fromEntries(['ArrowUp', 'Plus', 'Mic', 'Square', 'X', 'FileText', 'Loader2'].map((name) => [name, icon])),
     'react-hot-toast': { error() {} },
     '@/lib/utils': { cn: (...classes) => classes.filter(Boolean).join(' ') },
     '@/stores/chat-store': { useChatStore: () => state },
     '@/lib/api': { api: { media: { upload: async () => ({}) } } },
     '@/lib/browser-speech': { createBrowserSpeechRecognition: () => ({}) },
-    './ConversationalVoiceLayer': { default: () => null },
+    './ConversationalVoiceLayer': () => null,
   });
   const root = createRoot(document.getElementById('root'));
   const render = () => act(async () => { root.render(React.createElement(ChatInputBar)); });
