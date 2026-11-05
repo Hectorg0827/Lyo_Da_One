@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AudioLines, MicOff, Volume2 } from 'lucide-react';
+import { Mic, MicOff, Volume2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useChatStore } from '@/stores/chat-store';
@@ -1181,24 +1181,23 @@ export default function ConversationalVoiceLayer() {
           : 'Voice ready';
 
   return (
-    <div className="max-w-3xl mx-auto mb-2 rounded-2xl border border-lyo-500/25 bg-lyo-500/10 px-3 py-2.5">
-      <div className="flex items-center gap-3">
-        <div className={cn(
-          'w-9 h-9 rounded-full flex items-center justify-center shrink-0',
-          phase === 'speaking' ? 'bg-lyo-500/20 text-lyo-200' : 'bg-white/10 text-white/80'
-        )}>
-          {phase === 'speaking' ? <Volume2 className="w-4 h-4" /> : phase === 'error' ? <MicOff className="w-4 h-4" /> : <AudioLines className="w-4 h-4" />}
+    <div className="max-w-3xl mx-auto mb-2 rounded-xl bg-lyo-500/10 px-3 sm:px-4 py-2">
+      <div className="flex min-h-8 items-center gap-2.5">
+        <div className="shrink-0 text-lyo-300" aria-hidden="true">
+          {phase === 'speaking' ? <Volume2 className="w-5 h-5" />
+            : phase === 'error' ? <MicOff className="w-5 h-5" />
+              : <Mic className="w-5 h-5" />}
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-xs font-semibold text-white/85">Live conversation</div>
-          <div className={cn('text-xs text-white/55', !debugEnabled && 'truncate')}>{label}</div>
+        <div className={cn('min-w-0 flex-1 text-sm text-white/90', !debugEnabled && 'truncate')}
+          role="status" aria-live="polite" aria-atomic="true">
+          {label}
         </div>
         {(phase === 'speaking' || phase === 'thinking') && (
           <button
             type="button"
             onClick={interruptPlayback}
             aria-label="Interrupt Lyo and start speaking"
-            className="px-3 py-2 rounded-full bg-lyo-500/25 hover:bg-lyo-500/40 text-xs text-white shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
+            className="px-2.5 py-1.5 rounded-full bg-lyo-500/25 hover:bg-lyo-500/40 text-xs text-white shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-white"
           >
             Interrupt
           </button>
@@ -1206,7 +1205,7 @@ export default function ConversationalVoiceLayer() {
         <button
           type="button"
           onClick={endSession}
-          className="px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 text-xs text-white/75 shrink-0"
+          className="px-2.5 py-1.5 rounded-full text-xs font-medium text-lyo-300 hover:bg-lyo-500/15 shrink-0"
         >
           End
         </button>
