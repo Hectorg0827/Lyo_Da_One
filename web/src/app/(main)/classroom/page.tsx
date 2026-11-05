@@ -88,8 +88,12 @@ function ClassroomStage() {
   // with nothing on screen saying so, which is a lesson quietly shorter than
   // the one the learner asked for.
   const initialDuration = normalizeSessionMinutes(params.get('duration')) ?? 10;
+  // The selectors are drafts. Changing a learning target halfway through a
+  // class must never silently replace its server-owned session or progress.
   const [mode, setMode] = useState<ClassroomMode>(initialMode);
   const [durationMinutes, setDurationMinutes] = useState(initialDuration);
+  const [activeMode, setActiveMode] = useState<ClassroomMode>(initialMode);
+  const [activeDurationMinutes, setActiveDurationMinutes] = useState(initialDuration);
   const [reduceMotion, setReduceMotion] = useState(false);
   const systemReducedMotion = useReducedMotion();
   const animationsOff = reduceMotion || systemReducedMotion === true;
@@ -109,8 +113,8 @@ function ClassroomStage() {
     objective,
     recordScope,
     difficulty,
-    mode,
-    durationMinutes,
+    mode: activeMode,
+    durationMinutes: activeDurationMinutes,
     reducedMotion: animationsOff,
     language,
     resume,
@@ -119,7 +123,7 @@ function ClassroomStage() {
   const {
     status, board, boardHistory, recordConcepts, viewingBoard, caption, activeSpeaker, prompt,
     transcript, lyoState, waitingForScene, isNarrating, canContinue, continueLabel,
-    progressCurrent, progressTotal, error, notice, stallPhase, resumable, soundOn, voiceOn,
+    progressCurrent, progressTotal, progressStage, error, notice, stallPhase, resumable, soundOn, voiceOn,
     speechRate, languageCode,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
     askQuestion, signal, takeFloor, requestHint, continueLesson, skipTurn, toggleSound, toggleVoice,
@@ -214,7 +218,10 @@ function ClassroomStage() {
     connect(connection);
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, courseId, lessonId, reviewConceptId, objective, recordScope, difficulty, mode, durationMinutes, animationsOff, language, resume]);
+    // Reduced motion changes the local animation behavior immediately. It
+    // must not disconnect a lesson merely to update a visual preference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic, courseId, lessonId, reviewConceptId, objective, recordScope, difficulty, activeMode, activeDurationMinutes, language, resume]);
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
@@ -292,6 +299,15 @@ function ClassroomStage() {
   const readyToContinue = status === 'live' && viewingBoard === -1
     && !waitingForScene && (!isNarrating || lessonPaused) && !prompt && !pendingCheckpoint
     && (canContinue || board.length > 0);
+  const sessionSettingsChanged = mode !== activeMode || durationMinutes !== activeDurationMinutes;
+  const applySessionSettings = () => {
+    if (!sessionSettingsChanged) return;
+    // A new scope is a new lesson, not an in-place change to a graded
+    // question. Keep the active session intact if the learner cancels.
+    if (status === 'live' && !window.confirm('Start a new classroom session with these settings? This will leave your current session and begin a new one.')) return;
+    setActiveMode(mode);
+    setActiveDurationMinutes(durationMinutes);
+  };
   const primaryContinue = languageCode.toLowerCase().startsWith('es') ? 'Continuar' : 'Continue';
   const normalizedContinueLabel = continueLabel.trim();
   // The store uses the literal English "Continue" when a CTA omits its label.
@@ -511,8 +527,11 @@ function ClassroomStage() {
               : status === 'connecting' ? <span className="text-white/60">Connecting…</span> : <span className="text-white/60">{status}</span>}
           </p>
           {progressTotal > 0 && (
-            <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10" aria-label={`${progressCurrent} of ${progressTotal} skills practised`}>
-              <div className="h-full rounded-full bg-gradient-to-r from-lyo-500 to-accent-purple transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, progressCurrent / progressTotal * 100))}%` }} />
+            <div className="mt-1.5">
+              <div className="h-1 w-full overflow-hidden rounded-full bg-white/10" aria-label={`${progressCurrent} of ${progressTotal} skills completed`}>
+                <div className="h-full rounded-full bg-gradient-to-r from-lyo-500 to-accent-purple transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, progressCurrent / progressTotal * 100))}%` }} />
+              </div>
+              {progressStage && <p className="mt-1 truncate text-[10px] font-medium text-lyo-200/85" aria-live="polite">{progressStage}</p>}
             </div>
           )}
         </div>
@@ -616,6 +635,21 @@ function ClassroomStage() {
               ))}
             </select>
           </label>
+          {sessionSettingsChanged && (
+            <div className="space-y-2 rounded-lg border border-amber-400/25 bg-amber-400/10 p-2 text-amber-100 sm:col-span-3" role="status">
+              <p>Changes to lesson mode or session length start a new class. Your current lesson will stay open until you choose to restart.</p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={applySessionSettings}
+                  className="min-h-10 rounded-lg bg-lyo-500 px-3 font-semibold text-white hover:bg-lyo-400">
+                  Start new class with changes
+                </button>
+                <button type="button" onClick={() => { setMode(activeMode); setDurationMinutes(activeDurationMinutes); }}
+                  className="min-h-10 rounded-lg border border-white/20 px-3 text-white/80 hover:bg-white/10">
+                  Keep current class
+                </button>
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             <span className="flex items-center gap-1.5 font-semibold text-white">
               <Accessibility className="h-3.5 w-3.5" /> Accessibility
@@ -719,17 +753,13 @@ function ClassroomStage() {
               </div>
             )}
             {captionOnly && !lyoPresent && (
-              <div className="px-3 py-2 sm:px-4">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-lyo-200">Captions</p>
-                  <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }}
-                    className="text-[11px] font-medium text-white/65 underline underline-offset-2 hover:text-white">
-                    Full transcript
-                  </button>
-                </div>
-                <div data-classroom-caption-target className={cn(
-                  'relative overflow-hidden', voiceOn ? 'h-10 sm:h-[44px]' : 'h-[72px] sm:h-[84px]',
-                )} />
+              <div className="flex min-h-12 items-center gap-2 px-3 py-1 sm:px-4">
+                <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }}
+                  title="Expand full teacher transcript"
+                  className="shrink-0 text-[10px] font-bold uppercase tracking-[0.08em] text-lyo-200 underline underline-offset-2 hover:text-white">
+                  Captions
+                </button>
+                <div data-classroom-caption-target className="relative h-10 min-w-0 flex-1 overflow-hidden sm:h-11" />
               </div>
             )}
           </motion.section>
@@ -883,7 +913,7 @@ function ClassroomStage() {
                   </p>
                   <p className="mx-auto max-w-xs text-xs leading-relaxed text-white/70">
                     {topic} · {difficulty ? `${difficulty} level · ` : ''}
-                    {durationMinutes} minute session
+                    {activeDurationMinutes} minute session
                   </p>
                 </div>
                 <div className="flex gap-1.5" aria-hidden>

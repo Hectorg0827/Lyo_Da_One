@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { speakBrowserFallback, splitSpeechForStreaming } from './classroom-audio.mjs';
+import { speakBrowserFallback, splitSpeechForStreaming, silentCaptionDelay } from './classroom-audio.mjs';
 
 class FakeUtterance {
   constructor(text) { this.text = text; }
@@ -50,6 +50,21 @@ test('the backup voice cancels when the student interrupts', async () => {
     language: 'es-ES', synth, Utterance: FakeUtterance, signal: abort.signal,
   }), /Playback interrupted/);
   assert.ok(cancellations >= 1);
+});
+
+test('device voice unavailable immediately, text-only lesson advances without a long silent voice wait', async () => {
+  let cancellations = 0;
+  const synth = {
+    getVoices: () => [],
+    cancel: () => { cancellations += 1; },
+    speak: () => {}, // Browser accepted speak() but cannot start audio.
+  };
+  await assert.rejects(speakBrowserFallback('Teacher speaking', {
+    synth, Utterance: FakeUtterance, startupTimeoutMs: 5,
+  }), /did not start/);
+  assert.ok(cancellations > 0);
+  assert.ok(silentCaptionDelay('A long classroom explanation '.repeat(20)) <= 1800);
+  assert.ok(silentCaptionDelay('Good!') >= 650);
 });
 
 test('teacher narration uses natural clause boundaries without losing or repeating words', () => {

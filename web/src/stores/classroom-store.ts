@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { SpeechPreparationCache, SpeechLookaheadQueue, playSpeechResponse, speakBrowserFallback, boardTransitionDelay, splitSpeechForStreaming } from '@/lib/classroom-audio.mjs';
+import { SpeechPreparationCache, SpeechLookaheadQueue, playSpeechResponse, speakBrowserFallback, boardTransitionDelay, splitSpeechForStreaming, firstAudibleTurn, silentCaptionDelay } from '@/lib/classroom-audio.mjs';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import {
   CLASSROOM_STALL_NOTICE_MS,
@@ -238,6 +238,7 @@ interface ClassroomStore {
   canContinue: boolean;
   progressCurrent: number;
   progressTotal: number;
+  progressStage: string;
   continueLabel: string;
   nextActionIntent: string;
   nextActionComponentId: string;
@@ -304,7 +305,7 @@ let authToken: string | null = null;
 // previous line finishes. The cache is deliberately tiny and session-local:
 // it exists only to overlap network/TTS latency with time the learner is
 // already listening to the current turn.
-const prefetchedSpeech = new SpeechPreparationCache(3);
+const prefetchedSpeech = new SpeechPreparationCache(1);
 let learnerActionStarted: number | null = null;
 let contentLatencyRecorded = false;
 let idCounter = 0;
@@ -495,6 +496,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   function prefetchSpeechLine(speaker: string, text: string) {
     if (!get().voiceOn || typeof window === 'undefined' || !text.trim()) return;
+    // Kokoro on a single CPU cannot synthesize multiple speculative lines at
+    // once. Keep the earliest line, even when another scene streams in.
+    if (prefetchedSpeech.hasPending()) return;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
     // Prefetch only the fast opening segment. A full-length competing request
@@ -523,7 +527,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   function speakLine(speaker: string, text: string, onDone: () => void) {
     if (!get().voiceOn || typeof window === 'undefined') {
-      playTimer = setTimeout(onDone, speechDelay(text));
+      playTimer = setTimeout(onDone, silentCaptionDelay(text));
       return;
     }
 
@@ -573,7 +577,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         if (!response) throw new Error('Teacher audio segment unavailable');
         await playSpeechResponse(response, {
           signal: controller.signal,
-          startupTimeoutMs: 30000,
+          // Speech may stall behind a cold model or an unavailable CPU. The
+          // reading board must keep moving while the voice reconnects.
+          startupTimeoutMs: 7000,
           onStarted: () => {
             emitSegment(segment, index);
             if (!controller.signal.aborted && generation === speechGeneration) {
@@ -622,7 +628,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           notice: state.notice ?? CLASSROOM_VOICE_NOTICE,
         }));
         emitLineEnd('unavailable');
-        playTimer = setTimeout(onDone, Math.min(speechDelay(text), 4000));
+        playTimer = setTimeout(onDone, silentCaptionDelay(text));
       }
     }).finally(() => {
       lookahead.clear();
@@ -884,14 +890,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   function enqueueTurns(turns: DirectorTurn[]) {
     recordResponseLatency('content');
-    // Start the next few voice requests immediately. While line one is
-    // playing, lines two and three can finish synthesizing instead of making
-    // the learner sit through a fresh network/provider round-trip at every
-    // transition.
-    turns
-      .filter((turn) => (turn.type === 'speech' || turn.type === 'user_prompt') && (turn.text ?? '').trim())
-      .slice(0, 3)
-      .forEach((turn) => prefetchSpeechLine(turn.speaker || 'Teacher', (turn.text ?? '').trim()));
+    // Prime only the FIRST audible line. Previously three concurrent
+    // requests saturated the single-CPU Kokoro worker, delaying all three
+    // and causing the opening speech to time out. The one-ahead queue warms
+    // later phrases only after the first audio actually starts playing.
+    const first = firstAudibleTurn(turns);
+    if (first) prefetchSpeechLine(first.speaker || 'Teacher', (first.text ?? '').trim());
     turnQueue.push(...turns);
     waitingSince = null;
     stallNudged = false;
@@ -1003,7 +1007,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'ProgressBar': {
         const current = Math.max(0, comp.current ?? 0);
         const total = Math.max(1, comp.total ?? 1);
-        set({ progressCurrent: current, progressTotal: total });
+        set({ progressCurrent: current, progressTotal: total, progressStage: comp.label || '' });
         // Keep this course's Stacks entry in sync with the backend's own
         // authoritative mastery-progress signal — non-blocking, mirrors
         // Android's ClassroomEngine.syncStackProgress. sessionId equals
@@ -1310,6 +1314,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     canContinue: false,
     progressCurrent: 0,
     progressTotal: 0,
+    progressStage: '',
     continueLabel: 'Check understanding',
     nextActionIntent: 'continue',
     nextActionComponentId: 'web_continue',
@@ -1388,7 +1393,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         boardHistory: [], recordConcepts: [], viewingBoard: -1,
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, isNarrating: false, canContinue: false,
-        isPaused: false, progressCurrent: 0, progressTotal: 0,
+        isPaused: false, progressCurrent: 0, progressTotal: 0, progressStage: '',
         continueLabel: 'Continue', nextActionIntent: 'continue', nextActionComponentId: 'web_continue',
         error: null, notice: null, stallPhase: 'none',
       });

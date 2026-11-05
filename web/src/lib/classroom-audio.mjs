@@ -1,6 +1,7 @@
 /** A session-local, cancelable cache. A Response preserves the streaming body. */
 export class SpeechPreparationCache {
   constructor(limit = 3) { this.limit = limit; this.entries = new Map(); }
+  hasPending() { return this.entries.size > 0; }
   prepare(key, load) {
     if (this.entries.has(key)) return;
     const controller = new AbortController();
@@ -21,6 +22,21 @@ export class SpeechPreparationCache {
     for (const entry of this.entries.values()) entry.controller.abort();
     this.entries.clear();
   }
+}
+
+/** The CPU TTS service must receive at most one speculative line at a time. */
+export function firstAudibleTurn(turns) {
+  return turns.find(turn =>
+    (turn.type === 'speech' || turn.type === 'user_prompt') &&
+    (turn.text ?? '').trim());
+}
+
+/** Text-only lesson turns must not simulate a missing seven-second narration.
+ * The entire caption and transcript remain readable, while each visual beat
+ * gets a brief pause before the next line becomes available.
+ */
+export function silentCaptionDelay(text) {
+  return Math.min(1800, Math.max(650, Math.round((text?.length ?? 0) * 9)));
 }
 
 /**
@@ -241,6 +257,7 @@ export async function playSpeechResponse(responsePromise, {
  */
 export function speakBrowserFallback(text, {
   language = 'en', rate = 1, signal, onStarted = () => {},
+  startupTimeoutMs = 2500,
   synth = globalThis.speechSynthesis,
   Utterance = globalThis.SpeechSynthesisUtterance,
 } = {}) {
@@ -266,9 +283,10 @@ export function speakBrowserFallback(text, {
     utterance.lang = utterance.voice?.lang || lang;
     utterance.rate = Math.max(0.8, Math.min(1.2, rate));
     let settled = false;
-    let timeout;
+    let timeout, startupTimer;
     const cleanup = () => {
       clearTimeout(timeout);
+      clearTimeout(startupTimer);
       signal?.removeEventListener('abort', interrupted);
       utterance.onstart = utterance.onend = utterance.onerror = null;
     };
@@ -284,13 +302,20 @@ export function speakBrowserFallback(text, {
       finish(new DOMException('Playback interrupted', 'AbortError'));
     };
     signal?.addEventListener('abort', interrupted, { once: true });
-    utterance.onstart = () => onStarted();
+    utterance.onstart = () => {
+      clearTimeout(startupTimer);
+      onStarted();
+    };
     utterance.onend = () => finish();
     utterance.onerror = (event) => finish(new Error(event?.error || 'Browser speech failed'));
     timeout = setTimeout(() => {
       synth.cancel();
       finish(new Error('Browser speech timed out'));
     }, Math.max(10000, text.length * 120));
+    startupTimer = setTimeout(() => {
+      synth.cancel();
+      finish(new Error('Browser speech did not start'));
+    }, startupTimeoutMs);
     try {
       synth.cancel();
       synth.speak(utterance);

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SpeechPreparationCache, SpeechLookaheadQueue, playSpeechResponse } from './classroom-audio.mjs';
+import { SpeechPreparationCache, SpeechLookaheadQueue, playSpeechResponse, firstAudibleTurn } from './classroom-audio.mjs';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 class FakeAudio extends EventTarget {
@@ -46,6 +46,23 @@ test('prefetch is bounded, deduplicated, and canceled when the learner changes d
   assert.equal(active.controller.signal.aborted, false); // player owns it now
   assert.equal(signals[2].aborted, true);
   active.controller.abort();
+});
+
+test('only the earliest audible turn is eligible for speculative single-CPU prefetch', () => {
+  const turns = [
+    { type: 'write', text: '2/6 = 1/3' },
+    { type: 'speech', speaker: 'Teacher', text: 'Look at the numerator.' },
+    { type: 'user_prompt', speaker: 'Teacher', text: 'Your turn now.' },
+    { type: 'speech', speaker: 'Lyo', text: 'You can do it!' },
+  ];
+  assert.equal(firstAudibleTurn(turns), turns[1]);
+  assert.equal(firstAudibleTurn([{ type: 'speech', text: '  ' }, { type: 'pause' }]), undefined);
+  const cache = new SpeechPreparationCache(1);
+  assert.equal(cache.hasPending(), false);
+  cache.prepare('first', () => Promise.resolve(new Response('audio')));
+  assert.equal(cache.hasPending(), true);
+  cache.take('first').controller.abort();
+  assert.equal(cache.hasPending(), false);
 });
 
 test('one-ahead speech synthesis starts while the current phrase plays, not before', async () => {
