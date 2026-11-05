@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SpeechPreparationCache, SpeechLookaheadQueue, playSpeechResponse, firstAudibleTurn } from './classroom-audio.mjs';
+import { SpeechPreparationCache, SpeechLookaheadQueue, playSpeechResponse, firstAudibleTurn, retryPlaybackAfterMoreAudio } from './classroom-audio.mjs';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 class FakeAudio extends EventTarget {
@@ -122,6 +122,58 @@ test('speech starts before the final bytes arrive; download completion does not 
   await playback;
   assert.equal(finished, true);
   assert.equal(f.audio.paused, true);
+});
+
+test('a fragmentary first MP3 frame retries playback when more audio arrives', async () => {
+  const f = fixture();
+  let stream, attempts = 0;
+  f.audio.play = async () => {
+    attempts += 1;
+    if (attempts === 1) {
+      const error = new Error('decoder needs another frame');
+      error.name = 'NotSupportedError';
+      throw error;
+    }
+    f.audio.dispatchEvent(new Event('playing'));
+  };
+  const body = new ReadableStream({ start(controller) { stream = controller; } });
+  const playback = playSpeechResponse(Promise.resolve(new Response(body, {
+    headers: { 'Content-Type': 'audio/mpeg' },
+  })), { ...f.options, signal: new AbortController().signal });
+  stream.enqueue(new Uint8Array([1]));
+  await tick();
+  assert.equal(attempts, 1);
+  stream.enqueue(new Uint8Array([2, 3, 4]));
+  await tick();
+  assert.equal(attempts, 2, 'a decoder fragment error is not fatal to the stream');
+  stream.close();
+  await tick();
+  f.audio.dispatchEvent(new Event('ended'));
+  await playback;
+});
+
+test('an unplayable completed stream does not retry forever', async () => {
+  const f = fixture();
+  let stream, attempts = 0;
+  f.audio.play = async () => {
+    attempts += 1;
+    const error = new Error('unplayable MP3');
+    error.name = 'NotSupportedError';
+    throw error;
+  };
+  const body = new ReadableStream({ start(controller) { stream = controller; } });
+  const playback = playSpeechResponse(Promise.resolve(new Response(body, {
+    headers: { 'Content-Type': 'audio/mpeg' },
+  })), { ...f.options, signal: new AbortController().signal });
+  stream.enqueue(new Uint8Array([1]));
+  stream.close();
+  await assert.rejects(playback, /unplayable MP3/);
+  assert.equal(attempts, 2, 'one final retry is allowed after EOF');
+});
+
+test('autoplay refusal is not treated as a recoverable decoder fragment', () => {
+  assert.equal(retryPlaybackAfterMoreAudio({ name: 'NotAllowedError' }), false);
+  assert.equal(retryPlaybackAfterMoreAudio({ name: 'NotSupportedError' }), true);
 });
 
 test('interrupting during the download stops audio and cancels the reader', async () => {

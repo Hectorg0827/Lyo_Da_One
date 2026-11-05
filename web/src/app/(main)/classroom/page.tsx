@@ -36,6 +36,7 @@ import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 import SurfaceLoading from '@/components/ui/SurfaceLoading';
 import { classroomSpeaker, teacherForTopic } from '@/lib/classroom-cast.mjs';
 import { classroomNextAction } from '@/lib/classroom-navigation.mjs';
+import { WAITING_COMPANION_BEATS, teacherPresenceMs } from '@/lib/classroom-presence.mjs';
 
 const LYO_STATE_IMG: Record<string, string> = {
   reading: '/mascot/mascot_reading_1.png',
@@ -151,6 +152,7 @@ function ClassroomStage() {
   const [captionMoment, setCaptionMoment] = useState(false);
   const [lyoMoment, setLyoMoment] = useState(false);
   const [waitingCompanionMoment, setWaitingCompanionMoment] = useState(false);
+  const [waitingCue, setWaitingCue] = useState(WAITING_COMPANION_BEATS[0].cue);
   const [hintMenuOpen, setHintMenuOpen] = useState(false);
   const [listeningTarget, setListeningTarget] = useState<'question' | 'prompt' | null>(null);
   const [promptResponse, setPromptResponse] = useState('');
@@ -186,8 +188,12 @@ function ClassroomStage() {
       return;
     }
     setCaptionMoment(true);
-    if (isNarrating && activeSpeaker) return;
-    const timeout = window.setTimeout(() => setCaptionMoment(false), prompt ? 3600 : 2200);
+    // Speech synthesis can take tens of seconds. Presence must not become a
+    // permanent portrait merely because the audio clock is still waiting.
+    const timeout = window.setTimeout(
+      () => setCaptionMoment(false),
+      teacherPresenceMs({ narrating: isNarrating && Boolean(activeSpeaker), prompt: Boolean(prompt) }),
+    );
     return () => window.clearTimeout(timeout);
   }, [caption, activeSpeaker, isNarrating, prompt, status]);
 
@@ -206,12 +212,15 @@ function ClassroomStage() {
   useEffect(() => {
     setWaitingCompanionMoment(false);
     if (!waitingForScene || status !== 'live' || isNarrating) return;
-    const appear = window.setTimeout(() => setWaitingCompanionMoment(true), 1800);
-    const disappear = window.setTimeout(() => setWaitingCompanionMoment(false), 6200);
-    return () => {
-      window.clearTimeout(appear);
-      window.clearTimeout(disappear);
-    };
+    const timeouts: number[] = [];
+    for (const beat of WAITING_COMPANION_BEATS) {
+      timeouts.push(window.setTimeout(() => {
+        setWaitingCue(beat.cue);
+        setWaitingCompanionMoment(true);
+      }, beat.showAtMs));
+      timeouts.push(window.setTimeout(() => setWaitingCompanionMoment(false), beat.hideAtMs));
+    }
+    return () => timeouts.forEach((timeout) => window.clearTimeout(timeout));
   }, [waitingForScene, status, isNarrating]);
 
   useEffect(() => {
@@ -356,15 +365,14 @@ function ClassroomStage() {
   const live = status === 'live';
   const hasTeacherCaption = Boolean(caption?.text?.trim() && caption.speaker !== 'You');
   const teacherPresent = live && hasTeacherCaption && captionMoment;
-  const captionNeedsReadingSpace = hasTeacherCaption && (captionsPinned || !voiceOn);
-  const lyoPresent = live && !teacherPresent && !captionNeedsReadingSpace
-    && (lyoMoment || waitingCompanionMoment);
+  const captionNeedsReadingSpace = hasTeacherCaption && (captionsPinned || !voiceOn || isNarrating);
+  const lyoPresent = live && !teacherPresent && (lyoMoment || waitingCompanionMoment);
   // Silent reading and accessibility preferences keep subtitles available
   // without forcing a persistent teacher portrait beside the board.
-  const captionOnly = !teacherPresent && hasTeacherCaption && (captionsPinned || !voiceOn);
+  const captionOnly = !teacherPresent && !lyoPresent && captionNeedsReadingSpace;
   const characterDockVisible = teacherPresent || lyoPresent || captionOnly;
   const lyoCue = waitingCompanionMoment
-    ? 'Your next step is on its way…'
+    ? waitingCue
     : lyoState === 'celebrating' ? 'Nice progress! Keep going.'
       : lyoState === 'curious' ? 'Have a question? I’m here to help.'
         : lyoState === 'confused' ? 'Need a hint? Try Help below.'
@@ -738,18 +746,25 @@ function ClassroomStage() {
               </div>
             )}
             {lyoPresent && (
-              <div className="flex items-center gap-2.5 px-3 py-2 sm:px-4">
-                <motion.img
-                  src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
-                  alt="Lyo, your study companion"
-                  className="h-10 w-10 shrink-0 object-contain"
-                  initial={animationsOff ? false : { x: -8, rotate: -6 }}
-                  animate={{ x: 0, rotate: 0 }}
-                  transition={{ duration: animationsOff ? 0 : 0.23 }}
-                />
-                <p className="min-w-0 text-xs leading-relaxed text-white/85">
-                  <strong className="mr-1 text-lyo-200">Lyo:</strong> {lyoCue}
-                </p>
+              <div>
+                <div className="flex items-center gap-2.5 px-3 py-2 sm:px-4">
+                  <motion.img
+                    src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
+                    alt="Lyo, your study companion"
+                    className="h-10 w-10 shrink-0 object-contain"
+                    initial={animationsOff ? false : { x: -8, rotate: -6 }}
+                    animate={{ x: 0, rotate: 0 }}
+                    transition={{ duration: animationsOff ? 0 : 0.23 }}
+                  />
+                  <p className="min-w-0 text-xs leading-relaxed text-white/85">
+                    <strong className="mr-1 text-lyo-200">Lyo:</strong> {lyoCue}
+                  </p>
+                </div>
+                {captionNeedsReadingSpace && (
+                  <div className="border-t border-white/10 px-3 py-1 sm:px-4">
+                    <div data-classroom-caption-target className="relative h-10 overflow-hidden sm:h-11" />
+                  </div>
+                )}
               </div>
             )}
             {captionOnly && !lyoPresent && (

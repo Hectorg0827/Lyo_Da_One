@@ -16,6 +16,7 @@ export class SpeechLookaheadQueue {
 }
 export function splitSpeechForStreaming(text: string, firstChars?: number, laterChars?: number): string[];
 export function boardTransitionDelay(): number;
+export function retryPlaybackAfterMoreAudio(error: { name?: string } | null | undefined): boolean;
 export function playSpeechResponse(response: Promise<Response | null>, options: {
   signal: AbortSignal;
   onStarted?: () => void;

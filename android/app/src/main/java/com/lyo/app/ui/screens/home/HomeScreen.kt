@@ -36,12 +36,13 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -51,6 +52,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -103,6 +105,9 @@ fun HomeScreen(nav: NavHostController) {
     var stackFilter by remember { mutableStateOf(FocusPresentation.Filter.All) }
     // Saved courses start stacked, and open on a tap. See the deck below.
     var deckExpanded by remember { mutableStateOf(false) }
+    var profileMenuOpen by remember { mutableStateOf(false) }
+    var logoutConfirmationOpen by remember { mutableStateOf(false) }
+    val accountScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         runCatching { ApiClient.api.gamificationOverview() }
@@ -188,12 +193,40 @@ fun HomeScreen(nav: NavHostController) {
                         tint = TextSecondary,
                     )
                 }
-                IconButton(onClick = { nav.navigate(Routes.SETTINGS) }) {
-                    Icon(
-                        Icons.Filled.Settings,
-                        contentDescription = "Settings",
-                        tint = TextSecondary,
-                    )
+                Box {
+                    IconButton(onClick = { profileMenuOpen = true }) {
+                        Icon(
+                            Icons.Filled.Person,
+                            contentDescription = "Open profile menu",
+                            tint = TextSecondary,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = profileMenuOpen,
+                        onDismissRequest = { profileMenuOpen = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Profile") },
+                            onClick = {
+                                profileMenuOpen = false
+                                nav.navigate(Routes.PROFILE)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Settings") },
+                            onClick = {
+                                profileMenuOpen = false
+                                nav.navigate(Routes.SETTINGS)
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Log out") },
+                            onClick = {
+                                profileMenuOpen = false
+                                logoutConfirmationOpen = true
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -234,8 +267,7 @@ fun HomeScreen(nav: NavHostController) {
                     dueReviews.isNotEmpty() -> {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             dueReviews.take(3).forEach { review ->
-                                val title = review.skillName?.takeIf { it.isNotBlank() }
-                                    ?: humanizeSkillId(review.skillId)
+                                val title = FocusPresentation.reviewTitle(review.skillId, review.skillName)
                                 GlassCard(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -570,16 +602,27 @@ fun HomeScreen(nav: NavHostController) {
 
         item { Spacer(Modifier.height(8.dp)) }
     }
-}
 
-private fun humanizeSkillId(value: String): String =
-    value.replace("_", " ")
-        .replace("-", " ")
-        .split(" ")
-        .filter { it.isNotBlank() }
-        .joinToString(" ") { token ->
-            token.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
-        }
+    if (logoutConfirmationOpen) {
+        AlertDialog(
+            onDismissRequest = { logoutConfirmationOpen = false },
+            title = { Text("Log out of LYO?") },
+            text = { Text("You'll need to sign in again to see your saved courses and learning progress.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    logoutConfirmationOpen = false
+                    accountScope.launch {
+                        Session.logout()
+                        nav.navigate(Routes.LOGIN) { popUpTo(0) }
+                    }
+                }) { Text("Log out") }
+            },
+            dismissButton = {
+                TextButton(onClick = { logoutConfirmationOpen = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
 
 @Composable
 private fun StatCard(

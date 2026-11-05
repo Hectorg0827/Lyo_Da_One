@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
@@ -140,6 +141,9 @@ fun ClassroomScreen(
         modifier = Modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing)
+            // Keep the learner's answer field and submit controls above the
+            // software keyboard on edge-to-edge Android 15+ devices.
+            .imePadding()
             .background(Background),
     ) {
         // Background tap-catcher, drawn BEHIND everything below — Compose's

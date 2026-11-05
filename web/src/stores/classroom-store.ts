@@ -402,7 +402,7 @@ function stopStallWatch() {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
-const CLASSROOM_VOICE_NOTICE = 'Teacher audio is temporarily unavailable. Captions will continue; tap the voice icon to retry.';
+const CLASSROOM_VOICE_NOTICE = 'Teacher audio is temporarily unavailable. Captions will continue, and LYO will retry voice automatically.';
 const CLASSROOM_RECONNECT_NOTICE = 'Connection interrupted. Reconnecting to your lesson — your answers are saved.';
 const CLASSROOM_RESTORING_NOTICE = 'Connected. Restoring your lesson where you left off…';
 
@@ -577,9 +577,11 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         if (!response) throw new Error('Teacher audio segment unavailable');
         await playSpeechResponse(response, {
           signal: controller.signal,
-          // Speech may stall behind a cold model or an unavailable CPU. The
-          // reading board must keep moving while the voice reconnects.
-          startupTimeoutMs: 7000,
+          // A cold CPU voice worker can take longer than seven seconds to
+          // produce its first playable frame. Killing its request before that
+          // frame also prevents the finished recording from warming the cache.
+          // The board remains visible and the waiting UI can show a nudge.
+          startupTimeoutMs: 15000,
           onStarted: () => {
             emitSegment(segment, index);
             if (!controller.signal.aborted && generation === speechGeneration) {
@@ -598,6 +600,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       }
     }).catch(async (error: { playbackStarted?: boolean }) => {
       if (controller.signal.aborted || generation !== speechGeneration) return;
+      // One slow or unsupported audio response must not permanently mute the
+      // class. The next spoken line retries the same natural teacher voice.
+      // A short cooldown avoids hammering a single cold CPU on every caption.
+      serverVoiceUnavailableUntil = Math.max(serverVoiceUnavailableUntil, Date.now() + 15_000);
       if (error.playbackStarted || voiceStarted) {
         // Do not replay already-heard words through a second, robotic voice.
         set((state) => ({ notice: state.notice ?? CLASSROOM_VOICE_NOTICE }));
@@ -624,7 +630,6 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       } catch {
         if (controller.signal.aborted || generation !== speechGeneration) return;
         set((state) => ({
-          voiceOn: false,
           notice: state.notice ?? CLASSROOM_VOICE_NOTICE,
         }));
         emitLineEnd('unavailable');

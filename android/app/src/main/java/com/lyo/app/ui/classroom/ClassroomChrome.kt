@@ -10,6 +10,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -471,32 +472,54 @@ fun BottomActionDock(
                 Text("$continueLabel →")
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onHint, modifier = Modifier.heightIn(min = 48.dp)) { Text("Help") }
-            OutlinedButton(onClick = onTooEasy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Challenge") }
-            if (handRaised) {
+        if (handRaised) {
+            // Question entry is its own row. Previously Help + Challenge +
+            // text field + two icons competed for one 320dp-wide line,
+            // leaving the input and send control underneath the screen edge.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 androidx.compose.material3.OutlinedTextField(
                     value = question,
                     onValueChange = { question = it },
                     placeholder = { Text("Ask the teacher…", color = TextSecondary) },
+                    singleLine = false,
+                    maxLines = 3,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = { startDictation() }) {
-                    Icon(
-                        Icons.Filled.Mic,
-                        contentDescription = "Speak your question",
-                        tint = ClassroomTokens.AccentPurple,
-                    )
+                    Icon(Icons.Filled.Mic, contentDescription = "Speak your question", tint = ClassroomTokens.AccentPurple)
                 }
-                IconButton(onClick = {
-                    onAskQuestion(question)
-                    question = ""
-                    handRaised = false
-                }) {
+                IconButton(
+                    onClick = {
+                        if (question.isNotBlank()) {
+                            onAskQuestion(question.trim())
+                            question = ""
+                            handRaised = false
+                        }
+                    },
+                    enabled = question.isNotBlank(),
+                ) {
                     Icon(Icons.Filled.Send, contentDescription = "Send", tint = ClassroomTokens.AccentPurple)
                 }
-            } else {
-                OutlinedButton(onClick = { handRaised = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedButton(onClick = onHint, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Help") }
+                OutlinedButton(onClick = { handRaised = false }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Close") }
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedButton(onClick = onHint, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Help") }
+                OutlinedButton(onClick = onTooEasy, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Challenge") }
+                OutlinedButton(onClick = { handRaised = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
                     Text("Raise hand", color = LyoGold)
                 }
             }

@@ -133,6 +133,14 @@ export function splitSpeechForStreaming(text, firstChars = 40, laterChars = 65) 
 /** Board content remains visible while speech explains it; no fake reading wait. */
 export function boardTransitionDelay() { return 0; }
 
+/** MediaSource can reject play() when its first appended MP3 fragment has not
+ * yet supplied a decodable frame. More stream bytes can resolve that specific
+ * transient condition; autoplay denials and other errors cannot.
+ */
+export function retryPlaybackAfterMoreAudio(error) {
+  return error?.name === 'NotSupportedError';
+}
+
 /** Play MP3 bytes as they arrive where MediaSource supports them.
  * Other browsers retain the shared voice via one buffered download.
  * Cancellation owns the fetch as well as the player; a late response cannot speak.
@@ -206,7 +214,31 @@ export async function playSpeechResponse(responsePromise, {
     ensureActive();
     const buffer = media.addSourceBuffer(mime);
     reader = response.body.getReader();
-    let playbackRequested = false;
+    let playbackAttemptPending = false;
+    let appendedChunks = 0;
+    let streamComplete = false;
+    let terminalPlaybackRetries = 0;
+    const requestPlayback = () => {
+      if (started || disposed || signal.aborted || playbackAttemptPending) return;
+      playbackAttemptPending = true;
+      // Do not await play(): a browser can keep that promise pending while it
+      // buffers, and the reader must keep feeding decoder frames meanwhile.
+      Promise.resolve().then(() => audio.play()).then(() => {
+        playbackAttemptPending = false;
+      }).catch((error) => {
+        playbackAttemptPending = false;
+        if (retryPlaybackAfterMoreAudio(error)) {
+          if (!streamComplete) return;
+          // Once at EOF is enough to distinguish an incomplete first MP3
+          // fragment from a genuinely unplayable audio stream.
+          if (terminalPlaybackRetries++ < 1) {
+            queueMicrotask(requestPlayback);
+            return;
+          }
+        }
+        fail(error);
+      });
+    };
     while (true) {
       const { done, value } = await reader.read();
       ensureActive();
@@ -214,15 +246,15 @@ export async function playSpeechResponse(responsePromise, {
       const appended = waitFor(buffer, 'updateend');
       buffer.appendBuffer(value);
       await appended;
-      if (!playbackRequested) {
-        playbackRequested = true;
-        // Playback starts before EOF. Do not await play(), which may itself
-        // need more frames: keep feeding the decoder while it buffers.
-        void audio.play().catch(fail);
-      }
+      appendedChunks += 1;
+      requestPlayback();
     }
-    if (!playbackRequested) throw new Error('Empty teacher audio');
+    streamComplete = true;
+    if (!appendedChunks) throw new Error('Empty teacher audio');
     if (media.readyState === 'open') media.endOfStream();
+    // Some decoders only recognize a short MP3 after the final frame lands.
+    // If the first fragment was rejected, give the now-complete stream a turn.
+    if (!started && !playbackAttemptPending) requestPlayback();
   };
   // A completed download is not a completed utterance. Only ended advances.
   void pump().catch(fail);

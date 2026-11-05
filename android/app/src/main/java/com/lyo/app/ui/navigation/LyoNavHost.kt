@@ -8,8 +8,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -18,6 +19,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -135,8 +137,8 @@ object Routes {
 private data class BottomItem(val route: String, val label: String, val icon: ImageVector)
 
 /**
- * Mirrors the iOS product hierarchy: Focus, Discover, Create, Community, Profile.
- * Chat remains a contextual destination opened from Create and other learning surfaces.
+ * Android's five primary destinations match the approved web/mobile hierarchy:
+ * Focus, Discover, Lyo, Community, +. Account/Profile lives in Focus's menu.
  *
  * "Discover" is the clip reel. The two were one surface under two names: this
  * bar said Clips and opened [ClipsScreen], while "discover" opened an unrelated
@@ -145,13 +147,20 @@ private data class BottomItem(val route: String, val label: String, val icon: Im
  * browser moved to [Routes.PLACES] and the "clips" route still reaches the reel
  * so existing deep links keep working.
  */
-private val bottomItems = listOf(
-    BottomItem(Routes.HOME, "Focus", Icons.Filled.Home),
-    BottomItem(Routes.DISCOVER, "Discover", Icons.Filled.PlayCircle),
-    BottomItem(Routes.CREATE, "Create", Icons.Filled.Add),
-    BottomItem(Routes.COMMUNITY, "Community", Icons.Filled.People),
-    BottomItem(Routes.PROFILE, "Profile", Icons.Filled.Person),
+internal val primaryTabRoutes = listOf(
+    Routes.HOME, Routes.DISCOVER, Routes.CHAT, Routes.COMMUNITY, Routes.CREATE,
 )
+
+private val bottomItems = primaryTabRoutes.map { route ->
+    when (route) {
+        Routes.HOME -> BottomItem(route, "Focus", Icons.Filled.Home)
+        Routes.DISCOVER -> BottomItem(route, "Discover", Icons.Filled.PlayCircle)
+        Routes.CHAT -> BottomItem(route, "Lyo", Icons.Filled.SmartToy)
+        Routes.COMMUNITY -> BottomItem(route, "Community", Icons.Filled.People)
+        Routes.CREATE -> BottomItem(route, "Create", Icons.Filled.Add)
+        else -> error("Unknown primary tab: $route")
+    }
+}
 
 @Composable
 fun LyoApp() {
@@ -194,9 +203,20 @@ private fun LyoNavHost() {
     }
 
     val showBottomBar = currentRoute in bottomItems.map { it.route }
+    // The native classroom owns its own safe-drawing/IME insets. Applying
+    // Scaffold's system-bar padding a second time otherwise shifts its board
+    // and bottom actions on edge-to-edge devices.
+    val classroomRoutes = setOf(
+        Routes.CLASSROOM, Routes.PREP_CLASSROOM, Routes.REVIEW_CLASSROOM,
+    )
 
     Scaffold(
         containerColor = Background,
+        contentWindowInsets = if (currentRoute in classroomRoutes) {
+            WindowInsets(0, 0, 0, 0)
+        } else {
+            ScaffoldDefaults.contentWindowInsets
+        },
         bottomBar = {
             if (showBottomBar) {
                 NavigationBar(containerColor = Surface) {
@@ -213,7 +233,9 @@ private fun LyoNavHost() {
                                 }
                             },
                             icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
+                            // The fifth destination is the standalone +
+                            // affordance, not a second + text label.
+                            label = if (item.route == Routes.CREATE) null else ({ Text(item.label) }),
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = LyoPurple,
                                 selectedTextColor = LyoPurple,
