@@ -8,6 +8,7 @@ import * as contract from './classroom-contract.mjs';
 import { canResumeClassroom } from './classroom-contract.mjs';
 import * as learner from './learner-model.mjs';
 import * as visuals from './teaching-activity.mjs';
+import * as inferredFractions from './infer-explicit-fraction-visual.mjs';
 import * as boardPresentation from './board-presentation.mjs';
 import * as commonsImage from './commons-image.mjs';
 import * as classroomCast from './classroom-cast.mjs';
@@ -35,6 +36,7 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     zustand: { create }, '@/lib/classroom-audio.mjs': audio,
     '@/lib/classroom-contract.mjs': contract, '@/lib/learner-model.mjs': learner,
     '@/lib/teaching-activity.mjs': visuals, '@/lib/board-presentation.mjs': boardPresentation, '@/lib/classroom-sounds': { playSound() {} },
+    '@/lib/infer-explicit-fraction-visual.mjs': inferredFractions,
     '@/lib/stack': { updateCourseProgress: async () => {} },
     // The Commons lookup the board shares with Chat. The real module, not a
     // stub: no test drives a board image, so it is never called, and a stub
@@ -149,6 +151,39 @@ test('new speech preserves the current board until replacement board content arr
   store.getState().skipTurn();
   assert.equal(taught(store).length, 1);
   assert.equal(taught(store)[0].text, 'Next example');
+  store.getState().disconnect();
+});
+
+test('explicit narrated fraction model draws a real five-part visual and yields to authored visual', () => {
+  const { store, sockets } = classroom();
+  const socket = sockets[0];
+  socket.receive(component('TeacherMessage', {
+    component_id: 'fraction-narration',
+    text: 'Look at the rectangle divided into five equal parts, with three shaded parts.',
+  }));
+  const fallback = taught(store).filter(el => el.kind === 'teaching_visual');
+  assert.equal(fallback.length, 1);
+  assert.equal(fallback[0].visual.kind, 'fraction_bar');
+  assert.equal(fallback[0].visual.parts, 5);
+  assert.equal(fallback[0].visual.value, 3);
+
+  socket.receive(component('LessonBlock', {
+    component_id: 'real-visual', block_type: 'teaching_visual',
+    block: { kind: 'fraction_bar', title: 'Authoritative model', caption: 'Two of four', description: 'Four equal parts', parts: 4, value: 2, whole: 1, unit: 'whole' },
+  }));
+  const visualsAfter = taught(store).filter(el => el.kind === 'teaching_visual');
+  assert.equal(visualsAfter.length, 1);
+  assert.equal(visualsAfter[0].id, 'real-visual');
+  assert.equal(visualsAfter[0].visual.parts, 4);
+  store.getState().disconnect();
+});
+
+test('ambiguous narration never fabricates a classroom diagram', () => {
+  const { store, sockets } = classroom();
+  sockets[0].receive(component('TeacherMessage', {
+    text: 'Look at the bar model and decide which option is correct.',
+  }));
+  assert.equal(taught(store).filter(el => el.kind === 'teaching_visual').length, 0);
   store.getState().disconnect();
 });
 

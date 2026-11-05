@@ -17,6 +17,7 @@ import {
 import { updateCourseProgress } from '@/lib/stack';
 import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.mjs';
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
+import { inferExplicitFractionVisual } from '@/lib/infer-explicit-fraction-visual.mjs';
 import { parseBoardDocument, presentationRoleFor, type BoardDocument, type PresentationRole } from '@/lib/board-presentation.mjs';
 import { resolveCommonsImage } from '@/lib/commons-image.mjs';
 import { classroomSpeaker } from '@/lib/classroom-cast.mjs';
@@ -911,6 +912,17 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   // ── incoming protocol ──
 
   function handleComponent(comp: ClassroomComponent) {
+    // Some older classroom turns narrate an exact model but omit the
+    // structured LessonBlock. Draw only facts the teacher explicitly stated;
+    // a vague "look at the model" must never become a made-up diagram.
+    function showNarratedFraction(text: string) {
+      const visual = inferExplicitFractionVisual(text);
+      if (!visual || get().board.some((element) => element.kind === 'teaching_visual')) return;
+      addBoardElement({
+        id: `inferred-fraction:${comp.component_id || nextId()}`,
+        kind: 'teaching_visual', visual, presentationRole: 'reference',
+      });
+    }
     switch (comp.type) {
       case 'TeacherMessage': {
         const text = (comp.text ?? '').trim();
@@ -926,6 +938,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
             }
           } catch { /* plain text below */ }
         }
+        showNarratedFraction(text);
         enqueueTurns([{ type: 'speech', speaker: 'Teacher', text }]);
         addSources(comp.source_attributions);
         break;
@@ -973,6 +986,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           content: comp.content,
           items: [],
         });
+        showNarratedFraction(comp.content || '');
         if (comp.component_id === 'classroom-recovery/notice') {
           // A provider-capacity failure is a concrete, recoverable state,
           // not an endlessly pending new scene. The recovery card remains
@@ -995,7 +1009,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'LessonBlock':
         if (comp.block_type === 'teaching_visual') {
           const visual = parseTeachingVisual(comp.block);
-          if (visual) addBoardElement({ id: comp.component_id, kind: 'teaching_visual', visual, presentationRole: presentationRoleFor(comp) });
+          if (visual) {
+            // A server-authored visual takes precedence over a conservative
+            // narration fallback if both arrive during the same scene.
+            set((s) => ({ board: s.board.filter((el) => !el.id.startsWith('inferred-fraction:')) }));
+            addBoardElement({ id: comp.component_id, kind: 'teaching_visual', visual, presentationRole: presentationRoleFor(comp) });
+          }
         } else if (comp.block_type === 'summary' && comp.block) {
           addBoardElement({
             id: comp.component_id || nextId(),
