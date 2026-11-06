@@ -16,3 +16,22 @@ export function classroomNextAction({
   if (waiting) return { type: 'waiting', label: live ? 'Preparing next step…' : 'Restoring lesson…', disabled: true };
   return { type: 'waiting', label: live ? 'Preparing next step…' : 'Connecting…', disabled: true };
 }
+
+/**
+ * Progress is server-authored. A learner can return to their courses once
+ * every tracked skill is completed and a recap has appeared, but never while
+ * answering a checkpoint or while the next scene is still being generated.
+ * This is navigation only: it does not increment progress or end a session.
+ * @param {{progressCurrent?: number, progressTotal?: number,
+ *   board?: readonly {kind?: string}[], viewingHistory?: boolean,
+ *   waiting?: boolean, hasCheckpoint?: boolean, hasPrompt?: boolean}} options
+ */
+export function classroomCompletionExitReady({
+  progressCurrent = 0, progressTotal = 0, board = [], viewingHistory = false,
+  waiting = false, hasCheckpoint = false, hasPrompt = false,
+} = {}) {
+  return !viewingHistory && !waiting && !hasCheckpoint && !hasPrompt
+    && Number.isFinite(progressCurrent) && Number.isFinite(progressTotal)
+    && progressTotal > 0 && progressCurrent >= progressTotal
+    && Array.isArray(board) && board.some((element) => element?.kind === 'summary');
+}

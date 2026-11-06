@@ -36,7 +36,7 @@ import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 import SurfaceLoading from '@/components/ui/SurfaceLoading';
 import { classroomSpeaker, teacherForTopic } from '@/lib/classroom-cast.mjs';
-import { classroomNextAction } from '@/lib/classroom-navigation.mjs';
+import { classroomCompletionExitReady, classroomNextAction } from '@/lib/classroom-navigation.mjs';
 import { WAITING_COMPANION_BEATS, teacherPresenceMs } from '@/lib/classroom-presence.mjs';
 
 const LYO_STATE_IMG: Record<string, string> = {
@@ -388,6 +388,13 @@ function ClassroomStage() {
     narrating: isNarrating,
     stalled: stallPhase === 'stalled',
     live,
+    waiting: waitingForScene,
+    hasCheckpoint: pendingCheckpoint,
+    hasPrompt: Boolean(prompt),
+  });
+  const canFinishLesson = classroomCompletionExitReady({
+    progressCurrent, progressTotal, board: shownBoard,
+    viewingHistory: viewingBoard !== -1,
     waiting: waitingForScene,
     hasCheckpoint: pendingCheckpoint,
     hasPrompt: Boolean(prompt),
@@ -1036,6 +1043,15 @@ function ClassroomStage() {
           <p className="text-[11px] text-white/45 text-center">
             {deskDisabledReason}
           </p>
+        )}
+        {canFinishLesson && (
+          <button
+            type="button"
+            onClick={() => router.push(classroomExitHref(courseId))}
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/45 bg-emerald-500/15 px-3 py-2 text-sm font-bold text-emerald-100 transition-colors hover:bg-emerald-500/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300"
+          >
+            <BookOpenCheck className="h-4 w-4" /> Finish &amp; return to courses
+          </button>
         )}
         {/* Permanent, thumb-reachable transport. A learner can always see
             where the lesson stands; waiting never looks like a dead end. */}
