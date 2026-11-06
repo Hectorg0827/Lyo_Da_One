@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ChevronDown, ChevronUp, Clock, Play, RotateCcw, Check, Layers } from 'lucide-react';
 import type { StackItem } from '@/lib/stack';
+import { stackCourseHref } from '@/lib/course-destination.mjs';
 import CourseArtwork from '@/components/home/CourseArtwork';
 import {
   ACTION_REVIEW,
@@ -245,7 +246,7 @@ function CourseCard({
   const [flipped, setFlipped] = useState(false);
   const openBack = onBodyClick ?? (() => setFlipped(true));
 
-  const href = `/courses/${item.content_id || item.id}`;
+  const href = stackCourseHref(item);
   const action = actionFor(item);
   const finished = isFinished(item);
   const blurb = blurbFor(item);

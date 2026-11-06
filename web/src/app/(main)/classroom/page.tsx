@@ -27,6 +27,7 @@ import {
 import { ClassroomWorkspace } from '@/components/classroom/ClassroomWorkspace';
 import { classroomIsPaused, workspaceScrollAnchor } from '@/lib/board-presentation.mjs';
 import { upsertCourseOnStart } from '@/lib/stack';
+import { classroomExitHref } from '@/lib/course-destination.mjs';
 import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
 import {
   CLASSROOM_STALL_RECOVERY,
@@ -261,9 +262,12 @@ function ClassroomStage() {
   // mirroring Android's LyoNavHost Routes.CLASSROOM wiring. No-ops silently
   // if the visitor isn't signed in or the sync fails — never blocks class.
   useEffect(() => {
-    void upsertCourseOnStart(courseId, topic);
+    void upsertCourseOnStart(courseId, topic, {
+      objective, recordScope, difficulty, durationMinutes: initialDuration, language,
+      mode: initialMode,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId, topic]);
+  }, [courseId, topic, objective, recordScope, difficulty, initialDuration, language, initialMode]);
 
   // Nothing has been taught yet: the board still holds only the cover page.
   // The offer of an unfinished class belongs to that moment alone — taking it
@@ -513,7 +517,7 @@ function ClassroomStage() {
       {/* ── Top bar ── */}
       <div className="flex items-start gap-3 border-b border-lyo-400/10 bg-gradient-to-r from-lyo-500/10 via-transparent to-accent-purple/5 px-3 py-2.5 sm:px-4">
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push(classroomExitHref(courseId))}
           aria-label="Leave classroom"
           className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10 hover:text-white"
           title="Leave classroom"

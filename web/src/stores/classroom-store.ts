@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { SpeechPreparationCache, SpeechLookaheadQueue, playSpeechResponse, speakBrowserFallback, boardTransitionDelay, splitSpeechForStreaming, firstAudibleTurn, silentCaptionDelay } from '@/lib/classroom-audio.mjs';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
+import { getAccessToken, tryRefreshToken } from '@/lib/api';
 import {
   CLASSROOM_STALL_NOTICE_MS,
   CLASSROOM_STALL_RECOVERY_MS,
@@ -470,23 +471,37 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
     if (API_KEY) headers['X-API-Key'] = API_KEY;
     const character = classroomSpeaker(speaker, get().topic);
-    const response = await fetch(
+    const body = JSON.stringify({
+      text,
+      voice: character?.voice ?? 'nova',
+      speaker_id: character?.id,
+      format: 'mp3',
+      speed: rate,
+      content_type: 'explanation',
+      language,
+    });
+    let response = await fetch(
       `${API_URL.replace(/\/$/, '')}/api/v1/tts/synthesize/stream`,
       {
         method: 'POST',
         headers,
         signal,
-        body: JSON.stringify({
-          text,
-          voice: character?.voice ?? 'nova',
-          speaker_id: character?.id,
-          format: 'mp3',
-          speed: rate,
-          content_type: 'explanation',
-          language,
-        }),
+        body,
       },
     );
+    // A long classroom can outlive the short-lived access token. Retry the
+    // natural teacher voice once with a refreshed token instead of silencing
+    // the rest of a healthy 30-minute lesson after its first 401.
+    if (response.status === 401 && !signal?.aborted && await tryRefreshToken()) {
+      const renewed = getAccessToken();
+      if (renewed) {
+        authToken = renewed;
+        headers.Authorization = `Bearer ${renewed}`;
+        response = await fetch(`${API_URL.replace(/\/$/, '')}/api/v1/tts/synthesize/stream`, {
+          method: 'POST', headers, signal, body,
+        });
+      }
+    }
     if (!response.ok) {
       serverVoiceUnavailableUntil = Date.now() + 60_000;
       return null;
@@ -578,11 +593,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         if (!response) throw new Error('Teacher audio segment unavailable');
         await playSpeechResponse(response, {
           signal: controller.signal,
-          // A cold CPU voice worker can take longer than seven seconds to
-          // produce its first playable frame. Killing its request before that
-          // frame also prevents the finished recording from warming the cache.
-          // The board remains visible and the waiting UI can show a nudge.
-          startupTimeoutMs: 15000,
+          // Live staging shows the CPU Kokoro worker often needs 23–26 seconds
+          // before its first bytes. Aborting at 15 seconds made natural speech
+          // fail on virtually every turn and prevented full audio cache writes.
+          // This is a reliability ceiling, not an acceptable latency target:
+          // captions and the waiting nudge remain available during synthesis.
+          startupTimeoutMs: 35000,
           onStarted: () => {
             emitSegment(segment, index);
             if (!controller.signal.aborted && generation === speechGeneration) {

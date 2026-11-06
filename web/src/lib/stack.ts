@@ -1,6 +1,4 @@
-import { ApiError, api, clearTokens, getAccessToken } from '@/lib/api';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
+import { ApiError, api, getAccessToken, request } from '@/lib/api';
 
 // Web's own production origin — the domain a stack item's share link
 // points to. Not recorded anywhere in either repo (no NEXT_PUBLIC_SITE_URL,
@@ -60,27 +58,10 @@ async function stackRequest<T>(endpoint: string, init?: RequestInit): Promise<T>
     throw new ApiError('Sign in to save this to your Stacks.', 401);
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  if (response.status === 401) {
-    clearTokens();
-    throw new ApiError('Your session expired. Sign in again to sync your Stacks.', 401);
-  }
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: 'Unable to reach your Stacks.' }));
-    throw new ApiError(body.detail || body.message || 'Unable to reach your Stacks.', response.status);
-  }
-
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  // Stack sync is supplementary to the classroom. Use the shared one-time
+  // token refresh; an expired access token must not clear an otherwise valid
+  // session or evict the learner from their saved course cards.
+  return request<T>(endpoint, { ...init, optionalAuth: true });
 }
 
 /** The backend has no upsert-by-course semantics (`POST /items` always
@@ -100,7 +81,18 @@ async function findCourseStackItem(courseId: string): Promise<StackItem | null> 
  *  first visit; returns the existing one unchanged on a repeat visit — a
  *  resumed course must not spawn a duplicate stack card. Never throws —
  *  a failed sync must not block learning. */
-export async function upsertCourseOnStart(courseId: string, title: string): Promise<StackItem | null> {
+export async function upsertCourseOnStart(
+  courseId: string,
+  title: string,
+  classroom?: {
+    objective?: string;
+    recordScope?: string;
+    difficulty?: string;
+    durationMinutes?: number;
+    language?: string;
+    mode?: string;
+  },
+): Promise<StackItem | null> {
   if (!courseId.trim()) return null;
   try {
     const existing = await findCourseStackItem(courseId);
@@ -112,6 +104,7 @@ export async function upsertCourseOnStart(courseId: string, title: string): Prom
         item_type: ITEM_TYPE_COURSE,
         content_id: courseId,
         content_type: ITEM_TYPE_COURSE,
+        ...(classroom ? { extra_data: { classroom: { topic: title, ...classroom } } } : {}),
       }),
     });
   } catch {

@@ -36,6 +36,7 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     zustand: { create }, '@/lib/classroom-audio.mjs': audio,
     '@/lib/classroom-contract.mjs': contract, '@/lib/learner-model.mjs': learner,
     '@/lib/teaching-activity.mjs': visuals, '@/lib/board-presentation.mjs': boardPresentation, '@/lib/classroom-sounds': { playSound() {} },
+    '@/lib/api': { getAccessToken: () => localStorage.getItem('lyo_token'), tryRefreshToken: async () => false },
     '@/lib/infer-explicit-fraction-visual.mjs': inferredFractions,
     '@/lib/stack': { updateCourseProgress: async () => {} },
     // The Commons lookup the board shares with Chat. The real module, not a
