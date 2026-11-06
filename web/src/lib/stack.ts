@@ -112,10 +112,34 @@ export async function upsertCourseOnStart(
   }
 }
 
-/** `progress` is a 0.0–1.0 fraction. `status` is auto-derived server-side
- *  from `progress` (see the backend's PUT /items/{id} handler) — this
- *  never needs to send status itself. No-ops if the course has no stack
- *  entry yet rather than creating one, matching Android's behavior. */
+/** A submitted classroom checkpoint is real participation, even when the
+ *  course's skill-completion progress is still 0%. The backend only derives
+ *  `in_progress` automatically when progress > 0, so update its independent
+ *  status field after a successful submission. Merely saving/opening a course
+ *  must not call this: it has not established any participation yet.
+ *
+ *  This never creates a missing card and never regresses paused/completed
+ *  work. The classroom uses it on a best-effort basis, so a Stacks outage
+ *  cannot block answering a question. */
+export async function markCourseInProgress(courseId: string): Promise<StackItem | null> {
+  if (!courseId.trim()) return null;
+  try {
+    const existing = await findCourseStackItem(courseId);
+    if (!existing) return null;
+    if (existing.status !== 'not_started' || existing.progress >= 1) return existing;
+    return await stackRequest<StackItem>(`/api/v1/stack/items/${existing.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: 'in_progress' }),
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** `progress` is a 0.0–1.0 fraction. Nonzero progress automatically derives
+ *  the status server-side, but a zero-progress course can independently be
+ *  `in_progress` when the learner has submitted a checkpoint (see above).
+ *  No-ops if the course has no stack entry yet. */
 export async function updateCourseProgress(courseId: string, progress: number): Promise<StackItem | null> {
   if (!courseId.trim()) return null;
   try {

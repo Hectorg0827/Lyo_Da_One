@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { SpeechPreparationCache, SpeechLookaheadQueue, playSpeechResponse, speakBrowserFallback, boardTransitionDelay, splitSpeechForStreaming, firstAudibleTurn, silentCaptionDelay } from '@/lib/classroom-audio.mjs';
+import { SpeechPreparationCache, SessionSpeechReplayCache, SpeechLookaheadQueue, playSpeechResponse, speakBrowserFallback, boardTransitionDelay, groupSpeechForProvider, firstAudibleTurn, silentCaptionDelay } from '@/lib/classroom-audio.mjs';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import { getAccessToken, tryRefreshToken } from '@/lib/api';
 import {
@@ -15,7 +15,7 @@ import {
   classroomSessionStart,
   classroomSessionStorageKey,
 } from '@/lib/classroom-contract.mjs';
-import { updateCourseProgress } from '@/lib/stack';
+import { markCourseInProgress, updateCourseProgress } from '@/lib/stack';
 import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.mjs';
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
 import { inferExplicitFractionVisual } from '@/lib/infer-explicit-fraction-visual.mjs';
@@ -308,6 +308,9 @@ let authToken: string | null = null;
 // it exists only to overlap network/TTS latency with time the learner is
 // already listening to the current turn.
 const prefetchedSpeech = new SpeechPreparationCache(1);
+// A session-scoped, bounded audio replay cache prevents another expensive CPU
+// render when the teacher repeats a short prompt or encouragement.
+const replayedSpeech = new SessionSpeechReplayCache();
 let learnerActionStarted: number | null = null;
 let contentLatencyRecorded = false;
 let idCounter = 0;
@@ -466,6 +469,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     signal?: AbortSignal,
     speaker = 'Teacher',
   ): Promise<Response | null> {
+    const key = speechCacheKey(speaker, text, language, rate);
+    const cached = replayedSpeech.get(key);
+    if (cached) return cached;
     if (Date.now() < serverVoiceUnavailableUntil) return null;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
@@ -507,19 +513,24 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       return null;
     }
     serverVoiceUnavailableUntil = 0;
+    // Do not block first playback for caching: clone the arriving MP3 stream,
+    // retain only a complete small clip, and drop it on interruption/leave.
+    if (text.length <= 300 && !signal?.aborted) {
+      void replayedSpeech.remember(key, response, signal);
+    }
     return response;
   }
 
   function prefetchSpeechLine(speaker: string, text: string) {
     if (!get().voiceOn || typeof window === 'undefined' || !text.trim()) return;
-    // Kokoro on a single CPU cannot synthesize multiple speculative lines at
-    // once. Keep the earliest line, even when another scene streams in.
-    if (prefetchedSpeech.hasPending()) return;
+    // Do not warm a second line while another Kokoro request is still active;
+    // speculative overlap caused severe single-CPU synthesis contention.
+    if (prefetchedSpeech.hasPending() || (speechAbort && !speechAbort.signal.aborted)) return;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
-    // Prefetch only the fast opening segment. A full-length competing request
-    // would monopolize the single-CPU teacher voice service before speech starts.
-    const first = splitSpeechForStreaming(text)[0];
+    // The provider streams audio natively by sentence, so a short complete
+    // line is one CPU render rather than many serial clause-sized renders.
+    const first = groupSpeechForProvider(text)[0];
     if (!first) return;
     const key = speechCacheKey(speaker, first, language, rate);
     prefetchedSpeech.prepare(key, (signal) => requestSpeechResponse(first, language, rate, signal, speaker));
@@ -550,7 +561,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     const generation = ++speechGeneration;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
-    const segments = splitSpeechForStreaming(text);
+    const segments = groupSpeechForProvider(text);
     if (!segments.length) { onDone(); return; }
     const prepared = prefetchedSpeech.take(speechCacheKey(speaker, segments[0], language, rate));
     const controller = prepared?.controller || new AbortController();
@@ -581,10 +592,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       prepared?.response,
     );
 
-    // Warm only the NEXT complete phrase once the current audio is actually
-    // playing. The shared CPU can then synthesize it during playback, avoiding
-    // an extra network + TTS wait at each natural sentence boundary. Do not
-    // compete with synthesis of the first audible words.
+    // The provider streams each natural sentence within a single request.
+    // Do not launch a competing Kokoro CPU render while the current one is
+    // still producing its remaining audio: congestion added 20–60s gaps.
     const playSegments = async () => {
       for (let index = 0; index < segments.length; index++) {
         if (controller.signal.aborted || generation !== speechGeneration) return;
@@ -593,17 +603,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         if (!response) throw new Error('Teacher audio segment unavailable');
         await playSpeechResponse(response, {
           signal: controller.signal,
-          // Live staging shows the CPU Kokoro worker often needs 23–26 seconds
-          // before its first bytes. Aborting at 15 seconds made natural speech
-          // fail on virtually every turn and prevented full audio cache writes.
-          // This is a reliability ceiling, not an acceptable latency target:
-          // captions and the waiting nudge remain available during synthesis.
-          startupTimeoutMs: 35000,
+          // Measured Kokoro first bytes in staging took 25–58s under load.
+          // Let a still-working CPU stream finish; the visible dialogue and
+          // waiting state remain available while it synthesizes.
+          startupTimeoutMs: 75000,
           onStarted: () => {
             emitSegment(segment, index);
-            if (!controller.signal.aborted && generation === speechGeneration) {
-              void lookahead.warmNext(index);
-            }
           },
         });
         completedSegments += 1;
@@ -1453,6 +1458,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       submittedQuizzes.clear();
       submittedTransfers.clear();
       prefetchedSpeech.clear();
+      replayedSpeech.clear();
       learnerActionStarted = null;
       if (ws) { try { ws.close(); } catch { /* noop */ } ws = null; }
       set({ status: 'idle' });
@@ -1467,6 +1473,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         reportOffline();
         return false;
       }
+      void markCourseInProgress(get().courseId || get().sessionId);
       learnerTakesFloor();
       pushTranscript('You', option);
       set({ prompt: null, lyoState: 'listening', waitingForScene: true });
@@ -1485,6 +1492,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         reportOffline();
         return;
       }
+      void markCourseInProgress(get().courseId || get().sessionId);
       submittedQuizzes.set(el.quiz.component_id, { question: el.quiz.question || '', answered: option.label });
       set((state) => ({
         board: state.board.map((item) =>
@@ -1510,6 +1518,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         reportOffline();
         return;
       }
+      void markCourseInProgress(get().courseId || get().sessionId);
       submittedTransfers.set(el.input.component_id, { question: el.input.question || '', response: trimmed });
       set((state) => ({
         board: state.board.map((item) =>

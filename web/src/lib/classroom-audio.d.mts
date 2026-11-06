@@ -5,6 +5,12 @@ export class SpeechPreparationCache {
   take(key: string): { controller: AbortController; response: Promise<Response | null> } | undefined;
   clear(): void;
 }
+export class SessionSpeechReplayCache {
+  constructor(limit?: number, maxBytes?: number, maxClipBytes?: number);
+  get(key: string): Response | null;
+  remember(key: string, response: Response, signal?: AbortSignal): Promise<boolean>;
+  clear(): void;
+}
 export function firstAudibleTurn(turns: Array<{ type: string; text?: string; speaker?: string }>): { type: string; text?: string; speaker?: string } | undefined;
 export function silentCaptionDelay(text: string): number;
 export class SpeechLookaheadQueue {
@@ -15,6 +21,7 @@ export class SpeechLookaheadQueue {
   clear(): void;
 }
 export function splitSpeechForStreaming(text: string, firstChars?: number, laterChars?: number): string[];
+export function groupSpeechForProvider(text: string, maxChars?: number): string[];
 export function boardTransitionDelay(): number;
 export function retryPlaybackAfterMoreAudio(error: { name?: string } | null | undefined): boolean;
 export function playSpeechResponse(response: Promise<Response | null>, options: {

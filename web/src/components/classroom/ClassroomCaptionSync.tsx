@@ -41,6 +41,8 @@ type LineEndDetail = {
  * mapped to the words in the *entire* line. The store dispatches an event when
  * each phrase begins playing; we reveal that phrase at its real start instead
  * of pretending to have word timestamps that the audio provider never sent.
+ * While the voice is still rendering, show the full dialogue immediately so
+ * a slow TTS provider never hides the teacher's actual instruction.
  *
  * The full, searchable lesson transcript remains in the Classroom notebook.
  * The page separately exposes the complete line to assistive technologies.
@@ -140,32 +142,36 @@ export default function ClassroomCaptionSync() {
 
   const spokenCaption = spoken && spoken.speaker === caption?.speaker && spoken.lineText === caption?.text
     ? spoken : null;
+  const preparingVoice = Boolean(voiceOn && caption?.speaker !== 'You'
+    && !spokenCaption?.phrases.length && !spokenCaption?.outcome);
   const visualText = !voiceOn || caption?.speaker === 'You' || spokenCaption?.outcome === 'unavailable'
     ? (caption?.text ?? '')
     : spokenCaption?.outcome === 'cancelled'
       ? ''
-      : (spokenCaption?.phrases.join(' ') ?? '');
+      : (spokenCaption?.phrases.join(' ') || caption?.text || '');
 
   // Voice-on captions follow the newly started speech phrase. Silent reading
   // opens at the beginning and allows scrolling through the complete line.
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller) return;
-    if (voiceOn && followingRef.current) scroller.scrollTop = scroller.scrollHeight;
+    if (preparingVoice) scroller.scrollTop = 0;
+    else if (voiceOn && followingRef.current) scroller.scrollTop = scroller.scrollHeight;
     else if (!voiceOn) scroller.scrollTop = 0;
     setHasMoreBelow(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 4);
-  }, [visualText, target, voiceOn]);
+  }, [visualText, target, voiceOn, preparingVoice]);
 
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (!scroller || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(() => {
-      if (voiceOn && followingRef.current) scroller.scrollTop = scroller.scrollHeight;
+      if (preparingVoice) scroller.scrollTop = 0;
+      else if (voiceOn && followingRef.current) scroller.scrollTop = scroller.scrollHeight;
       setHasMoreBelow(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 4);
     });
     observer.observe(scroller);
     return () => observer.disconnect();
-  }, [target, voiceOn]);
+  }, [target, voiceOn, preparingVoice]);
 
   if (!active || !target || !caption) return null;
 
@@ -193,6 +199,7 @@ export default function ClassroomCaptionSync() {
               <span className={`mr-1.5 font-bold ${SPEAKER_TONE[caption.speaker] ?? 'text-lyo-300'}`}>
                 {caption.speaker}:
               </span>
+              {preparingVoice && <span className="mr-1.5 text-[11px] font-medium text-amber-200/90">(voice loading)</span>}
               <span>“{visualText}”</span>
             </p>
           ) : (

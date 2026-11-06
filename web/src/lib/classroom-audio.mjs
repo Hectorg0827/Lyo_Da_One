@@ -24,6 +24,81 @@ export class SpeechPreparationCache {
   }
 }
 
+/**
+ * Keep short, fully downloaded teacher clips in memory for this classroom only.
+ * Repeated coaching lines otherwise trigger a fresh 25–60s CPU synthesis even
+ * when the same voice just said those exact words. No lesson text or audio is
+ * written to browser storage and interrupted/partial streams are never cached.
+ */
+export class SessionSpeechReplayCache {
+  constructor(limit = 24, maxBytes = 4 * 1024 * 1024, maxClipBytes = 512 * 1024) {
+    this.limit = limit;
+    this.maxBytes = maxBytes;
+    this.maxClipBytes = maxClipBytes;
+    this.entries = new Map();
+    this.totalBytes = 0;
+  }
+
+  get(key) {
+    const entry = this.entries.get(key);
+    if (!entry) return null;
+    // LRU: a frequently repeated coaching line should not be evicted first.
+    this.entries.delete(key);
+    this.entries.set(key, entry);
+    return new Response(entry.bytes.slice(), { headers: { 'Content-Type': entry.mime } });
+  }
+
+  async remember(key, response, signal) {
+    if (!response?.ok || !response.clone || signal?.aborted) return false;
+    let clone;
+    try {
+      clone = response.clone();
+      const reader = clone.body?.getReader();
+      if (!reader) return false;
+      const chunks = [];
+      let size = 0;
+      while (true) {
+        if (signal?.aborted) throw new DOMException('Interrupted', 'AbortError');
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > this.maxClipBytes) {
+          // A cloned stream is tee'd: awaiting cancel can hang until the
+          // *original playback* reader also ends. Never hold the TTS path.
+          void reader.cancel().catch(() => {});
+          return false;
+        }
+        chunks.push(value);
+      }
+      if (signal?.aborted || size === 0) return false;
+      const bytes = new Uint8Array(size);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      const mime = response.headers.get('Content-Type')?.split(';')[0] || 'audio/mpeg';
+      const old = this.entries.get(key);
+      if (old) this.totalBytes -= old.bytes.byteLength;
+      this.entries.delete(key);
+      this.entries.set(key, { bytes, mime });
+      this.totalBytes += size;
+      while (this.entries.size > this.limit || this.totalBytes > this.maxBytes) {
+        const oldest = this.entries.keys().next().value;
+        const discarded = this.entries.get(oldest);
+        this.entries.delete(oldest);
+        this.totalBytes -= discarded.bytes.byteLength;
+      }
+      return true;
+    } catch {
+      try { void clone?.body?.cancel()?.catch(() => {}); } catch { /* Already locked. */ }
+      return false;
+    }
+  }
+
+  clear() { this.entries.clear(); this.totalBytes = 0; }
+}
+
 /** The CPU TTS service must receive at most one speculative line at a time. */
 export function firstAudibleTurn(turns) {
   return turns.find(turn =>
@@ -128,6 +203,29 @@ export function splitSpeechForStreaming(text, firstChars = 40, laterChars = 65) 
     else chunks.push(current);
   }
   return chunks;
+}
+
+/**
+ * Kokoro's native `stream:true` already emits audio in sentence chunks. Send
+ * an entire short teacher line in ONE upstream call instead of paying the CPU
+ * startup cost for each comma/sentence. Bound unusually long turns and keep
+ * natural word/clause boundaries so they can still be interrupted safely.
+ */
+export function groupSpeechForProvider(text, maxChars = 280) {
+  const clauses = splitSpeechForStreaming(text);
+  const groups = [];
+  let current = '';
+  for (const clause of clauses) {
+    const merged = current ? `${current} ${clause}` : clause;
+    if (current && merged.length > maxChars) {
+      groups.push(current);
+      current = clause;
+    } else {
+      current = merged;
+    }
+  }
+  if (current) groups.push(current);
+  return groups;
 }
 
 /** Board content remains visible while speech explains it; no fake reading wait. */

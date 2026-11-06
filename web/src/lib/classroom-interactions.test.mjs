@@ -15,6 +15,7 @@ import * as classroomCast from './classroom-cast.mjs';
 
 function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' } } = {}) {
   const sockets = [], timers = [], canceled = [], intervals = [];
+  const markedCourses = [];
   let clockMs = Date.now();
   let state;
   const create = init => {
@@ -38,7 +39,7 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     '@/lib/teaching-activity.mjs': visuals, '@/lib/board-presentation.mjs': boardPresentation, '@/lib/classroom-sounds': { playSound() {} },
     '@/lib/api': { getAccessToken: () => localStorage.getItem('lyo_token'), tryRefreshToken: async () => false },
     '@/lib/infer-explicit-fraction-visual.mjs': inferredFractions,
-    '@/lib/stack': { updateCourseProgress: async () => {} },
+    '@/lib/stack': { updateCourseProgress: async () => {}, markCourseInProgress: async (courseId) => { markedCourses.push(courseId); } },
     // The Commons lookup the board shares with Chat. The real module, not a
     // stub: no test drives a board image, so it is never called, and a stub
     // would hide the day one does.
@@ -86,13 +87,39 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
       intervals.filter(interval => !interval.canceled).forEach(interval => interval.fn());
     }
   };
-  return { store: useClassroomStore, sockets, timers, canceled, intervals, storage: store, tick };
+  return { store: useClassroomStore, sockets, timers, canceled, intervals, markedCourses, storage: store, tick };
 }
 
 /** Everything the teacher has actually put on the board, without the cover
     page the class opens on. */
 const taught = store => store.getState().board.filter(el => el.kind !== 'opening');
 const component = (type, rest) => ({ event_type: 'component_render', component: { type, component_id: type, ...rest } });
+
+test('successful checkpoint participation marks a saved course in progress before any skill completes', () => {
+  const { store, sockets, markedCourses } = classroom({ connection: {
+    topic: 'Fractions', courseId: 'fractions-qa', sessionId: 'lesson',
+  } });
+  sockets[0].receive(component('QuizCard', { component_id: 'diagnostic', question: 'Denominator?', options: [
+    { id: 'a', label: 'Eight' },
+  ] }));
+  store.getState().answerQuiz('diagnostic', { id: 'a', label: 'Eight' });
+  assert.deepEqual(markedCourses, ['fractions-qa']);
+  sockets[0].receive(component('InputField', { component_id: 'transfer', question: 'Explain the fraction' }));
+  store.getState().answerTransfer('transfer', 'Eight equal parts make the whole.');
+  assert.deepEqual(markedCourses, ['fractions-qa', 'fractions-qa']);
+  store.getState().disconnect();
+});
+
+test('a checkpoint action that fails to reach the classroom never marks a course in progress', () => {
+  const { store, sockets, markedCourses } = classroom({ connection: {
+    topic: 'Fractions', courseId: 'fractions-qa', sessionId: 'lesson',
+  } });
+  sockets[0].receive(component('QuizCard', { component_id: 'diagnostic', question: 'Denominator?', options: [] }));
+  sockets[0].readyState = 3;
+  store.getState().answerQuiz('diagnostic', { id: 'a', label: 'Eight' });
+  assert.deepEqual(markedCourses, []);
+  store.getState().disconnect();
+});
 
 test('diagnostic feedback is visible and spoken while the next scene is still pending', () => {
   const { store, sockets, tick } = classroom();

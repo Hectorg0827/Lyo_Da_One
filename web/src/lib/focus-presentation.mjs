@@ -80,6 +80,21 @@ export function isFinished(item) {
   return progress.kind === PROGRESS_MEASURED && progress.percent >= 100;
 }
 
+/** A teacher checkpoint can be answered before one whole skill is mastered.
+ *  That leaves a legitimate 0% mastery figure, but it is no longer a course
+ *  the student has not started. Keep both status and measured progress true. */
+export function progressDisplayFor(item) {
+  const progress = progressFor(item);
+  if (progress.kind !== PROGRESS_MEASURED) return null;
+  if (isFinished(item)) return 'Complete';
+  if (progress.percent === 0) {
+    if (item?.status === 'in_progress') return 'In progress';
+    if (item?.status === 'paused') return 'Paused';
+    if (item?.status === 'not_started') return 'Not started';
+  }
+  return `${progress.percent}%`;
+}
+
 /**
  * What the card's primary button offers.
  *

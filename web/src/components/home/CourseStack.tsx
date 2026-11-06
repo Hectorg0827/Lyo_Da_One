@@ -26,6 +26,7 @@ import {
   deckStaggerMilliseconds,
   isFinished,
   matchesFilter,
+  progressDisplayFor,
   progressFor,
 } from '@/lib/focus-presentation.mjs';
 
@@ -333,11 +334,7 @@ function CourseCard({
                   />
                 </div>
                 <span className="shrink-0 text-[10px] font-bold text-white/70 tabular-nums">
-                  {finished
-                    ? 'Complete'
-                    : item.status === 'not_started' && progress.percent === 0
-                      ? 'Not started'
-                      : `${progress.percent}%`}
+                  {progressDisplayFor(item)}
                 </span>
               </div>
             ) : (
