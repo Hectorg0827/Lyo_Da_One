@@ -116,9 +116,9 @@ export function silentCaptionDelay(text) {
 
 /**
  * A bounded speech pipeline for a single teacher turn. The caller starts the
- * next request only AFTER the current segment actually begins playing, so the
- * single-CPU voice server is free to produce the first audible words first.
- * The next segment can then synthesize while the student hears the current one.
+ * next request only AFTER the current segment has fully downloaded, so the
+ * single-CPU voice server never competes with unfinished synthesis. The
+ * next segment can then synthesize while the student hears the current one.
  * An externally owned AbortController cancels all requests when interrupted.
  */
 export class SpeechLookaheadQueue {
@@ -214,6 +214,18 @@ export function splitSpeechForStreaming(text, firstChars = 40, laterChars = 65) 
 export function groupSpeechForProvider(text, maxChars = 280) {
   const clauses = splitSpeechForStreaming(text);
   const groups = [];
+  // The CPU Kokoro endpoint generally finishes synthesizing a sentence
+  // before its first bytes reach the browser. A 250-character opening can
+  // therefore keep the learner waiting tens of seconds. For longer lines,
+  // play the first *complete sentence* as its own request. Keep every word
+  // and punctuation mark; never chop a sentence to chase a stopwatch.
+  if (text.trim().length > 110 && clauses.length > 1) {
+    const opening = clauses[0];
+    if (opening.length >= 28 && opening.length <= Math.min(110, maxChars) &&
+        /[.!?…]["'”’]*$/u.test(opening)) {
+      groups.push(clauses.shift());
+    }
+  }
   let current = '';
   for (const clause of clauses) {
     const merged = current ? `${current} ${clause}` : clause;
@@ -244,7 +256,7 @@ export function retryPlaybackAfterMoreAudio(error) {
  * Cancellation owns the fetch as well as the player; a late response cannot speak.
  */
 export async function playSpeechResponse(responsePromise, {
-  signal: externalSignal, onStarted = () => {}, startupTimeoutMs = 30000,
+  signal: externalSignal, onStarted = () => {}, onDownloaded = () => {}, startupTimeoutMs = 30000,
   createAudio = () => new Audio(),
   MediaSourceClass = globalThis.MediaSource,
   urls = URL,
@@ -299,6 +311,7 @@ export async function playSpeechResponse(responsePromise, {
     if (!response.body || !MediaSourceClass?.isTypeSupported(mime)) {
       const blob = await response.blob();
       ensureActive();
+      onDownloaded();
       url = urls.createObjectURL(blob);
       audio.src = url;
       await audio.play();
@@ -350,6 +363,7 @@ export async function playSpeechResponse(responsePromise, {
     streamComplete = true;
     if (!appendedChunks) throw new Error('Empty teacher audio');
     if (media.readyState === 'open') media.endOfStream();
+    onDownloaded();
     // Some decoders only recognize a short MP3 after the final frame lands.
     // If the first fragment was rejected, give the now-complete stream a turn.
     if (!started && !playbackAttemptPending) requestPlayback();

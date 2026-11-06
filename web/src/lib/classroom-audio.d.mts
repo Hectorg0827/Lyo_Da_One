@@ -27,6 +27,7 @@ export function retryPlaybackAfterMoreAudio(error: { name?: string } | null | un
 export function playSpeechResponse(response: Promise<Response | null>, options: {
   signal: AbortSignal;
   onStarted?: () => void;
+  onDownloaded?: () => void;
   startupTimeoutMs?: number;
 }): Promise<void>;
 export function speakBrowserFallback(text: string, options?: {

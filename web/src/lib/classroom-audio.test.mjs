@@ -113,6 +113,17 @@ test('native streaming renders a typical teacher line once rather than once per 
   assert.deepEqual(groupSpeechForProvider(''), []);
 });
 
+test('long narration starts with a full, natural first sentence for faster audio', () => {
+  const first = 'Let us compare the two fractions using the same whole.';
+  const rest = 'First find the denominators. Then notice that more equal pieces make each piece smaller.';
+  const line = `${first} ${rest}`;
+  const requests = groupSpeechForProvider(line);
+  assert.equal(requests[0], first);
+  assert.equal(requests.slice(1).join(' '), rest);
+  assert.equal(requests.join(' '), line);
+  assert.deepEqual(groupSpeechForProvider('¿Cuál es la variable?'), ['¿Cuál es la variable?']);
+});
+
 test('unusually long teacher turns keep bounded natural provider requests with no lost words', () => {
   const line = Array.from({ length: 52 }, (_, i) => `fraction${i}`).join(' ');
   const requests = groupSpeechForProvider(line, 250);

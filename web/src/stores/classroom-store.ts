@@ -592,9 +592,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       prepared?.response,
     );
 
-    // The provider streams each natural sentence within a single request.
-    // Do not launch a competing Kokoro CPU render while the current one is
-    // still producing its remaining audio: congestion added 20–60s gaps.
+    // One Kokoro CPU render at a time. When the current download finishes,
+    // warm exactly one next phrase during playback rather than leaving the
+    // teacher silent throughout a second full CPU synthesis.
     const playSegments = async () => {
       for (let index = 0; index < segments.length; index++) {
         if (controller.signal.aborted || generation !== speechGeneration) return;
@@ -609,6 +609,11 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           startupTimeoutMs: 75000,
           onStarted: () => {
             emitSegment(segment, index);
+          },
+          onDownloaded: () => {
+            if (!controller.signal.aborted && generation === speechGeneration) {
+              lookahead.warmNext(index);
+            }
           },
         });
         completedSegments += 1;

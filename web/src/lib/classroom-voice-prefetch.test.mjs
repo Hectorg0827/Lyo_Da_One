@@ -107,16 +107,19 @@ test('speech starts before the final bytes arrive; download completion does not 
   const body = new ReadableStream({ start(c) { stream = c; } });
   const controller = new AbortController();
   let finished = false;
+  let downloaded = 0;
   const playback = playSpeechResponse(Promise.resolve(new Response(body, { headers: { 'Content-Type': 'audio/mpeg' } })), {
-    ...f.options, signal: controller.signal,
+    ...f.options, signal: controller.signal, onDownloaded: () => { downloaded++; },
   }).then(() => { finished = true; });
   stream.enqueue(new Uint8Array([1, 2]));
   await tick();
   assert.equal(f.audio.plays, 1);
   assert.equal(f.downloads, 0);
+  assert.equal(downloaded, 0, 'do not warm next audio while CPU render is still streaming');
   stream.enqueue(new Uint8Array([3])); stream.close();
   await tick();
   assert.equal(f.downloads, 1);
+  assert.equal(downloaded, 1, 'warm next after download, while this recording plays');
   assert.equal(finished, false);
   f.audio.dispatchEvent(new Event('ended'));
   await playback;
