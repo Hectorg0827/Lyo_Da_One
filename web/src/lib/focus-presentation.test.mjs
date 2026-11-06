@@ -30,6 +30,7 @@ import {
   matchesFilter,
   motifFor,
   percentFor,
+  progressDisplayFor,
   progressFor,
   stableHash,
 } from './focus-presentation.mjs';
@@ -75,8 +76,21 @@ test('completion follows the server status, and a missing figure is not finished
 test('the action reflects where the learner is', () => {
   assert.equal(actionFor(course({ status: 'not_started', progress: 0 })), ACTION_START);
   assert.equal(actionFor(course({ status: 'in_progress', progress: 0.4 })), ACTION_RESUME);
+  assert.equal(actionFor(course({ status: 'in_progress', progress: 0 })), ACTION_RESUME);
   assert.equal(actionFor(course({ status: 'paused', progress: 0.4 })), ACTION_RESUME);
   assert.equal(actionFor(course({ status: 'completed' })), ACTION_REVIEW);
+});
+
+test('a genuinely started course with no completed skills is never labelled not started', () => {
+  const submitted = course({ status: 'in_progress', progress: 0 });
+  assert.equal(progressDisplayFor(submitted), 'In progress');
+  assert.equal(matchesFilter(submitted, FILTER_IN_PROGRESS), true);
+  assert.equal(matchesFilter(submitted, FILTER_NOT_STARTED), false);
+  assert.equal(progressDisplayFor(course({ status: 'paused', progress: 0 })), 'Paused');
+  assert.equal(progressDisplayFor(course({ status: 'not_started', progress: 0 })), 'Not started');
+  assert.equal(progressDisplayFor(course({ status: 'in_progress', progress: 0.5 })), '50%');
+  assert.equal(progressDisplayFor(course({ status: 'completed', progress: 1 })), 'Complete');
+  assert.equal(progressDisplayFor(course({ status: undefined, progress: undefined })), null);
 });
 
 test('an unmeasured course offers Start without asserting zero', () => {

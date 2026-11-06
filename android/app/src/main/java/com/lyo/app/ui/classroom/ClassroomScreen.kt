@@ -1,12 +1,17 @@
 package com.lyo.app.ui.classroom
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.safeDrawing
@@ -38,6 +43,7 @@ import com.lyo.app.ui.screens.classroom.ClassroomVoicePlayer
 import com.lyo.app.ui.theme.Background
 import com.lyo.app.ui.theme.LyoRed
 import com.lyo.app.ui.theme.TextSecondary
+import kotlinx.coroutines.delay
 
 /**
  * The AI Classroom screen — entry point wired into LyoNavHost. Composes
@@ -45,8 +51,8 @@ import com.lyo.app.ui.theme.TextSecondary
  * genuinely dynamic, server-driven content), and hand-authored chrome
  * (ClassroomChrome.kt) around it, per the implementation plan's
  * Architecture section: chrome auto-hides Netflix/YouTube-style; the
- * board and Lyo's explanation
- * never do.
+ * board and learner work remain visible while teacher and companion enter
+ * only when they have a meaningful teaching, help or celebration cue.
  *
  * `courseId` mirrors `RecentCourseStore.save()`'s pattern in LyoNavHost's
  * COURSE_DETAIL route — a real integration would also record classroom
@@ -59,6 +65,7 @@ fun ClassroomScreen(
     topic: String,
     courseId: String = topic,
     teachingMode: String = "solo",
+    initialDurationMinutes: Int = ClassroomLessonDuration.default,
     courseBacked: Boolean = true,
     reviewConceptId: String? = null,
 ) {
@@ -68,6 +75,9 @@ fun ClassroomScreen(
     // inside the session, so a session that cannot produce its next step
     // cannot be argued out of it. Bumping this key is what rebuilds it.
     var sessionAttempt by remember(topic, courseId) { mutableIntStateOf(0) }
+    var lessonDuration by remember(topic, courseId) {
+        mutableIntStateOf(ClassroomLessonDuration.normalize(initialDurationMinutes))
+    }
     var resumeSeat by remember(topic, courseId) { mutableStateOf<ClassroomSavedSession?>(null) }
     // Keyed on the attempt too: engine.dispose() closes this player, so a
     // rebuilt engine inheriting the old one would teach in silence.
@@ -75,12 +85,13 @@ fun ClassroomScreen(
         ClassroomVoicePlayer(context)
     }
     val engine = remember(
-        topic, courseId, teachingMode, courseBacked, reviewConceptId, sessionAttempt,
+        topic, courseId, teachingMode, courseBacked, reviewConceptId, lessonDuration, sessionAttempt,
     ) {
         ClassroomEngine(
             topic = topic,
             sessionIdParam = courseId,
             mode = teachingMode,
+            durationMinutes = lessonDuration,
             courseBacked = courseBacked,
             reviewConceptId = reviewConceptId,
             voicePlayer = voicePlayer,
@@ -105,6 +116,18 @@ fun ClassroomScreen(
     // the Switch needs its own observable copy to actually recompose on
     // toggle; this mirrors it into ClassroomPreferences on every change.
     var reducedMotionUi by remember { mutableStateOf(ClassroomPreferences.reducedMotion) }
+    var captionsEnabledUi by remember { mutableStateOf(ClassroomPreferences.captionsEnabled) }
+    var preparingStepUi by remember(engine) { mutableStateOf(false) }
+
+    LaunchedEffect(engine, engine.isAwaitingStep) {
+        preparingStepUi = false
+        if (engine.isAwaitingStep) {
+            // Immediate visual acknowledgement after a submit/Continue;
+            // avoid a distracting spinner for steps arriving in under 400ms.
+            delay(400L)
+            preparingStepUi = engine.isAwaitingStep
+        }
+    }
 
     LaunchedEffect(notebookOpen) {
         if (notebookOpen) engine.refreshLearnerRecord()
@@ -118,6 +141,9 @@ fun ClassroomScreen(
         modifier = Modifier
             .fillMaxSize()
             .windowInsetsPadding(WindowInsets.safeDrawing)
+            // Keep the learner's answer field and submit controls above the
+            // software keyboard on edge-to-edge Android 15+ devices.
+            .imePadding()
             .background(Background),
     ) {
         // Background tap-catcher, drawn BEHIND everything below — Compose's
@@ -165,6 +191,23 @@ fun ClassroomScreen(
                         reducedMotionUi = it
                         ClassroomPreferences.reducedMotion = it
                     },
+                    captionsEnabled = captionsEnabledUi,
+                    onCaptionsEnabledChange = {
+                        captionsEnabledUi = it
+                        ClassroomPreferences.captionsEnabled = it
+                    },
+                    durationMinutes = lessonDuration,
+                    onDurationChange = { minutes ->
+                        if (minutes != lessonDuration) {
+                            // Session duration is a server contract parameter,
+                            // not a cosmetic timer; a change starts a new seat.
+                            lessonDuration = minutes
+                            resumeSeat = null
+                            sessionAttempt += 1
+                            settingsOpen = false
+                            chrome.poke()
+                        }
+                    },
                 )
             }
             if (notebookOpen) {
@@ -177,17 +220,41 @@ fun ClassroomScreen(
                 )
             }
 
-            // A teacher leads; Lyo remains a separate student companion.
-            TeacherBadgeAndCaption(
-                caption = engine.surface.dataModel.resolvePointer("/caption"),
-                topic = topic,
-                lessonRecovery = engine.lessonRecovery,
-                onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
+            // Characters are event-driven, never permanent furniture. Their
+            // collapsing rows return vertical space to diagrams and writing.
+            val presence = ClassroomPresencePolicy.decide(
+                speaker = engine.activeSpeaker,
+                learnerWorking = engine.hasActiveCheckpoint,
+                paused = engine.isPaused,
+                supportCue = engine.supportCue,
+                celebrationCue = engine.celebrationCue,
+                captionsEnabled = captionsEnabledUi,
             )
-            LyoCompanionBadge(
-                state = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
-                spokenClassmates = if (teachingMode == "classroom") engine.transcript.map { it.speaker } else emptyList(),
-            )
+            val motionEnter = if (reducedMotionUi) fadeIn() else fadeIn() + expandVertically()
+            val motionExit = if (reducedMotionUi) fadeOut() else fadeOut() + shrinkVertically()
+            AnimatedVisibility(
+                visible = presence.teacher,
+                enter = motionEnter,
+                exit = motionExit,
+            ) {
+                TeacherBadgeAndCaption(
+                    caption = if (presence.caption) engine.surface.dataModel.resolvePointer("/caption") else null,
+                    topic = topic,
+                    lessonRecovery = engine.lessonRecovery,
+                    onTranscript = { notebookOpen = true; settingsOpen = false; chrome.poke() },
+                )
+            }
+            AnimatedVisibility(
+                visible = presence.companion,
+                enter = motionEnter,
+                exit = motionExit,
+            ) {
+                LyoCompanionBadge(
+                    state = engine.surface.dataModel.resolvePointer("/mascot/state")?.takeIf { it.isJsonPrimitive }?.asString ?: "reading",
+                    spokenClassmates = if (teachingMode == "classroom") engine.transcript.takeLast(2).map { it.speaker } else emptyList(),
+                    caption = if (presence.caption) engine.surface.dataModel.resolvePointer("/caption") else null,
+                )
+            }
 
             // Teaching tools scroll independently from the explanation and controls.
             Box(
@@ -245,6 +312,16 @@ fun ClassroomScreen(
             // The step never arrived. The class says so, says it is not the
             // learner's fault, and gives them two things that actually move
             // it — asking again, and leaving the stuck session behind.
+            if (preparingStepUi && engine.status == "live" && !engine.hasActiveCheckpoint &&
+                engine.stallPhase != ClassroomStallPhase.STALLED && !engine.isPaused
+            ) {
+                Text(
+                    text = "Preparing your next step… You can review the board while I work.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
             if (engine.stallPhase == ClassroomStallPhase.STALLED) {
                 StallRecoveryCard(
                     onAskAgain = { engine.nudgeTeacher(); chrome.poke() },
@@ -257,6 +334,14 @@ fun ClassroomScreen(
             } else {
                 engine.notice?.let { message ->
                     ClassroomNoticeCard(message = message, onDismiss = { engine.dismissNotice() })
+                }
+                if (engine.stallPhase == ClassroomStallPhase.SLOW && engine.notice == null && !preparingStepUi) {
+                    Text(
+                        text = "Working on your next step… You can keep reviewing the board.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    )
                 }
                 engine.resumableSession?.takeIf { !engine.hasBoardContent }?.let { seat ->
                     ResumeOfferCard(onResume = {

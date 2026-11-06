@@ -1,8 +1,9 @@
 'use client';
 
 import { create } from 'zustand';
-import { SpeechPreparationCache, playSpeechResponse, speakBrowserFallback, boardTransitionDelay, splitSpeechForStreaming } from '@/lib/classroom-audio.mjs';
+import { SpeechPreparationCache, SessionSpeechReplayCache, SpeechLookaheadQueue, playSpeechResponse, speakBrowserFallback, boardTransitionDelay, groupSpeechForProvider, firstAudibleTurn, silentCaptionDelay } from '@/lib/classroom-audio.mjs';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
+import { getAccessToken, tryRefreshToken } from '@/lib/api';
 import {
   CLASSROOM_STALL_NOTICE_MS,
   CLASSROOM_STALL_RECOVERY_MS,
@@ -14,9 +15,10 @@ import {
   classroomSessionStart,
   classroomSessionStorageKey,
 } from '@/lib/classroom-contract.mjs';
-import { updateCourseProgress } from '@/lib/stack';
+import { markCourseInProgress, updateCourseProgress } from '@/lib/stack';
 import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.mjs';
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
+import { inferExplicitFractionVisual } from '@/lib/infer-explicit-fraction-visual.mjs';
 import { parseBoardDocument, presentationRoleFor, type BoardDocument, type PresentationRole } from '@/lib/board-presentation.mjs';
 import { resolveCommonsImage } from '@/lib/commons-image.mjs';
 import { classroomSpeaker } from '@/lib/classroom-cast.mjs';
@@ -238,6 +240,7 @@ interface ClassroomStore {
   canContinue: boolean;
   progressCurrent: number;
   progressTotal: number;
+  progressStage: string;
   continueLabel: string;
   nextActionIntent: string;
   nextActionComponentId: string;
@@ -304,7 +307,10 @@ let authToken: string | null = null;
 // previous line finishes. The cache is deliberately tiny and session-local:
 // it exists only to overlap network/TTS latency with time the learner is
 // already listening to the current turn.
-const prefetchedSpeech = new SpeechPreparationCache(3);
+const prefetchedSpeech = new SpeechPreparationCache(1);
+// A session-scoped, bounded audio replay cache prevents another expensive CPU
+// render when the teacher repeats a short prompt or encouragement.
+const replayedSpeech = new SessionSpeechReplayCache();
 let learnerActionStarted: number | null = null;
 let contentLatencyRecorded = false;
 let idCounter = 0;
@@ -378,6 +384,19 @@ let waitingSince: number | null = null;
 let stallNudged = false;
 let lastConnection: ClassroomConnection | null = null;
 const STALL_TICK_MS = 1000;
+// A transient socket closure must not end a student's lesson. The connection
+// is not the lesson: the server stores progress by sessionId, and a new socket
+// can reattach without replaying or regrading the learner's last answer.
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let reconnectCount = 0;
+let lessonFinished = false;
+const MAX_CLASSROOM_RECONNECTS = 3;
+const RECONNECT_DELAYS_MS = [500, 1400, 3200];
+
+function stopReconnect() {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+}
 
 function stopStallWatch() {
   if (stallTicker) clearInterval(stallTicker);
@@ -388,10 +407,15 @@ function stopStallWatch() {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
-const CLASSROOM_VOICE_NOTICE = 'Teacher audio is temporarily unavailable. Captions will continue; tap the voice icon to retry.';
+const CLASSROOM_VOICE_NOTICE = 'Teacher audio is temporarily unavailable. Captions will continue, and LYO will retry voice automatically.';
+const CLASSROOM_RECONNECT_NOTICE = 'Connection interrupted. Reconnecting to your lesson — your answers are saved.';
+const CLASSROOM_RESTORING_NOTICE = 'Connected. Restoring your lesson where you left off…';
 
-function wsUrl(connection: ClassroomConnection, token: string | null): string {
-  return buildClassroomWsUrl(API_URL, connection, token);
+function wsUrl(connection: ClassroomConnection, token: string | null, resumeTransport = false): string {
+  const url = buildClassroomWsUrl(API_URL, connection, token);
+  // A transport interruption reattaches to the same server session; it is
+  // not a new student entry and must not trigger a fresh welcome/lesson.
+  return resumeTransport ? `${url}&resume=1` : url;
 }
 
 /** Exported so the caption UI can pace its word-by-word reveal against the
@@ -445,43 +469,68 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     signal?: AbortSignal,
     speaker = 'Teacher',
   ): Promise<Response | null> {
+    const key = speechCacheKey(speaker, text, language, rate);
+    const cached = replayedSpeech.get(key);
+    if (cached) return cached;
     if (Date.now() < serverVoiceUnavailableUntil) return null;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (authToken) headers.Authorization = `Bearer ${authToken}`;
     if (API_KEY) headers['X-API-Key'] = API_KEY;
     const character = classroomSpeaker(speaker, get().topic);
-    const response = await fetch(
+    const body = JSON.stringify({
+      text,
+      voice: character?.voice ?? 'nova',
+      speaker_id: character?.id,
+      format: 'mp3',
+      speed: rate,
+      content_type: 'explanation',
+      language,
+    });
+    let response = await fetch(
       `${API_URL.replace(/\/$/, '')}/api/v1/tts/synthesize/stream`,
       {
         method: 'POST',
         headers,
         signal,
-        body: JSON.stringify({
-          text,
-          voice: character?.voice ?? 'nova',
-          speaker_id: character?.id,
-          format: 'mp3',
-          speed: rate,
-          content_type: 'explanation',
-          language,
-        }),
+        body,
       },
     );
+    // A long classroom can outlive the short-lived access token. Retry the
+    // natural teacher voice once with a refreshed token instead of silencing
+    // the rest of a healthy 30-minute lesson after its first 401.
+    if (response.status === 401 && !signal?.aborted && await tryRefreshToken()) {
+      const renewed = getAccessToken();
+      if (renewed) {
+        authToken = renewed;
+        headers.Authorization = `Bearer ${renewed}`;
+        response = await fetch(`${API_URL.replace(/\/$/, '')}/api/v1/tts/synthesize/stream`, {
+          method: 'POST', headers, signal, body,
+        });
+      }
+    }
     if (!response.ok) {
       serverVoiceUnavailableUntil = Date.now() + 60_000;
       return null;
     }
     serverVoiceUnavailableUntil = 0;
+    // Do not block first playback for caching: clone the arriving MP3 stream,
+    // retain only a complete small clip, and drop it on interruption/leave.
+    if (text.length <= 300 && !signal?.aborted) {
+      void replayedSpeech.remember(key, response, signal);
+    }
     return response;
   }
 
   function prefetchSpeechLine(speaker: string, text: string) {
     if (!get().voiceOn || typeof window === 'undefined' || !text.trim()) return;
+    // Do not warm a second line while another Kokoro request is still active;
+    // speculative overlap caused severe single-CPU synthesis contention.
+    if (prefetchedSpeech.hasPending() || (speechAbort && !speechAbort.signal.aborted)) return;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
-    // Prefetch only the fast opening segment. A full-length competing request
-    // would monopolize the single-CPU teacher voice service before speech starts.
-    const first = splitSpeechForStreaming(text)[0];
+    // The provider streams audio natively by sentence, so a short complete
+    // line is one CPU render rather than many serial clause-sized renders.
+    const first = groupSpeechForProvider(text)[0];
     if (!first) return;
     const key = speechCacheKey(speaker, first, language, rate);
     prefetchedSpeech.prepare(key, (signal) => requestSpeechResponse(first, language, rate, signal, speaker));
@@ -505,37 +554,66 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   function speakLine(speaker: string, text: string, onDone: () => void) {
     if (!get().voiceOn || typeof window === 'undefined') {
-      playTimer = setTimeout(onDone, speechDelay(text));
+      playTimer = setTimeout(onDone, silentCaptionDelay(text));
       return;
     }
 
     const generation = ++speechGeneration;
     const language = get().languageCode || 'auto';
     const rate = get().speechRate;
-    const segments = splitSpeechForStreaming(text);
+    const segments = groupSpeechForProvider(text);
     if (!segments.length) { onDone(); return; }
     const prepared = prefetchedSpeech.take(speechCacheKey(speaker, segments[0], language, rate));
     const controller = prepared?.controller || new AbortController();
     speechAbort = controller;
     let completedSegments = 0;
     let voiceStarted = false;
+    let lineEndEmitted = false;
+    const emitLineEnd = (outcome: 'completed' | 'cancelled' | 'unavailable') => {
+      if (lineEndEmitted) return;
+      lineEndEmitted = true;
+      window.dispatchEvent(new CustomEvent('classroom:spoken-line-end', {
+        detail: { speaker, generation, outcome },
+      }));
+    };
+    controller.signal.addEventListener('abort', () => emitLineEnd('cancelled'), { once: true });
+    const emitSegment = (segment: string, index: number) => {
+      if (controller.signal.aborted || generation !== speechGeneration) return;
+      window.dispatchEvent(new CustomEvent('classroom:spoken-segment', {
+        detail: { speaker, text: segment, index, total: segments.length, generation },
+      }));
+      voiceStarted = true;
+      recordResponseLatency('audio');
+    };
 
-    // Each Kokoro request is short enough for the CPU service to deliver its
-    // first bytes. Never let an arbitrary 8-second deadline substitute the
-    // browser's robotic voice for a healthy but slower shared teacher voice.
+    const lookahead = new SpeechLookaheadQueue(
+      segments,
+      (segment) => requestSpeechResponse(segment, language, rate, controller.signal, speaker),
+      prepared?.response,
+    );
+
+    // One Kokoro CPU render at a time. When the current download finishes,
+    // warm exactly one next phrase during playback rather than leaving the
+    // teacher silent throughout a second full CPU synthesis.
     const playSegments = async () => {
       for (let index = 0; index < segments.length; index++) {
         if (controller.signal.aborted || generation !== speechGeneration) return;
         const segment = segments[index];
-        const response = index === 0 && prepared
-          ? prepared.response
-          : requestSpeechResponse(segment, language, rate, controller.signal, speaker);
+        const response = lookahead.take(index);
+        if (!response) throw new Error('Teacher audio segment unavailable');
         await playSpeechResponse(response, {
           signal: controller.signal,
-          startupTimeoutMs: 30000,
+          // Measured Kokoro first bytes in staging took 25–58s under load.
+          // Let a still-working CPU stream finish; the visible dialogue and
+          // waiting state remain available while it synthesizes.
+          startupTimeoutMs: 75000,
           onStarted: () => {
-            voiceStarted = true;
-            if (generation === speechGeneration) recordResponseLatency('audio');
+            emitSegment(segment, index);
+          },
+          onDownloaded: () => {
+            if (!controller.signal.aborted && generation === speechGeneration) {
+              lookahead.warmNext(index);
+            }
           },
         });
         completedSegments += 1;
@@ -543,12 +621,20 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     };
 
     void playSegments().then(() => {
-      if (generation === speechGeneration && !controller.signal.aborted) onDone();
+      if (generation === speechGeneration && !controller.signal.aborted) {
+        emitLineEnd('completed');
+        onDone();
+      }
     }).catch(async (error: { playbackStarted?: boolean }) => {
       if (controller.signal.aborted || generation !== speechGeneration) return;
+      // One slow or unsupported audio response must not permanently mute the
+      // class. The next spoken line retries the same natural teacher voice.
+      // A short cooldown avoids hammering a single cold CPU on every caption.
+      serverVoiceUnavailableUntil = Math.max(serverVoiceUnavailableUntil, Date.now() + 15_000);
       if (error.playbackStarted || voiceStarted) {
         // Do not replay already-heard words through a second, robotic voice.
         set((state) => ({ notice: state.notice ?? CLASSROOM_VOICE_NOTICE }));
+        emitLineEnd('unavailable');
         onDone();
         return;
       }
@@ -558,24 +644,26 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         await speakBrowserFallback(remaining, {
           language, rate, signal: controller.signal,
           onStarted: () => {
-            if (generation === speechGeneration) recordResponseLatency('audio');
+            emitSegment(remaining, completedSegments);
           },
         });
         if (generation === speechGeneration) {
           set((state) => ({
             notice: state.notice ?? 'Using your device voice while the classroom voice reconnects.',
           }));
+          emitLineEnd('completed');
           onDone();
         }
       } catch {
         if (controller.signal.aborted || generation !== speechGeneration) return;
         set((state) => ({
-          voiceOn: false,
           notice: state.notice ?? CLASSROOM_VOICE_NOTICE,
         }));
-        playTimer = setTimeout(onDone, Math.min(speechDelay(text), 4000));
+        emitLineEnd('unavailable');
+        playTimer = setTimeout(onDone, silentCaptionDelay(text));
       }
     }).finally(() => {
+      lookahead.clear();
       controller.abort();
       if (speechAbort === controller) speechAbort = null;
     });
@@ -801,6 +889,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         // The class reached its end. The seat stops being an unfinished one
         // from here, however recently it was started.
         markSavedSessionFinished(get().courseKey, get().sessionId);
+        lessonFinished = true;
         sfx('bell');
         addBoardElement({ id: nextId(), kind: 'dismissal', homework: turn.homework, nextHook: turn.next_hook });
         pushTranscript('Teacher', `🔔 Class dismissed. ${turn.homework ? `Homework: ${turn.homework}` : ''}`);
@@ -833,14 +922,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   function enqueueTurns(turns: DirectorTurn[]) {
     recordResponseLatency('content');
-    // Start the next few voice requests immediately. While line one is
-    // playing, lines two and three can finish synthesizing instead of making
-    // the learner sit through a fresh network/provider round-trip at every
-    // transition.
-    turns
-      .filter((turn) => (turn.type === 'speech' || turn.type === 'user_prompt') && (turn.text ?? '').trim())
-      .slice(0, 3)
-      .forEach((turn) => prefetchSpeechLine(turn.speaker || 'Teacher', (turn.text ?? '').trim()));
+    // Prime only the FIRST audible line. Previously three concurrent
+    // requests saturated the single-CPU Kokoro worker, delaying all three
+    // and causing the opening speech to time out. The one-ahead queue warms
+    // later phrases only after the first audio actually starts playing.
+    const first = firstAudibleTurn(turns);
+    if (first) prefetchSpeechLine(first.speaker || 'Teacher', (first.text ?? '').trim());
     turnQueue.push(...turns);
     waitingSince = null;
     stallNudged = false;
@@ -851,6 +938,17 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   // ── incoming protocol ──
 
   function handleComponent(comp: ClassroomComponent) {
+    // Some older classroom turns narrate an exact model but omit the
+    // structured LessonBlock. Draw only facts the teacher explicitly stated;
+    // a vague "look at the model" must never become a made-up diagram.
+    function showNarratedFraction(text: string) {
+      const visual = inferExplicitFractionVisual(text);
+      if (!visual || get().board.some((element) => element.kind === 'teaching_visual')) return;
+      addBoardElement({
+        id: `inferred-fraction:${comp.component_id || nextId()}`,
+        kind: 'teaching_visual', visual, presentationRole: 'reference',
+      });
+    }
     switch (comp.type) {
       case 'TeacherMessage': {
         const text = (comp.text ?? '').trim();
@@ -866,6 +964,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
             }
           } catch { /* plain text below */ }
         }
+        showNarratedFraction(text);
         enqueueTurns([{ type: 'speech', speaker: 'Teacher', text }]);
         addSources(comp.source_attributions);
         break;
@@ -873,17 +972,36 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'StudentPrompt':
         enqueueTurns([{ type: 'speech', speaker: comp.student_name || 'Maya', text: comp.text ?? '' }]);
         break;
-      case 'QuizCard':
-        addBoardElement({ id: comp.component_id || nextId(), kind: 'quiz', quiz: comp, presentationRole: 'practice' });
-        pushTranscript('Teacher', `📝 Check: ${comp.question ?? ''}`);
+      case 'QuizCard': {
+        // Component identifiers are expected to be unique, but if a producer
+        // reuses one for a different question, treat it as new evidence.
+        // Only the *same question* replayed after reattachment is immutable.
+        const priorQuiz = submittedQuizzes.get(comp.component_id);
+        const acknowledged = priorQuiz?.question === (comp.question || '') ? priorQuiz : null;
+        addBoardElement({
+          id: comp.component_id || nextId(), kind: 'quiz', quiz: comp, presentationRole: 'practice',
+          ...(acknowledged ? {
+            answered: acknowledged.answered,
+            feedback: acknowledged.feedback,
+            wasCorrect: acknowledged.wasCorrect,
+          } : {}),
+        });
+        if (!acknowledged) pushTranscript('Teacher', `📝 Check: ${comp.question ?? ''}`);
         set({ canContinue: false });
         break;
-      case 'InputField':
-        addBoardElement({ id: comp.component_id || nextId(), kind: 'transfer', input: comp, presentationRole: 'practice' });
-        pushTranscript('Teacher', `✍️ Application check: ${comp.question ?? ''}`);
+      }
+      case 'InputField': {
+        const priorTransfer = submittedTransfers.get(comp.component_id);
+        const acknowledged = priorTransfer?.question === (comp.question || '') ? priorTransfer : null;
+        addBoardElement({
+          id: comp.component_id || nextId(), kind: 'transfer', input: comp, presentationRole: 'practice',
+          ...(acknowledged ? { response: acknowledged.response, submitted: true } : {}),
+        });
+        if (!acknowledged) pushTranscript('Teacher', `✍️ Application check: ${comp.question ?? ''}`);
         addSources(comp.source_attributions);
         set({ canContinue: false, waitingForScene: false });
         break;
+      }
       case 'ExampleBlock':
         addBoardElement({
           id: comp.component_id || nextId(),
@@ -894,11 +1012,35 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           content: comp.content,
           items: [],
         });
+        showNarratedFraction(comp.content || '');
+        if (comp.component_id === 'classroom-recovery/notice') {
+          // A provider-capacity failure is a concrete, recoverable state,
+          // not an endlessly pending new scene. The recovery card remains
+          // visible; the learner's accepted answer is never replayed.
+          set({
+            waitingForScene: false,
+            stallPhase: 'none',
+            notice: (comp.content || comp.title || 'The teacher is unavailable right now. Your work is saved.').trim(),
+          });
+        } else if (comp.component_id === 'classroom-recovery/offline') {
+          // After repeated provider failures the server offers a factual,
+          // deterministic learning step rather than a generation spinner.
+          set({
+            waitingForScene: false,
+            stallPhase: 'none',
+            notice: 'The AI teacher is temporarily unavailable. You can keep learning with the offline step below.',
+          });
+        }
         break;
       case 'LessonBlock':
         if (comp.block_type === 'teaching_visual') {
           const visual = parseTeachingVisual(comp.block);
-          if (visual) addBoardElement({ id: comp.component_id, kind: 'teaching_visual', visual, presentationRole: presentationRoleFor(comp) });
+          if (visual) {
+            // A server-authored visual takes precedence over a conservative
+            // narration fallback if both arrive during the same scene.
+            set((s) => ({ board: s.board.filter((el) => !el.id.startsWith('inferred-fraction:')) }));
+            addBoardElement({ id: comp.component_id, kind: 'teaching_visual', visual, presentationRole: presentationRoleFor(comp) });
+          }
         } else if (comp.block_type === 'summary' && comp.block) {
           addBoardElement({
             id: comp.component_id || nextId(),
@@ -915,7 +1057,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'ProgressBar': {
         const current = Math.max(0, comp.current ?? 0);
         const total = Math.max(1, comp.total ?? 1);
-        set({ progressCurrent: current, progressTotal: total });
+        set({ progressCurrent: current, progressTotal: total, progressStage: comp.label || '' });
         // Keep this course's Stacks entry in sync with the backend's own
         // authoritative mastery-progress signal — non-blocking, mirrors
         // Android's ClassroomEngine.syncStackProgress. sessionId equals
@@ -942,6 +1084,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     let msg: Record<string, unknown>;
     try { msg = JSON.parse(raw); } catch { return; }
     const et = (msg.event_type as string) || (msg.type as string) || '';
+    // Late events belong to the session that produced them, not the lesson
+    // the student opened afterward. These were previously filtered for quiz
+    // feedback only, allowing stale scene/CTA events to replace a new board.
+    if (typeof msg.session_id === 'string' && msg.session_id !== get().sessionId) return;
 
     switch (et) {
       case 'answer_feedback': {
@@ -954,6 +1100,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         if (!feedback || !answered || answered.kind !== 'quiz' || answered.feedback === feedback) break;
         const wasCorrect = data?.verdict === 'correct' ? true
           : data?.verdict === 'incorrect' ? false : undefined;
+        const submitted = submittedQuizzes.get(answered.quiz.component_id);
+        if (submitted) submittedQuizzes.set(answered.quiz.component_id, { ...submitted, feedback, wasCorrect });
         set((state) => ({
           board: state.board.map((item) => item.id === answered.id
             ? { ...item, feedback, wasCorrect } : item),
@@ -977,6 +1125,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         set({ recordConcepts: conceptsFromClassScene(start?.scene) });
         if ((start?.scene as { metadata?: Record<string, unknown> } | undefined)?.metadata?.course_complete === true) {
           markSavedSessionFinished(get().courseKey, get().sessionId);
+          lessonFinished = true;
           set({ resumable: null });
         }
         // A new scene invalidates every older queued or playing turn.
@@ -1025,6 +1174,11 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
    * silently dropped action used to leave the board spinning forever.
    */
   const activityUpdates = new Map<string, Record<string, unknown>>();
+  // A resumed transport can replay the scene containing an already-sent
+  // question. Preserve the student's local acknowledgement across that replay
+  // and never allow a reconnect to submit the same question twice.
+  const submittedQuizzes = new Map<string, { question: string; answered: string; feedback?: string; wasCorrect?: boolean }>();
+  const submittedTransfers = new Map<string, { question: string; response: string }>();
   let activityTimer: ReturnType<typeof setTimeout> | null = null;
   function flushActivities() {
     if (activityTimer) clearTimeout(activityTimer);
@@ -1110,6 +1264,82 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     stallTicker = setInterval(stallTick, STALL_TICK_MS);
   }
 
+  /** Reattach after a network break without replacing the teaching session,
+   * grading an already-accepted answer again or discarding the board. */
+  function scheduleReconnect() {
+    if (!lastConnection || !authToken || lessonFinished) return;
+    if (reconnectCount >= MAX_CLASSROOM_RECONNECTS) {
+      set({
+        status: 'error',
+        waitingForScene: false,
+        stallPhase: 'none',
+        notice: null,
+        error: 'The classroom connection could not be restored. Your answers are saved. Reopen the lesson to resume.',
+      });
+      return;
+    }
+    const delayMs = RECONNECT_DELAYS_MS[reconnectCount];
+    reconnectCount += 1;
+    stopReconnect();
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (lastConnection && authToken && get().status === 'connecting') {
+        openClassroomSocket(lastConnection, authToken, true);
+      }
+    }, delayMs);
+  }
+
+  function openClassroomSocket(connection: ClassroomConnection, token: string, resumeTransport = false) {
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(wsUrl({ ...connection, sessionId: get().sessionId }, token, resumeTransport));
+    } catch {
+      set({ status: 'connecting', notice: CLASSROOM_RECONNECT_NOTICE, waitingForScene: false });
+      scheduleReconnect();
+      return;
+    }
+    ws = socket;
+    socket.onopen = () => {
+      if (ws !== socket) return;
+      set((state) => ({
+        status: 'live',
+        notice: resumeTransport ? CLASSROOM_RESTORING_NOTICE : state.notice,
+      }));
+    };
+    socket.onmessage = (event) => {
+      if (ws !== socket) return;
+      let messageType = '';
+      try {
+        const parsed = JSON.parse(String(event.data));
+        messageType = parsed.event_type || parsed.type || '';
+      } catch { /* let handleMessage ignore malformed payloads */ }
+      if (['scene_start', 'SCENE_START', 'scene_stream', 'component_render', 'scene_complete'].includes(messageType)) {
+        reconnectCount = 0;
+        set((state) => ({
+          notice: state.notice === CLASSROOM_RESTORING_NOTICE || state.notice === CLASSROOM_RECONNECT_NOTICE
+            ? null : state.notice,
+        }));
+      }
+      handleMessage(String(event.data));
+    };
+    socket.onerror = () => {
+      if (ws === socket) set({ notice: CLASSROOM_RECONNECT_NOTICE });
+      // A WebSocket error normally emits onclose next. That single handler
+      // owns reconnect scheduling to avoid double sockets or double retries.
+    };
+    socket.onclose = () => {
+      if (ws !== socket) return;
+      ws = null;
+      if (lessonFinished) {
+        set({ status: 'ended', waitingForScene: false, stallPhase: 'none' });
+        return;
+      }
+      waitingSince = null;
+      set({ status: 'connecting', notice: CLASSROOM_RECONNECT_NOTICE, stallPhase: 'none' });
+      scheduleReconnect();
+    };
+  }
+
   return {
     status: 'idle',
     topic: '',
@@ -1134,6 +1364,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     canContinue: false,
     progressCurrent: 0,
     progressTotal: 0,
+    progressStage: '',
     continueLabel: 'Check understanding',
     nextActionIntent: 'continue',
     nextActionComponentId: 'web_continue',
@@ -1148,6 +1379,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
     connect: (connection: ClassroomConnection) => {
       get().disconnect();
+      reconnectCount = 0;
+      lessonFinished = false;
+      submittedQuizzes.clear();
+      submittedTransfers.clear();
       const token = typeof window !== 'undefined' ? localStorage.getItem('lyo_token') : null;
       if (!token) {
         set({
@@ -1208,34 +1443,27 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         boardHistory: [], recordConcepts: [], viewingBoard: -1,
         caption: null, activeSpeaker: null, prompt: null, transcript: [],
         lyoState: 'reading', waitingForScene: true, isNarrating: false, canContinue: false,
-        isPaused: false, progressCurrent: 0, progressTotal: 0,
+        isPaused: false, progressCurrent: 0, progressTotal: 0, progressStage: '',
         continueLabel: 'Continue', nextActionIntent: 'continue', nextActionComponentId: 'web_continue',
         error: null, notice: null, stallPhase: 'none',
       });
       startStallWatch();
-
-      const socket = new WebSocket(wsUrl({ ...connection, sessionId }, token));
-      ws = socket;
-      socket.onopen = () => { if (ws === socket) set({ status: 'live' }); };
-      socket.onmessage = (e) => { if (ws === socket) handleMessage(String(e.data)); };
-      socket.onerror = () => {
-        if (ws === socket) set({ status: 'error', error: 'Connection to the classroom failed.' });
-      };
-      socket.onclose = () => {
-        if (ws === socket) {
-          set((s) => ({ status: s.transcript.length > 0 ? 'ended' : s.status === 'error' ? 'error' : 'ended' }));
-          ws = null;
-        }
-      };
+      openClassroomSocket(connection, token);
     },
 
     disconnect: () => {
+      stopReconnect();
       flushActivities();
       stopPlayer();
       stopStallWatch();
       turnQueue = [];
       authToken = null;
+      reconnectCount = 0;
+      lessonFinished = false;
+      submittedQuizzes.clear();
+      submittedTransfers.clear();
       prefetchedSpeech.clear();
+      replayedSpeech.clear();
       learnerActionStarted = null;
       if (ws) { try { ws.close(); } catch { /* noop */ } ws = null; }
       set({ status: 'idle' });
@@ -1250,6 +1478,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         reportOffline();
         return false;
       }
+      void markCourseInProgress(get().courseId || get().sessionId);
       learnerTakesFloor();
       pushTranscript('You', option);
       set({ prompt: null, lyoState: 'listening', waitingForScene: true });
@@ -1268,6 +1497,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         reportOffline();
         return;
       }
+      void markCourseInProgress(get().courseId || get().sessionId);
+      submittedQuizzes.set(el.quiz.component_id, { question: el.quiz.question || '', answered: option.label });
       set((state) => ({
         board: state.board.map((item) =>
           item.id === elementId && item.kind === 'quiz'
@@ -1292,6 +1523,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         reportOffline();
         return;
       }
+      void markCourseInProgress(get().courseId || get().sessionId);
+      submittedTransfers.set(el.input.component_id, { question: el.input.question || '', response: trimmed });
       set((state) => ({
         board: state.board.map((item) =>
           item.id === elementId && item.kind === 'transfer'

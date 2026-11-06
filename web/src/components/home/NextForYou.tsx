@@ -5,9 +5,8 @@ import { motion } from 'framer-motion';
 import { RotateCcw, GraduationCap, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
-import { formatSkillLabel } from '@/lib/utils';
 import { practiceEntryHref, reviewEntryHref } from '@/lib/entry-contract.mjs';
-import { masteryPercent } from '@/lib/learner-model.mjs';
+import { conceptDisplayName, masteryPercent } from '@/lib/learner-model.mjs';
 import type { Recommendation } from '@/types';
 
 /**
@@ -48,6 +47,7 @@ const itemVariants = {
 
 export default function NextForYou() {
   const [items, setItems] = useState<Recommendation[]>([]);
+  const [recordNames, setRecordNames] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -57,7 +57,22 @@ export default function NextForYou() {
     api.personalization
       .recommendations()
       .then((result) => {
-        if (!cancelled) setItems(result?.items ?? []);
+        const recommendations = result?.items ?? [];
+        if (!cancelled) setItems(recommendations);
+        // Older recommendation responses may carry only an opaque UUID.
+        // The learner's evidence record has canonical names; look them up
+        // without delaying the first render or exposing the ID as a title.
+        if (recommendations.some((item) => conceptDisplayName(item) === 'Skill name unavailable')) {
+          void api.personalization.learnerRecord().then((record) => {
+            if (cancelled || !record?.concepts?.length) return;
+            const names: Record<string, string> = {};
+            for (const concept of record.concepts) {
+              const name = conceptDisplayName(concept);
+              if (name !== 'Skill name unavailable') names[concept.concept_id] = name;
+            }
+            setRecordNames(names);
+          }).catch(() => { /* A missing record is unknown, not the UUID itself. */ });
+        }
       })
       .catch(() => {
         if (!cancelled) setItems([]);
@@ -97,6 +112,12 @@ export default function NextForYou() {
           // and the Classroom describe the same concept the same way.
           const percent = masteryPercent(item.mastery);
           const isDue = item.reason === 'due_for_review';
+          const conceptName = conceptDisplayName({
+            concept_id: item.concept_id,
+            display_name: item.display_name || recordNames[item.concept_id],
+          });
+          const entryTopic = conceptName === 'Skill name unavailable'
+            ? 'A saved learning concept' : conceptName;
           return (
           <Link
             key={item.concept_id}
@@ -105,8 +126,8 @@ export default function NextForYou() {
             // something they never learned, and log any success as retention.
             href={
               (isDue
-                ? reviewEntryHref(formatSkillLabel(item.concept_id), item.concept_id)
-                : practiceEntryHref(formatSkillLabel(item.concept_id))) ?? '/classroom'
+                ? reviewEntryHref(entryTopic, item.concept_id)
+                : practiceEntryHref(entryTopic)) ?? '/classroom'
             }
             className="glass-card p-4 flex items-center gap-4 transition-all duration-200 hover:scale-[1.01]"
           >
@@ -122,7 +143,7 @@ export default function NextForYou() {
 
             <div className="flex-1 min-w-0 space-y-1">
               <p className="text-sm font-semibold text-primary truncate">
-                {formatSkillLabel(item.concept_id)}
+                {conceptName === 'Skill name unavailable' ? 'Your saved learning concept' : conceptName}
               </p>
               <p className="text-[11px] text-secondary truncate">
                 {/* Assembled server-side, so every client says the same thing

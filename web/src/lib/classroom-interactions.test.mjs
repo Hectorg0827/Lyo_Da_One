@@ -8,12 +8,14 @@ import * as contract from './classroom-contract.mjs';
 import { canResumeClassroom } from './classroom-contract.mjs';
 import * as learner from './learner-model.mjs';
 import * as visuals from './teaching-activity.mjs';
+import * as inferredFractions from './infer-explicit-fraction-visual.mjs';
 import * as boardPresentation from './board-presentation.mjs';
 import * as commonsImage from './commons-image.mjs';
 import * as classroomCast from './classroom-cast.mjs';
 
 function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' } } = {}) {
   const sockets = [], timers = [], canceled = [], intervals = [];
+  const markedCourses = [];
   let clockMs = Date.now();
   let state;
   const create = init => {
@@ -25,16 +27,19 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     static OPEN = 1;
     readyState = 1;
     sent = [];
-    constructor() { sockets.push(this); }
+    constructor(url) { this.url = url; sockets.push(this); }
     send(message) { this.sent.push(JSON.parse(message)); }
     close() {}
+    interrupt() { this.readyState = 3; this.onclose?.({ code: 1006 }); }
     receive(message) { this.onmessage({ data: JSON.stringify(message) }); }
   }
   const deps = {
     zustand: { create }, '@/lib/classroom-audio.mjs': audio,
     '@/lib/classroom-contract.mjs': contract, '@/lib/learner-model.mjs': learner,
     '@/lib/teaching-activity.mjs': visuals, '@/lib/board-presentation.mjs': boardPresentation, '@/lib/classroom-sounds': { playSound() {} },
-    '@/lib/stack': { updateCourseProgress: async () => {} },
+    '@/lib/api': { getAccessToken: () => localStorage.getItem('lyo_token'), tryRefreshToken: async () => false },
+    '@/lib/infer-explicit-fraction-visual.mjs': inferredFractions,
+    '@/lib/stack': { updateCourseProgress: async () => {}, markCourseInProgress: async (courseId) => { markedCourses.push(courseId); } },
     // The Commons lookup the board shares with Chat. The real module, not a
     // stub: no test drives a board image, so it is never called, and a stub
     // would hide the day one does.
@@ -82,13 +87,39 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
       intervals.filter(interval => !interval.canceled).forEach(interval => interval.fn());
     }
   };
-  return { store: useClassroomStore, sockets, timers, canceled, intervals, storage: store, tick };
+  return { store: useClassroomStore, sockets, timers, canceled, intervals, markedCourses, storage: store, tick };
 }
 
 /** Everything the teacher has actually put on the board, without the cover
     page the class opens on. */
 const taught = store => store.getState().board.filter(el => el.kind !== 'opening');
 const component = (type, rest) => ({ event_type: 'component_render', component: { type, component_id: type, ...rest } });
+
+test('successful checkpoint participation marks a saved course in progress before any skill completes', () => {
+  const { store, sockets, markedCourses } = classroom({ connection: {
+    topic: 'Fractions', courseId: 'fractions-qa', sessionId: 'lesson',
+  } });
+  sockets[0].receive(component('QuizCard', { component_id: 'diagnostic', question: 'Denominator?', options: [
+    { id: 'a', label: 'Eight' },
+  ] }));
+  store.getState().answerQuiz('diagnostic', { id: 'a', label: 'Eight' });
+  assert.deepEqual(markedCourses, ['fractions-qa']);
+  sockets[0].receive(component('InputField', { component_id: 'transfer', question: 'Explain the fraction' }));
+  store.getState().answerTransfer('transfer', 'Eight equal parts make the whole.');
+  assert.deepEqual(markedCourses, ['fractions-qa', 'fractions-qa']);
+  store.getState().disconnect();
+});
+
+test('a checkpoint action that fails to reach the classroom never marks a course in progress', () => {
+  const { store, sockets, markedCourses } = classroom({ connection: {
+    topic: 'Fractions', courseId: 'fractions-qa', sessionId: 'lesson',
+  } });
+  sockets[0].receive(component('QuizCard', { component_id: 'diagnostic', question: 'Denominator?', options: [] }));
+  sockets[0].readyState = 3;
+  store.getState().answerQuiz('diagnostic', { id: 'a', label: 'Eight' });
+  assert.deepEqual(markedCourses, []);
+  store.getState().disconnect();
+});
 
 test('diagnostic feedback is visible and spoken while the next scene is still pending', () => {
   const { store, sockets, tick } = classroom();
@@ -151,6 +182,39 @@ test('new speech preserves the current board until replacement board content arr
   store.getState().disconnect();
 });
 
+test('explicit narrated fraction model draws a real five-part visual and yields to authored visual', () => {
+  const { store, sockets } = classroom();
+  const socket = sockets[0];
+  socket.receive(component('TeacherMessage', {
+    component_id: 'fraction-narration',
+    text: 'Look at the rectangle divided into five equal parts, with three shaded parts.',
+  }));
+  const fallback = taught(store).filter(el => el.kind === 'teaching_visual');
+  assert.equal(fallback.length, 1);
+  assert.equal(fallback[0].visual.kind, 'fraction_bar');
+  assert.equal(fallback[0].visual.parts, 5);
+  assert.equal(fallback[0].visual.value, 3);
+
+  socket.receive(component('LessonBlock', {
+    component_id: 'real-visual', block_type: 'teaching_visual',
+    block: { kind: 'fraction_bar', title: 'Authoritative model', caption: 'Two of four', description: 'Four equal parts', parts: 4, value: 2, whole: 1, unit: 'whole' },
+  }));
+  const visualsAfter = taught(store).filter(el => el.kind === 'teaching_visual');
+  assert.equal(visualsAfter.length, 1);
+  assert.equal(visualsAfter[0].id, 'real-visual');
+  assert.equal(visualsAfter[0].visual.parts, 4);
+  store.getState().disconnect();
+});
+
+test('ambiguous narration never fabricates a classroom diagram', () => {
+  const { store, sockets } = classroom();
+  sockets[0].receive(component('TeacherMessage', {
+    text: 'Look at the bar model and decide which option is correct.',
+  }));
+  assert.equal(taught(store).filter(el => el.kind === 'teaching_visual').length, 0);
+  store.getState().disconnect();
+});
+
 test('board rendering no longer inserts seconds of delay before narration', () => {
   const { store, sockets, timers } = classroom();
   sockets[0].receive(component('TeacherMessage', { text: JSON.stringify([
@@ -163,7 +227,7 @@ test('board rendering no longer inserts seconds of delay before narration', () =
   store.getState().disconnect();
 });
 
-test('unavailable natural teacher audio continues with captions instead of switching voices', async () => {
+test('unavailable natural teacher audio advances captions and retries on future lines', async () => {
   const { store, sockets, timers } = classroom();
   // The harness begins muted to keep other teaching tests deterministic.
   store.getState().toggleVoice();
@@ -171,7 +235,7 @@ test('unavailable natural teacher audio continues with captions instead of switc
   sockets[0].receive(component('TeacherMessage', { text: 'Let us learn with one clear example.' }));
   await new Promise(resolve => setImmediate(resolve));
 
-  assert.equal(store.getState().voiceOn, false, 'never switch to the phone voice');
+  assert.equal(store.getState().voiceOn, true, 'a transient failure must not permanently mute the next lesson turn');
   assert.match(store.getState().notice, /Teacher audio is temporarily unavailable/);
   assert.equal(store.getState().caption.text, 'Let us learn with one clear example.');
   assert.ok(timers.some(timer => !timer.canceled && timer.delay <= 4000),
@@ -346,6 +410,115 @@ test('a stalled answer offers manual continue without resubmitting the graded re
   store.getState().nudgeTeacher();
   assert.equal(socket.sent.at(-1).action_intent, 'continue');
   assert.equal(socket.sent.filter(m => m.action_intent === 'submit_answer').length, 1);
+  store.getState().disconnect();
+});
+
+test('a dropped socket reattaches to the same lesson without replaying a submitted answer', () => {
+  const { store, sockets, timers } = classroom({ connection: { topic: 'Algebra', courseId: 'course-algebra' } });
+  const firstSocket = sockets[0];
+  firstSocket.onopen();
+  firstSocket.receive(component('QuizCard', {
+    component_id: 'algebra-quiz-1', question: 'What is the variable?',
+    options: [{ id: 'x', label: 'x' }],
+  }));
+  store.getState().answerQuiz('algebra-quiz-1', { id: 'x', label: 'x' });
+  firstSocket.receive({ event_type: 'answer_feedback', session_id: store.getState().sessionId, data: {
+    component_id: 'algebra-quiz-1', verdict: 'correct', feedback: 'Exactly: x is the variable.',
+  } });
+  const sessionId = store.getState().sessionId;
+  const before = taught(store)[0];
+  firstSocket.interrupt();
+  assert.equal(store.getState().status, 'connecting');
+  assert.match(store.getState().notice, /answers are saved/i);
+  assert.equal(store.getState().board.find(el => el.id === before.id)?.feedback, before.feedback);
+  assert.equal(firstSocket.sent.filter(message => message.action_intent === 'submit_answer').length, 1);
+
+  const reconnect = timers.find(timer => !timer.canceled && timer.delay === 500);
+  assert.ok(reconnect, 'bounded reconnect scheduled after the first disconnect');
+  reconnect.fn();
+  assert.equal(sockets.length, 2);
+  const secondSocket = sockets[1];
+  assert.equal(new URL(secondSocket.url).searchParams.get('session_id'), sessionId);
+  assert.equal(new URL(secondSocket.url).searchParams.get('resume'), '1');
+  secondSocket.onopen();
+  secondSocket.receive({ event_type: 'scene_start', session_id: sessionId, scene: {} });
+  secondSocket.receive(component('QuizCard', {
+    component_id: 'algebra-quiz-1', question: 'What is the variable?', options: [{ id: 'x', label: 'x' }],
+  }));
+  assert.equal(taught(store)[0].answered, 'x', 'replayed question retains submission acknowledgement');
+  assert.equal(taught(store)[0].feedback, before.feedback, 'correct feedback survives transport replay');
+  store.getState().answerQuiz('algebra-quiz-1', { id: 'x', label: 'x' });
+  assert.equal(secondSocket.sent.filter(message => message.action_intent === 'submit_answer').length, 0);
+  assert.equal(store.getState().notice, null);
+  store.getState().disconnect();
+});
+
+test('a repeated network failure eventually stops reconnecting and keeps student work visible', () => {
+  const { store, sockets, timers } = classroom();
+  sockets[0].onopen();
+  sockets[0].receive(component('QuizCard', {
+    component_id: 'q-1', question: 'What is one half?', options: [{ id: 'a', label: '1/2' }],
+  }));
+  for (const delay of [500, 1400, 3200]) {
+    sockets.at(-1).interrupt();
+    const retry = timers.find(timer => !timer.canceled && timer.delay === delay);
+    assert.ok(retry, `retry scheduled at ${delay} ms`);
+    retry.fn();
+  }
+  sockets.at(-1).interrupt();
+  assert.equal(sockets.length, 4, 'three retries maximum');
+  assert.equal(store.getState().status, 'error');
+  assert.match(store.getState().error, /answers are saved/i);
+  assert.equal(taught(store)[0].quiz.question, 'What is one half?');
+  store.getState().disconnect();
+});
+
+test('an old component id cannot accidentally mark a different question answered', () => {
+  const { store, sockets } = classroom();
+  const first = component('QuizCard', {
+    component_id: 'question', question: 'Which is larger?', options: [{ id: 'a', label: 'A' }],
+  });
+  sockets[0].receive(first);
+  store.getState().answerQuiz('question', { id: 'a', label: 'A' });
+  sockets[0].receive({ event_type: 'scene_start', scene: {} });
+  sockets[0].receive(component('QuizCard', {
+    component_id: 'question', question: 'Which is smaller?', options: [{ id: 'b', label: 'B' }],
+  }));
+  assert.equal(taught(store)[0].answered, undefined);
+  store.getState().answerQuiz('question', { id: 'b', label: 'B' });
+  assert.equal(sockets[0].sent.filter(message => message.action_intent === 'submit_answer').length, 2);
+  store.getState().disconnect();
+});
+
+test('an intentional lesson restart cancels the previous socket retry', () => {
+  const { store, sockets, timers } = classroom();
+  sockets[0].onopen();
+  sockets[0].interrupt();
+  const staleRetry = timers.find(timer => timer.delay === 500);
+  assert.ok(staleRetry && !staleRetry.canceled);
+  store.getState().restartLesson();
+  assert.ok(staleRetry.canceled);
+  assert.equal(sockets.length, 2);
+  assert.notEqual(store.getState().sessionId, 'lesson');
+  store.getState().disconnect();
+});
+
+test('backend capacity recovery displays a pause and a real Retry CTA, not endless waiting', () => {
+  const { store, sockets } = classroom();
+  sockets[0].onopen();
+  sockets[0].receive({ event_type: 'scene_start', scene: {} });
+  sockets[0].receive(component('ExampleBlock', {
+    component_id: 'classroom-recovery/notice', title: 'Your lesson is paused',
+    content: 'The teacher cannot generate the next lesson step right now. Your work is saved.',
+  }));
+  sockets[0].receive(component('CTAButton', {
+    component_id: 'classroom-recovery/retry', label: 'Retry this step', action_intent: 'retry',
+  }));
+  assert.equal(store.getState().waitingForScene, false);
+  assert.equal(store.getState().stallPhase, 'none');
+  assert.match(store.getState().notice, /cannot generate/i);
+  assert.equal(store.getState().continueLabel, 'Retry this step');
+  assert.equal(store.getState().nextActionIntent, 'retry');
   store.getState().disconnect();
 });
 

@@ -1,0 +1,100 @@
+name: Android Staging Validation
+
+# Compile and test Android against the isolated LYO Journey staging backend.
+# This workflow never publishes an app, creates a release or deploys services.
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/classroom-retention-20261105]
+  pull_request:
+    branches: [feat/classroom-retention-20261105]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-staging-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-staging:
+    name: Compile and unit-test staging APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Verified Railway LyoJourneyStagingBackend service. Never use the
+      # app's production fallback for test-device artifacts.
+      LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app
+
+    steps:
+      - name: Checkout requested revision
+        uses: actions/checkout@v4
+
+      - name: Refuse missing or non-staging API endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$LYO_STAGING_API_BASE_URL" = 'https://lyojourneystagingbackend-staging.up.railway.app'
+
+      - name: Set up Node 22 for parity contracts
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify Android navigation and classroom contracts
+        run: |
+          node --test scripts/verify-android-product-navigation.test.mjs
+          node scripts/verify-android-product-navigation.mjs
+          node scripts/verify-nav-naming-parity.mjs
+          node scripts/verify-classroom-parity.mjs
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK 35
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+
+      - name: Set up Gradle 8.7
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Assemble and test the staging variant only
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:assembleStaging :app:testStagingUnitTest \
+            --no-daemon \
+            "-PLYO_STAGING_API_BASE_URL=$LYO_STAGING_API_BASE_URL"
+
+      - name: Verify compiled APK points to staging
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_config=$(find app/build/generated/source/buildConfig -path '*/staging/*/BuildConfig.java' -print -quit)
+          test -n "$build_config"
+          grep -F 'API_ENVIRONMENT = "staging"' "$build_config"
+          grep -F "API_BASE_URL = \"$LYO_STAGING_API_BASE_URL/\"" "$build_config"
+
+      - name: Upload staging-only device-validation APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-android-STAGING-only-apk
+          path: android/app/build/outputs/apk/staging/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Document safe device installation
+        shell: bash
+        run: |
+          echo '### Android staging build passed' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Artifact: **lyo-android-STAGING-only-apk** (staging backend only).' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Caution: the staging APK uses the same Android application ID as the Play Store app and may replace it when installed. Use a dedicated test device or profile.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Verify Settings → About → Server says **staging** before interactive acceptance tests.' >> "$GITHUB_STEP_SUMMARY"

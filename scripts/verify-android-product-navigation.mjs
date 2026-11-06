@@ -23,28 +23,44 @@ const createPost = read('android/app/src/main/java/com/lyo/app/ui/screens/create
 const createCommunity = read('android/app/src/main/java/com/lyo/app/ui/screens/create/CreateCommunityItemScreen.kt');
 const communityViewModel = read('android/app/src/main/java/com/lyo/app/ui/screens/community/CommunityMapViewModel.kt');
 
-// The second tab is the clip reel. It used to be labelled "Clips" while
-// "discover" opened an unrelated places-and-events browser nothing linked to,
-// so the same feed had two names and one of them pointed somewhere else. It
-// is Discover on all three platforms now — iOS shows the same reel, web
-// serves it at /discover — and the reel is what this tab opens.
-const expectedOrder = [
-  'BottomItem(Routes.HOME, "Focus"',
-  'BottomItem(Routes.DISCOVER, "Discover"',
-  'BottomItem(Routes.CREATE, "Create"',
-  'BottomItem(Routes.COMMUNITY, "Community"',
-  'BottomItem(Routes.PROFILE, "Profile"',
-];
+/**
+ * Verify the routes actually used to build the Android bottom bar. Reading
+ * the route list, rather than searching for the former five BottomItem()
+ * literals, prevents a declaration refactor from turning a real UX fix into
+ * a false regression. This checks the approved Web/Android hierarchy, not
+ * the older iOS order: Focus / Discover / Lyo / Community / +.
+ *
+ * Exported for mutation tests: a swapped route, wrong label or an extra
+ * Profile tab must fail even if every expected label appears elsewhere.
+ */
+export function verifyPrimaryTabs(source) {
+  const declaration = source.match(/\binternal\s+val\s+primaryTabRoutes\s*=\s*listOf\(([^)]*)\)/);
+  if (!declaration) throw new Error('Android primary navigation: no primaryTabRoutes declaration');
+  const actual = [...declaration[1].matchAll(/\bRoutes\.([A-Z_]+)\b/g)].map(([, route]) => route);
+  const expected = ['HOME', 'DISCOVER', 'CHAT', 'COMMUNITY', 'CREATE'];
+  const otherTokens = declaration[1]
+    .replace(/\bRoutes\.[A-Z_]+\b/g, '')
+    .replace(/[\s,]/g, '');
+  if (otherTokens || JSON.stringify(actual) !== JSON.stringify(expected)) {
+    throw new Error(`Android primary navigation: expected ${expected.join(' → ')}, got ${actual.join(' → ')}`);
+  }
 
-let previousIndex = -1;
-for (const marker of expectedOrder) {
-  const index = nav.indexOf(marker);
-  if (index < 0) throw new Error(`Android primary navigation: missing ${marker}`);
-  if (index <= previousIndex) throw new Error('Android primary navigation order does not match iOS product hierarchy');
-  previousIndex = index;
+  for (const [route, label, icon] of [
+    ['HOME', 'Focus', 'Home'],
+    ['DISCOVER', 'Discover', 'PlayCircle'],
+    ['CHAT', 'Lyo', 'SmartToy'],
+    ['COMMUNITY', 'Community', 'People'],
+    ['CREATE', 'Create', 'Add'],
+  ]) {
+    const mapping = new RegExp(`\\bRoutes\\.${route}\\s*->\\s*BottomItem\\(\\s*route\\s*,\\s*"${label}"\\s*,\\s*Icons\\.Filled\\.${icon}\\s*\\)`);
+    if (!mapping.test(source)) {
+      throw new Error(`Android primary navigation: missing ${route} / ${label} / ${icon} mapping`);
+    }
+  }
+  requireText(source, 'label = if (item.route == Routes.CREATE) null', 'Android unlabeled + icon');
 }
 
-rejectText(nav, 'BottomItem(Routes.CHAT', 'Android primary navigation');
+verifyPrimaryTabs(nav);
 
 // Both names reach the one reel. "clips" stays registered because links to it
 // have already been shared, and a shared clip that opens nothing is worse than
@@ -82,4 +98,4 @@ requireText(createCommunity, 'vm.createEvent(', 'Android event publish');
 requireText(communityViewModel, 'api.createCommunityEvent(request)', 'Android event publish request');
 requireText(createCommunity, 'endAt.isAfter(startAt)', 'Android event time validation');
 
-console.log('Android primary navigation and complete Create workflows match the supported iOS product hierarchy.');
+console.log('Android five-tab navigation (Focus, Discover, Lyo, Community, +) and Create workflows verified.');

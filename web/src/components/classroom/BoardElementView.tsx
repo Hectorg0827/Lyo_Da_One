@@ -14,6 +14,7 @@ import {
   type BrowserSpeechRecognition,
 } from '@/lib/browser-speech';
 import { createTranscriptAccumulator, tidyTranscript } from '@/lib/speech-transcript.mjs';
+import { isUncertainAnswerLabel } from '@/lib/classroom-answer-options.mjs';
 import type { ClassroomOpening } from '@/lib/classroom-contract.mjs';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
@@ -306,7 +307,7 @@ function QuizView({
       </p>
       <p className="whitespace-pre-line text-base font-medium leading-relaxed text-white">{quiz.question}</p>
       <div className="grid gap-2 sm:grid-cols-2">
-        {(quiz.options ?? []).map((opt) => {
+        {(quiz.options ?? []).filter((opt) => !isUncertainAnswerLabel(opt.label)).map((opt) => {
           const chosen = el.answered === opt.label;
           return (
             <button
