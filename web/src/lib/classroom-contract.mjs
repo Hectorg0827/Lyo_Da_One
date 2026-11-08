@@ -81,6 +81,11 @@ export function classroomCourseKey(connection) {
   return key || 'general';
 }
 
+/** A hard refresh recovers the current class; normal navigation starts fresh. */
+export function classroomResumeOnEntry(explicitResume, navigationType) {
+  return explicitResume === true || navigationType === 'reload';
+}
+
 /** Where a surface remembers the last live session for a course. */
 export function classroomSessionStorageKey(courseKey) {
   return `lyo_classroom_session:${courseKey}`;
