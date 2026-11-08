@@ -430,6 +430,27 @@ test('a stalled answer reattaches to the same scene without resubmitting the gra
   store.getState().disconnect();
 });
 
+test('replayed checkpoint components do not duplicate the saved teacher transcript', () => {
+  const { store, sockets } = classroom();
+  const socket = sockets[0];
+  socket.onopen();
+  const prompt = component('InputField', {
+    component_id: 'fraction-check-1', question: 'Explain why 2/4 equals 1/2.',
+  });
+  socket.receive(prompt);
+  socket.receive(prompt);
+  const lines = store.getState().transcript.filter(line =>
+    line.text.includes('Explain why 2/4 equals 1/2.'));
+  assert.equal(lines.length, 1);
+  socket.receive(component('InputField', {
+    component_id: 'fraction-check-2', question: 'Explain why 2/4 equals 1/2.',
+  }));
+  assert.equal(store.getState().transcript.filter(line =>
+    line.text.includes('Explain why 2/4 equals 1/2.')).length, 1,
+  'consecutive identical transcript lines are still collapsed');
+  store.getState().disconnect();
+});
+
 test('a dropped socket reattaches to the same lesson without replaying a submitted answer', () => {
   const { store, sockets, timers } = classroom({ connection: { topic: 'Algebra', courseId: 'course-algebra' } });
   const firstSocket = sockets[0];
