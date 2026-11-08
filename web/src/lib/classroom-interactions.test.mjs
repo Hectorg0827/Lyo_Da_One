@@ -371,7 +371,7 @@ test('a slow step becomes recoverable without automatically sending another requ
   assert.equal(store.getState().stallPhase, 'slow', 'a wait past the notice point says so');
 
   const sentBefore = socket.sent.length;
-  tick(20);
+  tick(50);
   assert.equal(socket.sent.length, sentBefore, 'no unsolicited request can interfere with grading');
   assert.equal(store.getState().stallPhase, 'stalled', 'a recoverable stall is visible after the threshold');
 
@@ -392,7 +392,7 @@ test('a step that arrives clears the wait rather than leaving the warning up', (
   store.getState().disconnect();
 });
 
-test('a stalled answer offers manual continue without resubmitting the graded response', () => {
+test('a stalled answer reattaches to the same scene without resubmitting the graded response', () => {
   const { store, sockets, tick } = classroom({ connection: { topic: 'Minecraft' } });
   const socket = sockets[0];
   socket.onopen();
@@ -402,13 +402,15 @@ test('a stalled answer offers manual continue without resubmitting the graded re
   store.getState().answerQuiz(taught(store)[0].id, { id: 'a', label: 'W' });
   assert.equal(socket.sent.at(-1).action_intent, 'submit_answer');
 
-  tick(31);
+  tick(61);
   // The grader must not see this learner's answer twice because the first
   // one was slow coming back.
   assert.equal(store.getState().stallPhase, 'stalled');
   assert.equal(socket.sent.at(-1).action_intent, 'submit_answer');
   store.getState().nudgeTeacher();
-  assert.equal(socket.sent.at(-1).action_intent, 'continue');
+  assert.equal(sockets.length, 2);
+  assert.match(sockets[1].url, /[?&]resume=1(?:&|$)/);
+  assert.equal(socket.sent.at(-1).action_intent, 'submit_answer');
   assert.equal(socket.sent.filter(m => m.action_intent === 'submit_answer').length, 1);
   store.getState().disconnect();
 });
@@ -526,11 +528,12 @@ test('the learner can ask again by hand without resubmitting their answer', () =
   const { store, sockets, tick } = classroom({ connection: { topic: 'Minecraft' } });
   const socket = sockets[0];
   socket.onopen();
-  tick(31);
-  tick(31);
+  tick(61);
+  tick(61);
   assert.equal(store.getState().stallPhase, 'stalled');
   store.getState().nudgeTeacher();
-  assert.equal(socket.sent.at(-1).action_intent, 'continue');
+  assert.equal(sockets.length, 2);
+  assert.match(sockets[1].url, /[?&]resume=1(?:&|$)/);
   assert.equal(store.getState().stallPhase, 'slow');
   store.getState().disconnect();
 });
@@ -572,6 +575,7 @@ test('picking up where you left off returns to that class, not the one just open
   // offer has to carry the session it is actually about.
   assert.equal(store.getState().sessionId, left.id);
   assert.equal(store.getState().resumedSession, true);
+  assert.match(sockets[1].url, /[?&]resume=1(?:&|$)/);
   store.getState().disconnect();
 });
 
