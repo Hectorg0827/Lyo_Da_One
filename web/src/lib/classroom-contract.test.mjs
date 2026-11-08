@@ -8,6 +8,7 @@ import {
   buildClassroomWsUrl,
   canResumeClassroom,
   classroomCourseKey,
+  classroomResumeOnEntry,
   classroomOpening,
   classroomSceneStart,
   classroomSessionStart,
@@ -16,6 +17,12 @@ import {
   isTransferReady,
   normalizeClassroomMode,
 } from './classroom-contract.mjs';
+
+test('a hard refresh resumes its saved lesson, while a normal entry starts fresh', () => {
+  assert.equal(classroomResumeOnEntry(false, 'reload'), true);
+  assert.equal(classroomResumeOnEntry(false, 'navigate'), false);
+  assert.equal(classroomResumeOnEntry(true, 'navigate'), true);
+});
 
 test('classroom URL preserves learner controls and course context', () => {
   const url = new URL(buildClassroomWsUrl('https://api.lyoapp.com/', {
