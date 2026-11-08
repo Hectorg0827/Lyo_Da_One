@@ -179,6 +179,17 @@ test('autoplay refusal is not treated as a recoverable decoder fragment', () => 
   assert.equal(retryPlaybackAfterMoreAudio({ name: 'NotSupportedError' }), true);
 });
 
+test('an autoplay refusal reaches the classroom with its browser error name intact', async () => {
+  const f = fixture();
+  const blocked = new Error('User activation required');
+  blocked.name = 'NotAllowedError';
+  f.audio.play = async () => { throw blocked; };
+  const body = new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1, 2, 3])); controller.close(); } });
+  await assert.rejects(playSpeechResponse(Promise.resolve(new Response(body, {
+    headers: { 'Content-Type': 'audio/mpeg' },
+  })), f.options), error => error.name === 'NotAllowedError' && error.playbackStarted === false);
+});
+
 test('interrupting during the download stops audio and cancels the reader', async () => {
   const f = fixture(); let stream, canceled = false;
   const body = new ReadableStream({ start(c) { stream = c; }, cancel() { canceled = true; } });
