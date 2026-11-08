@@ -133,7 +133,7 @@ export type BoardElement = (
   | { id: string; kind: 'chart'; chartType: 'bar' | 'line'; labels: string[]; values: number[] }
   | { id: string; kind: 'explorable'; expression: string; params: { name: string; min: number; max: number; initial: number; step?: number }[]; xMin?: number; xMax?: number; prompt?: string }
   | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string; skipped?: boolean }
-  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean; skipped?: boolean }
+  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean; skipped?: boolean; feedback?: string; wasCorrect?: boolean }
   | { id: string; kind: 'summary'; title: string; content?: string; items: string[]; retrievalScheduled?: boolean }
   | { id: string; kind: 'source'; labels: string[] }
   | { id: string; kind: 'dismissal'; homework?: string; nextHook?: string }
@@ -1000,7 +1000,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         const acknowledged = priorTransfer?.question === (comp.question || '') ? priorTransfer : null;
         addBoardElement({
           id: comp.component_id || nextId(), kind: 'transfer', input: comp, presentationRole: 'practice',
-          ...(acknowledged ? { response: acknowledged.response, submitted: true } : {}),
+          ...(acknowledged ? { response: acknowledged.response, submitted: true, feedback: acknowledged.feedback, wasCorrect: acknowledged.wasCorrect } : {}),
         });
         if (!acknowledged) pushTranscript('Teacher', `✍️ Application check: ${comp.question ?? ''}`);
         addSources(comp.source_attributions);
@@ -1099,14 +1099,20 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         if (msg.session_id !== get().sessionId) break;
         const data = msg.data as Record<string, unknown> | undefined;
         const feedback = typeof data?.feedback === 'string' ? data.feedback.trim() : '';
-        const answered = get().board.find((item) => item.kind === 'quiz'
-          && item.quiz.component_id === data?.component_id && item.answered);
+        const answered = get().board.find((item) =>
+          (item.kind === 'quiz' && item.quiz.component_id === data?.component_id && item.answered)
+          || (item.kind === 'transfer' && item.input.component_id === data?.component_id && item.submitted));
         // Late/replayed results must never colour a different question.
-        if (!feedback || !answered || answered.kind !== 'quiz' || answered.feedback === feedback) break;
+        if (!feedback || !answered || (answered.kind !== 'quiz' && answered.kind !== 'transfer') || answered.feedback === feedback) break;
         const wasCorrect = data?.verdict === 'correct' ? true
           : data?.verdict === 'incorrect' ? false : undefined;
-        const submitted = submittedQuizzes.get(answered.quiz.component_id);
-        if (submitted) submittedQuizzes.set(answered.quiz.component_id, { ...submitted, feedback, wasCorrect });
+        if (answered.kind === 'quiz') {
+          const submitted = submittedQuizzes.get(answered.quiz.component_id);
+          if (submitted) submittedQuizzes.set(answered.quiz.component_id, { ...submitted, feedback, wasCorrect });
+        } else if (answered.kind === 'transfer') {
+          const submitted = submittedTransfers.get(answered.input.component_id);
+          if (submitted) submittedTransfers.set(answered.input.component_id, { ...submitted, feedback, wasCorrect });
+        }
         set((state) => ({
           board: state.board.map((item) => item.id === answered.id
             ? { ...item, feedback, wasCorrect } : item),
@@ -1183,7 +1189,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   // question. Preserve the student's local acknowledgement across that replay
   // and never allow a reconnect to submit the same question twice.
   const submittedQuizzes = new Map<string, { question: string; answered: string; feedback?: string; wasCorrect?: boolean }>();
-  const submittedTransfers = new Map<string, { question: string; response: string }>();
+  const submittedTransfers = new Map<string, { question: string; response: string; feedback?: string; wasCorrect?: boolean }>();
   let activityTimer: ReturnType<typeof setTimeout> | null = null;
   function flushActivities() {
     if (activityTimer) clearTimeout(activityTimer);
