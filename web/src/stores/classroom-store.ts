@@ -675,7 +675,13 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   }
 
   function pushTranscript(speaker: string, text: string) {
-    set((s) => ({ transcript: [...s.transcript, { id: nextId(), speaker, text }] }));
+    set((s) => {
+      const last = s.transcript[s.transcript.length - 1];
+      // A re-sent component or narrated chunk must not create two
+      // consecutive identical lines in the learner's saved transcript.
+      if (last?.speaker === speaker && last.text.trim() === text.trim()) return s;
+      return { transcript: [...s.transcript, { id: nextId(), speaker, text }] };
+    });
   }
 
   /** The teacher erases the board only when the next scene's content is
@@ -991,7 +997,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
             wasCorrect: acknowledged.wasCorrect,
           } : {}),
         });
-        if (!acknowledged) pushTranscript('Teacher', `📝 Check: ${comp.question ?? ''}`);
+        if (!acknowledged && recordedCheckpointPrompts.get(comp.component_id) !== (comp.question ?? '')) {
+          recordedCheckpointPrompts.set(comp.component_id, comp.question ?? '');
+          pushTranscript('Teacher', `📝 Check: ${comp.question ?? ''}`);
+        }
         set({ canContinue: false });
         break;
       }
@@ -1002,7 +1011,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           id: comp.component_id || nextId(), kind: 'transfer', input: comp, presentationRole: 'practice',
           ...(acknowledged ? { response: acknowledged.response, submitted: true, feedback: acknowledged.feedback, wasCorrect: acknowledged.wasCorrect } : {}),
         });
-        if (!acknowledged) pushTranscript('Teacher', `✍️ Application check: ${comp.question ?? ''}`);
+        if (!acknowledged && recordedCheckpointPrompts.get(comp.component_id) !== (comp.question ?? '')) {
+          recordedCheckpointPrompts.set(comp.component_id, comp.question ?? '');
+          pushTranscript('Teacher', `✍️ Application check: ${comp.question ?? ''}`);
+        }
         addSources(comp.source_attributions);
         set({ canContinue: false, waitingForScene: false });
         break;
@@ -1190,6 +1202,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   // and never allow a reconnect to submit the same question twice.
   const submittedQuizzes = new Map<string, { question: string; answered: string; feedback?: string; wasCorrect?: boolean }>();
   const submittedTransfers = new Map<string, { question: string; response: string; feedback?: string; wasCorrect?: boolean }>();
+  const recordedCheckpointPrompts = new Map<string, string>();
   let activityTimer: ReturnType<typeof setTimeout> | null = null;
   function flushActivities() {
     if (activityTimer) clearTimeout(activityTimer);
@@ -1394,6 +1407,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       lessonFinished = false;
       submittedQuizzes.clear();
       submittedTransfers.clear();
+      recordedCheckpointPrompts.clear();
       const token = typeof window !== 'undefined' ? localStorage.getItem('lyo_token') : null;
       if (!token) {
         set({
