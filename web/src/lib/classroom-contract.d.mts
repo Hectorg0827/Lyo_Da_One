@@ -54,6 +54,7 @@ export function classroomCourseKey(connection: {
   courseId?: string;
   topic?: string;
 } | null | undefined): string;
+export function classroomResumeOnEntry(explicitResume: boolean, navigationType?: string): boolean;
 export function classroomSessionStorageKey(courseKey: string): string;
 export const CLASSROOM_RESUME_WINDOW_MS: number;
 export function canResumeClassroom(
