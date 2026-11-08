@@ -243,6 +243,21 @@ test('unavailable natural teacher audio advances captions and retries on future 
   store.getState().disconnect();
 });
 
+test('written application verdict is shown and spoken, including an incorrect answer', () => {
+  const { store, sockets } = classroom();
+  sockets[0].receive(component('InputField', { component_id: 'missing-numerator', question: '1/2 = ?/10' }));
+  store.getState().answerTransfer('missing-numerator', '4');
+  sockets[0].receive({ event_type: 'answer_feedback', session_id: 'lesson', data: {
+    component_id: 'missing-numerator', verdict: 'incorrect', feedback: 'Not quite: one half of ten is five.',
+  } });
+  const answer = store.getState().board.find(el => el.kind === 'transfer' && el.input.component_id === 'missing-numerator');
+  assert.equal(answer.submitted, true);
+  assert.equal(answer.wasCorrect, false);
+  assert.match(answer.feedback, /one half of ten is five/);
+  assert.equal(store.getState().caption.text, 'Not quite: one half of ten is five.');
+  store.getState().disconnect();
+});
+
 test('taking the floor immediately stops the teacher and preserves the board', () => {
   const { store, sockets, canceled } = classroom();
   sockets[0].receive(component('TeacherMessage', { text: 'A teacher explanation.' }));
