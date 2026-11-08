@@ -408,6 +408,7 @@ function stopStallWatch() {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 const CLASSROOM_VOICE_NOTICE = 'Teacher audio is temporarily unavailable. Captions will continue, and LYO will retry voice automatically.';
+const CLASSROOM_AUDIO_PERMISSION_NOTICE = 'Your browser blocked teacher audio. Tap the speaker control off and on to enable voice for the next explanation. Captions remain available.';
 const CLASSROOM_RECONNECT_NOTICE = 'Connection interrupted. Reconnecting to your lesson — your answers are saved.';
 const CLASSROOM_RESTORING_NOTICE = 'Connected. Restoring your lesson where you left off…';
 
@@ -625,15 +626,19 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         emitLineEnd('completed');
         onDone();
       }
-    }).catch(async (error: { playbackStarted?: boolean }) => {
+    }).catch(async (error: { playbackStarted?: boolean; name?: string }) => {
       if (controller.signal.aborted || generation !== speechGeneration) return;
+      const permissionBlocked = error.name === 'NotAllowedError';
+      window.dispatchEvent(new CustomEvent('classroom:voice-error', {
+        detail: { category: permissionBlocked ? 'browser-activation' : 'playback', name: error.name || 'Error', generation },
+      }));
       // One slow or unsupported audio response must not permanently mute the
       // class. The next spoken line retries the same natural teacher voice.
       // A short cooldown avoids hammering a single cold CPU on every caption.
       serverVoiceUnavailableUntil = Math.max(serverVoiceUnavailableUntil, Date.now() + 15_000);
       if (error.playbackStarted || voiceStarted) {
         // Do not replay already-heard words through a second, robotic voice.
-        set((state) => ({ notice: state.notice ?? CLASSROOM_VOICE_NOTICE }));
+        set((state) => ({ notice: permissionBlocked ? CLASSROOM_AUDIO_PERMISSION_NOTICE : (state.notice ?? CLASSROOM_VOICE_NOTICE) }));
         emitLineEnd('unavailable');
         onDone();
         return;
@@ -649,7 +654,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         });
         if (generation === speechGeneration) {
           set((state) => ({
-            notice: state.notice ?? 'Using your device voice while the classroom voice reconnects.',
+            notice: permissionBlocked ? CLASSROOM_AUDIO_PERMISSION_NOTICE : (state.notice ?? 'Using your device voice while the classroom voice reconnects.'),
           }));
           emitLineEnd('completed');
           onDone();
@@ -657,7 +662,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       } catch {
         if (controller.signal.aborted || generation !== speechGeneration) return;
         set((state) => ({
-          notice: state.notice ?? CLASSROOM_VOICE_NOTICE,
+          notice: permissionBlocked ? CLASSROOM_AUDIO_PERMISSION_NOTICE : (state.notice ?? CLASSROOM_VOICE_NOTICE),
         }));
         emitLineEnd('unavailable');
         playTimer = setTimeout(onDone, silentCaptionDelay(text));
@@ -1764,7 +1769,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       const next = !get().voiceOn;
       set((state) => ({
         voiceOn: next,
-        notice: next && state.notice === CLASSROOM_VOICE_NOTICE ? null : state.notice,
+        notice: next && (state.notice === CLASSROOM_VOICE_NOTICE || state.notice === CLASSROOM_AUDIO_PERMISSION_NOTICE) ? null : state.notice,
       }));
       if (!next) {
         prefetchedSpeech.clear();
