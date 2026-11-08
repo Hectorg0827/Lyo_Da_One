@@ -1448,7 +1448,11 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         error: null, notice: null, stallPhase: 'none',
       });
       startStallWatch();
-      openClassroomSocket(connection, token);
+      // An explicit return to a saved class must request the backend's
+      // replay protocol, just like a reconnect after network interruption.
+      // Otherwise the backend can advance into a welcome/new scene instead
+      // of restoring the exact outstanding question.
+      openClassroomSocket(connection, token, start.resumed);
     },
 
     disconnect: () => {
@@ -1684,22 +1688,24 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       });
     },
 
-    /**
-     * The step did not come; ask for it again.
-     *
-     * Always `continue`, never the learner's own submission replayed. A
-     * resent answer is a second answer as far as the grader is concerned,
-     * and a learner who waited out a slow network must not pay for it with
-     * a duplicate attempt on their record.
+    /** Reattach to the authoritative scene when a response seems stuck.
+     * Never send `continue`: the original answer may still be grading,
+     * and a second action can advance the engine past its pending result.
      */
     nudgeTeacher: () => {
-      if (!sendAction('continue', get().nextActionComponentId || 'web_continue')) {
+      if (!lastConnection || !authToken || !ws) {
         reportOffline();
         return;
       }
+      const priorSocket = ws;
+      ws = null;
+      try { priorSocket.close(); } catch { /* already disconnected */ }
+      reconnectCount = 0;
       waitingSince = Date.now();
       stallNudged = true;
-      set({ waitingForScene: true, stallPhase: 'slow', notice: null, lyoState: 'thinking' });
+      set({ status: 'connecting', waitingForScene: true, stallPhase: 'slow',
+        notice: CLASSROOM_RESTORING_NOTICE, lyoState: 'thinking' });
+      openClassroomSocket(lastConnection, authToken, true);
     },
 
     /**
