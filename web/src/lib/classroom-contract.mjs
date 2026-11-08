@@ -146,7 +146,9 @@ export function classroomSessionStart(courseKey, saved, { resume = false, now = 
  * controls that can actually get the class moving again.
  */
 export const CLASSROOM_STALL_NOTICE_MS = 12000;
-export const CLASSROOM_STALL_RECOVERY_MS = 30000;
+// The backend can take ~37s to complete an otherwise successful graded turn.
+// Offer a reattach only after that normal slow-path window has elapsed.
+export const CLASSROOM_STALL_RECOVERY_MS = 60000;
 
 export const CLASSROOM_STALL_NOTICE =
   'Your teacher is still checking. Your answer is saved; you do not need to submit it again.';
