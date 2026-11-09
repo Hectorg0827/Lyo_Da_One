@@ -946,6 +946,18 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     resumePlayer();
   }
 
+  // The answer-feedback event already narrates the verdict while the next
+  // scene is generated. Some director responses prepend that entire verdict
+  // again; speak only the new teaching so the learner does not hear it twice.
+  let recentAnswerFeedback = '';
+  function removeRepeatedFeedback(text: string): string {
+    if (!recentAnswerFeedback) return text;
+    const feedback = recentAnswerFeedback;
+    recentAnswerFeedback = '';
+    if (feedback.length < 40 || !text.startsWith(feedback)) return text;
+    return text.slice(feedback.length).trim();
+  }
+
   // ── incoming protocol ──
 
   function handleComponent(comp: ClassroomComponent) {
@@ -962,7 +974,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
     switch (comp.type) {
       case 'TeacherMessage': {
-        const text = (comp.text ?? '').trim();
+        const text = removeRepeatedFeedback((comp.text ?? '').trim());
         if (!text) return;
         if (comp.language_code) set({ languageCode: comp.language_code });
         if (text.startsWith('[')) {
@@ -1131,6 +1143,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           languageCode: typeof data?.language_code === 'string' ? data.language_code : state.languageCode,
         }));
         enqueueTurns([{ type: 'speech', speaker: 'Teacher', text: feedback }]);
+        recentAnswerFeedback = feedback;
         // The result has arrived, but the next scene is still being prepared.
         // Keep the wait watchdog alive and never offer a second submission.
         set({ waitingForScene: true, canContinue: false, lyoState: 'explaining' });
