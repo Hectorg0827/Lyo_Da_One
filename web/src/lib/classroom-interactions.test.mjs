@@ -154,6 +154,28 @@ test('diagnostic feedback is visible and spoken while the next scene is still pe
   store.getState().disconnect();
 });
 
+test('next teacher scene speaks only new teaching when it repeats immediate answer feedback', () => {
+  const { store, sockets } = classroom();
+  const socket = sockets[0];
+  socket.onopen();
+  socket.receive(component('QuizCard', { component_id: 'pizza-probe', question: 'How many sixths?',
+    options: [{ id: 'wrong', label: '2/6' }] }));
+  store.getState().answerQuiz('pizza-probe', { id: 'wrong', label: '2/6' });
+  const feedback = 'Not quite. Two thirds becomes four sixths because both parts are doubled.';
+  socket.receive({ event_type: 'answer_feedback', session_id: 'lesson', data: {
+    component_id: 'pizza-probe', verdict: 'incorrect', feedback,
+  } });
+  assert.equal(store.getState().caption.text, feedback);
+  socket.receive(component('TeacherMessage', { text: `${feedback} Now compare the two pizza diagrams.` }));
+  // The feedback can still be playing. Advancing the queued teacher turn
+  // proves neither the saved transcript nor spoken caption repeats it.
+  store.getState().skipTurn();
+  assert.equal(store.getState().caption.text, 'Now compare the two pizza diagrams.');
+  assert.equal(store.getState().transcript.filter(line => line.text === feedback).length, 1);
+  assert.equal(store.getState().transcript.filter(line => line.text.includes('Now compare')).length, 1);
+  store.getState().disconnect();
+});
+
 test('incorrect and not-sure results keep their distinct server verdicts', () => {
   for (const [verdict, expected] of [['incorrect', false], ['declined', undefined]]) {
     const { store, sockets } = classroom();
