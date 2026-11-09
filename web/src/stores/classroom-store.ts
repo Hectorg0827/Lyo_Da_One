@@ -133,7 +133,7 @@ export type BoardElement = (
   | { id: string; kind: 'chart'; chartType: 'bar' | 'line'; labels: string[]; values: number[] }
   | { id: string; kind: 'explorable'; expression: string; params: { name: string; min: number; max: number; initial: number; step?: number }[]; xMin?: number; xMax?: number; prompt?: string }
   | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string; skipped?: boolean }
-  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean; skipped?: boolean }
+  | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean; skipped?: boolean; feedback?: string; wasCorrect?: boolean }
   | { id: string; kind: 'summary'; title: string; content?: string; items: string[]; retrievalScheduled?: boolean }
   | { id: string; kind: 'source'; labels: string[] }
   | { id: string; kind: 'dismissal'; homework?: string; nextHook?: string }
@@ -408,6 +408,7 @@ function stopStallWatch() {
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 const CLASSROOM_VOICE_NOTICE = 'Teacher audio is temporarily unavailable. Captions will continue, and LYO will retry voice automatically.';
+const CLASSROOM_AUDIO_PERMISSION_NOTICE = 'Your browser blocked teacher audio. Tap the speaker control off and on to enable voice for the next explanation. Captions remain available.';
 const CLASSROOM_RECONNECT_NOTICE = 'Connection interrupted. Reconnecting to your lesson — your answers are saved.';
 const CLASSROOM_RESTORING_NOTICE = 'Connected. Restoring your lesson where you left off…';
 
@@ -625,15 +626,19 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         emitLineEnd('completed');
         onDone();
       }
-    }).catch(async (error: { playbackStarted?: boolean }) => {
+    }).catch(async (error: { playbackStarted?: boolean; name?: string }) => {
       if (controller.signal.aborted || generation !== speechGeneration) return;
+      const permissionBlocked = error.name === 'NotAllowedError';
+      window.dispatchEvent(new CustomEvent('classroom:voice-error', {
+        detail: { category: permissionBlocked ? 'browser-activation' : 'playback', name: error.name || 'Error', generation },
+      }));
       // One slow or unsupported audio response must not permanently mute the
       // class. The next spoken line retries the same natural teacher voice.
       // A short cooldown avoids hammering a single cold CPU on every caption.
       serverVoiceUnavailableUntil = Math.max(serverVoiceUnavailableUntil, Date.now() + 15_000);
       if (error.playbackStarted || voiceStarted) {
         // Do not replay already-heard words through a second, robotic voice.
-        set((state) => ({ notice: state.notice ?? CLASSROOM_VOICE_NOTICE }));
+        set((state) => ({ notice: permissionBlocked ? CLASSROOM_AUDIO_PERMISSION_NOTICE : (state.notice ?? CLASSROOM_VOICE_NOTICE) }));
         emitLineEnd('unavailable');
         onDone();
         return;
@@ -649,7 +654,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         });
         if (generation === speechGeneration) {
           set((state) => ({
-            notice: state.notice ?? 'Using your device voice while the classroom voice reconnects.',
+            notice: permissionBlocked ? CLASSROOM_AUDIO_PERMISSION_NOTICE : (state.notice ?? 'Using your device voice while the classroom voice reconnects.'),
           }));
           emitLineEnd('completed');
           onDone();
@@ -657,7 +662,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       } catch {
         if (controller.signal.aborted || generation !== speechGeneration) return;
         set((state) => ({
-          notice: state.notice ?? CLASSROOM_VOICE_NOTICE,
+          notice: permissionBlocked ? CLASSROOM_AUDIO_PERMISSION_NOTICE : (state.notice ?? CLASSROOM_VOICE_NOTICE),
         }));
         emitLineEnd('unavailable');
         playTimer = setTimeout(onDone, silentCaptionDelay(text));
@@ -670,7 +675,13 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   }
 
   function pushTranscript(speaker: string, text: string) {
-    set((s) => ({ transcript: [...s.transcript, { id: nextId(), speaker, text }] }));
+    set((s) => {
+      const last = s.transcript[s.transcript.length - 1];
+      // A re-sent component or narrated chunk must not create two
+      // consecutive identical lines in the learner's saved transcript.
+      if (last?.speaker === speaker && last.text.trim() === text.trim()) return s;
+      return { transcript: [...s.transcript, { id: nextId(), speaker, text }] };
+    });
   }
 
   /** The teacher erases the board only when the next scene's content is
@@ -935,6 +946,18 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     resumePlayer();
   }
 
+  // The answer-feedback event already narrates the verdict while the next
+  // scene is generated. Some director responses prepend that entire verdict
+  // again; speak only the new teaching so the learner does not hear it twice.
+  let recentAnswerFeedback = '';
+  function removeRepeatedFeedback(text: string): string {
+    if (!recentAnswerFeedback) return text;
+    const feedback = recentAnswerFeedback;
+    recentAnswerFeedback = '';
+    if (feedback.length < 40 || !text.startsWith(feedback)) return text;
+    return text.slice(feedback.length).trim();
+  }
+
   // ── incoming protocol ──
 
   function handleComponent(comp: ClassroomComponent) {
@@ -951,7 +974,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     }
     switch (comp.type) {
       case 'TeacherMessage': {
-        const text = (comp.text ?? '').trim();
+        const text = removeRepeatedFeedback((comp.text ?? '').trim());
         if (!text) return;
         if (comp.language_code) set({ languageCode: comp.language_code });
         if (text.startsWith('[')) {
@@ -986,7 +1009,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
             wasCorrect: acknowledged.wasCorrect,
           } : {}),
         });
-        if (!acknowledged) pushTranscript('Teacher', `📝 Check: ${comp.question ?? ''}`);
+        if (!acknowledged && recordedCheckpointPrompts.get(comp.component_id) !== (comp.question ?? '')) {
+          recordedCheckpointPrompts.set(comp.component_id, comp.question ?? '');
+          pushTranscript('Teacher', `📝 Check: ${comp.question ?? ''}`);
+        }
         set({ canContinue: false });
         break;
       }
@@ -995,9 +1021,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         const acknowledged = priorTransfer?.question === (comp.question || '') ? priorTransfer : null;
         addBoardElement({
           id: comp.component_id || nextId(), kind: 'transfer', input: comp, presentationRole: 'practice',
-          ...(acknowledged ? { response: acknowledged.response, submitted: true } : {}),
+          ...(acknowledged ? { response: acknowledged.response, submitted: true, feedback: acknowledged.feedback, wasCorrect: acknowledged.wasCorrect } : {}),
         });
-        if (!acknowledged) pushTranscript('Teacher', `✍️ Application check: ${comp.question ?? ''}`);
+        if (!acknowledged && recordedCheckpointPrompts.get(comp.component_id) !== (comp.question ?? '')) {
+          recordedCheckpointPrompts.set(comp.component_id, comp.question ?? '');
+          pushTranscript('Teacher', `✍️ Application check: ${comp.question ?? ''}`);
+        }
         addSources(comp.source_attributions);
         set({ canContinue: false, waitingForScene: false });
         break;
@@ -1094,20 +1123,27 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         if (msg.session_id !== get().sessionId) break;
         const data = msg.data as Record<string, unknown> | undefined;
         const feedback = typeof data?.feedback === 'string' ? data.feedback.trim() : '';
-        const answered = get().board.find((item) => item.kind === 'quiz'
-          && item.quiz.component_id === data?.component_id && item.answered);
+        const answered = get().board.find((item) =>
+          (item.kind === 'quiz' && item.quiz.component_id === data?.component_id && item.answered)
+          || (item.kind === 'transfer' && item.input.component_id === data?.component_id && item.submitted));
         // Late/replayed results must never colour a different question.
-        if (!feedback || !answered || answered.kind !== 'quiz' || answered.feedback === feedback) break;
+        if (!feedback || !answered || (answered.kind !== 'quiz' && answered.kind !== 'transfer') || answered.feedback === feedback) break;
         const wasCorrect = data?.verdict === 'correct' ? true
           : data?.verdict === 'incorrect' ? false : undefined;
-        const submitted = submittedQuizzes.get(answered.quiz.component_id);
-        if (submitted) submittedQuizzes.set(answered.quiz.component_id, { ...submitted, feedback, wasCorrect });
+        if (answered.kind === 'quiz') {
+          const submitted = submittedQuizzes.get(answered.quiz.component_id);
+          if (submitted) submittedQuizzes.set(answered.quiz.component_id, { ...submitted, feedback, wasCorrect });
+        } else if (answered.kind === 'transfer') {
+          const submitted = submittedTransfers.get(answered.input.component_id);
+          if (submitted) submittedTransfers.set(answered.input.component_id, { ...submitted, feedback, wasCorrect });
+        }
         set((state) => ({
           board: state.board.map((item) => item.id === answered.id
             ? { ...item, feedback, wasCorrect } : item),
           languageCode: typeof data?.language_code === 'string' ? data.language_code : state.languageCode,
         }));
         enqueueTurns([{ type: 'speech', speaker: 'Teacher', text: feedback }]);
+        recentAnswerFeedback = feedback;
         // The result has arrived, but the next scene is still being prepared.
         // Keep the wait watchdog alive and never offer a second submission.
         set({ waitingForScene: true, canContinue: false, lyoState: 'explaining' });
@@ -1178,7 +1214,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   // question. Preserve the student's local acknowledgement across that replay
   // and never allow a reconnect to submit the same question twice.
   const submittedQuizzes = new Map<string, { question: string; answered: string; feedback?: string; wasCorrect?: boolean }>();
-  const submittedTransfers = new Map<string, { question: string; response: string }>();
+  const submittedTransfers = new Map<string, { question: string; response: string; feedback?: string; wasCorrect?: boolean }>();
+  const recordedCheckpointPrompts = new Map<string, string>();
   let activityTimer: ReturnType<typeof setTimeout> | null = null;
   function flushActivities() {
     if (activityTimer) clearTimeout(activityTimer);
@@ -1383,6 +1420,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       lessonFinished = false;
       submittedQuizzes.clear();
       submittedTransfers.clear();
+      recordedCheckpointPrompts.clear();
       const token = typeof window !== 'undefined' ? localStorage.getItem('lyo_token') : null;
       if (!token) {
         set({
@@ -1448,7 +1486,11 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         error: null, notice: null, stallPhase: 'none',
       });
       startStallWatch();
-      openClassroomSocket(connection, token);
+      // An explicit return to a saved class must request the backend's
+      // replay protocol, just like a reconnect after network interruption.
+      // Otherwise the backend can advance into a welcome/new scene instead
+      // of restoring the exact outstanding question.
+      openClassroomSocket(connection, token, start.resumed);
     },
 
     disconnect: () => {
@@ -1684,22 +1726,24 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       });
     },
 
-    /**
-     * The step did not come; ask for it again.
-     *
-     * Always `continue`, never the learner's own submission replayed. A
-     * resent answer is a second answer as far as the grader is concerned,
-     * and a learner who waited out a slow network must not pay for it with
-     * a duplicate attempt on their record.
+    /** Reattach to the authoritative scene when a response seems stuck.
+     * Never send `continue`: the original answer may still be grading,
+     * and a second action can advance the engine past its pending result.
      */
     nudgeTeacher: () => {
-      if (!sendAction('continue', get().nextActionComponentId || 'web_continue')) {
+      if (!lastConnection || !authToken || !ws) {
         reportOffline();
         return;
       }
+      const priorSocket = ws;
+      ws = null;
+      try { priorSocket.close(); } catch { /* already disconnected */ }
+      reconnectCount = 0;
       waitingSince = Date.now();
       stallNudged = true;
-      set({ waitingForScene: true, stallPhase: 'slow', notice: null, lyoState: 'thinking' });
+      set({ status: 'connecting', waitingForScene: true, stallPhase: 'slow',
+        notice: CLASSROOM_RESTORING_NOTICE, lyoState: 'thinking' });
+      openClassroomSocket(lastConnection, authToken, true);
     },
 
     /**
@@ -1758,7 +1802,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       const next = !get().voiceOn;
       set((state) => ({
         voiceOn: next,
-        notice: next && state.notice === CLASSROOM_VOICE_NOTICE ? null : state.notice,
+        notice: next && (state.notice === CLASSROOM_VOICE_NOTICE || state.notice === CLASSROOM_AUDIO_PERMISSION_NOTICE) ? null : state.notice,
       }));
       if (!next) {
         prefetchedSpeech.clear();

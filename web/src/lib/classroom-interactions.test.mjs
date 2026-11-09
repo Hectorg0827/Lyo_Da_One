@@ -154,6 +154,28 @@ test('diagnostic feedback is visible and spoken while the next scene is still pe
   store.getState().disconnect();
 });
 
+test('next teacher scene speaks only new teaching when it repeats immediate answer feedback', () => {
+  const { store, sockets } = classroom();
+  const socket = sockets[0];
+  socket.onopen();
+  socket.receive(component('QuizCard', { component_id: 'pizza-probe', question: 'How many sixths?',
+    options: [{ id: 'wrong', label: '2/6' }] }));
+  store.getState().answerQuiz('pizza-probe', { id: 'wrong', label: '2/6' });
+  const feedback = 'Not quite. Two thirds becomes four sixths because both parts are doubled.';
+  socket.receive({ event_type: 'answer_feedback', session_id: 'lesson', data: {
+    component_id: 'pizza-probe', verdict: 'incorrect', feedback,
+  } });
+  assert.equal(store.getState().caption.text, feedback);
+  socket.receive(component('TeacherMessage', { text: `${feedback} Now compare the two pizza diagrams.` }));
+  // The feedback can still be playing. Advancing the queued teacher turn
+  // proves neither the saved transcript nor spoken caption repeats it.
+  store.getState().skipTurn();
+  assert.equal(store.getState().caption.text, 'Now compare the two pizza diagrams.');
+  assert.equal(store.getState().transcript.filter(line => line.text === feedback).length, 1);
+  assert.equal(store.getState().transcript.filter(line => line.text.includes('Now compare')).length, 1);
+  store.getState().disconnect();
+});
+
 test('incorrect and not-sure results keep their distinct server verdicts', () => {
   for (const [verdict, expected] of [['incorrect', false], ['declined', undefined]]) {
     const { store, sockets } = classroom();
@@ -240,6 +262,21 @@ test('unavailable natural teacher audio advances captions and retries on future 
   assert.equal(store.getState().caption.text, 'Let us learn with one clear example.');
   assert.ok(timers.some(timer => !timer.canceled && timer.delay <= 4000),
     'the caption remains on screen before the next turn');
+  store.getState().disconnect();
+});
+
+test('written application verdict is shown and spoken, including an incorrect answer', () => {
+  const { store, sockets } = classroom();
+  sockets[0].receive(component('InputField', { component_id: 'missing-numerator', question: '1/2 = ?/10' }));
+  store.getState().answerTransfer('missing-numerator', '4');
+  sockets[0].receive({ event_type: 'answer_feedback', session_id: 'lesson', data: {
+    component_id: 'missing-numerator', verdict: 'incorrect', feedback: 'Not quite: one half of ten is five.',
+  } });
+  const answer = store.getState().board.find(el => el.kind === 'transfer' && el.input.component_id === 'missing-numerator');
+  assert.equal(answer.submitted, true);
+  assert.equal(answer.wasCorrect, false);
+  assert.match(answer.feedback, /one half of ten is five/);
+  assert.equal(store.getState().caption.text, 'Not quite: one half of ten is five.');
   store.getState().disconnect();
 });
 
@@ -371,7 +408,7 @@ test('a slow step becomes recoverable without automatically sending another requ
   assert.equal(store.getState().stallPhase, 'slow', 'a wait past the notice point says so');
 
   const sentBefore = socket.sent.length;
-  tick(20);
+  tick(50);
   assert.equal(socket.sent.length, sentBefore, 'no unsolicited request can interfere with grading');
   assert.equal(store.getState().stallPhase, 'stalled', 'a recoverable stall is visible after the threshold');
 
@@ -392,7 +429,7 @@ test('a step that arrives clears the wait rather than leaving the warning up', (
   store.getState().disconnect();
 });
 
-test('a stalled answer offers manual continue without resubmitting the graded response', () => {
+test('a stalled answer reattaches to the same scene without resubmitting the graded response', () => {
   const { store, sockets, tick } = classroom({ connection: { topic: 'Minecraft' } });
   const socket = sockets[0];
   socket.onopen();
@@ -402,14 +439,37 @@ test('a stalled answer offers manual continue without resubmitting the graded re
   store.getState().answerQuiz(taught(store)[0].id, { id: 'a', label: 'W' });
   assert.equal(socket.sent.at(-1).action_intent, 'submit_answer');
 
-  tick(31);
+  tick(61);
   // The grader must not see this learner's answer twice because the first
   // one was slow coming back.
   assert.equal(store.getState().stallPhase, 'stalled');
   assert.equal(socket.sent.at(-1).action_intent, 'submit_answer');
   store.getState().nudgeTeacher();
-  assert.equal(socket.sent.at(-1).action_intent, 'continue');
+  assert.equal(sockets.length, 2);
+  assert.match(sockets[1].url, /[?&]resume=1(?:&|$)/);
+  assert.equal(socket.sent.at(-1).action_intent, 'submit_answer');
   assert.equal(socket.sent.filter(m => m.action_intent === 'submit_answer').length, 1);
+  store.getState().disconnect();
+});
+
+test('replayed checkpoint components do not duplicate the saved teacher transcript', () => {
+  const { store, sockets } = classroom();
+  const socket = sockets[0];
+  socket.onopen();
+  const prompt = component('InputField', {
+    component_id: 'fraction-check-1', question: 'Explain why 2/4 equals 1/2.',
+  });
+  socket.receive(prompt);
+  socket.receive(prompt);
+  const lines = store.getState().transcript.filter(line =>
+    line.text.includes('Explain why 2/4 equals 1/2.'));
+  assert.equal(lines.length, 1);
+  socket.receive(component('InputField', {
+    component_id: 'fraction-check-2', question: 'Explain why 2/4 equals 1/2.',
+  }));
+  assert.equal(store.getState().transcript.filter(line =>
+    line.text.includes('Explain why 2/4 equals 1/2.')).length, 1,
+  'consecutive identical transcript lines are still collapsed');
   store.getState().disconnect();
 });
 
@@ -526,11 +586,12 @@ test('the learner can ask again by hand without resubmitting their answer', () =
   const { store, sockets, tick } = classroom({ connection: { topic: 'Minecraft' } });
   const socket = sockets[0];
   socket.onopen();
-  tick(31);
-  tick(31);
+  tick(61);
+  tick(61);
   assert.equal(store.getState().stallPhase, 'stalled');
   store.getState().nudgeTeacher();
-  assert.equal(socket.sent.at(-1).action_intent, 'continue');
+  assert.equal(sockets.length, 2);
+  assert.match(sockets[1].url, /[?&]resume=1(?:&|$)/);
   assert.equal(store.getState().stallPhase, 'slow');
   store.getState().disconnect();
 });
@@ -572,6 +633,7 @@ test('picking up where you left off returns to that class, not the one just open
   // offer has to carry the session it is actually about.
   assert.equal(store.getState().sessionId, left.id);
   assert.equal(store.getState().resumedSession, true);
+  assert.match(sockets[1].url, /[?&]resume=1(?:&|$)/);
   store.getState().disconnect();
 });
 

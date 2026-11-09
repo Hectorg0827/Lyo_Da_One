@@ -31,6 +31,7 @@ import { classroomExitHref } from '@/lib/course-destination.mjs';
 import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
 import {
   CLASSROOM_STALL_RECOVERY,
+  classroomResumeOnEntry,
 } from '@/lib/classroom-contract.mjs';
 import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
@@ -225,7 +226,11 @@ function ClassroomStage() {
   }, [waitingForScene, status, isNarrating]);
 
   useEffect(() => {
-    connect(connection);
+    // Refresh must reattach before a fresh generation overwrites the saved
+    // session ID. Navigating normally to the course still starts anew.
+    const navigationEntry = window.performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    const navigationType = navigationEntry?.type;
+    connect({ ...connection, resume: classroomResumeOnEntry(resume, navigationType) });
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     // Reduced motion changes the local animation behavior immediately. It
