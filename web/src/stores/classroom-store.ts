@@ -1318,16 +1318,33 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     const delayMs = RECONNECT_DELAYS_MS[reconnectCount];
     reconnectCount += 1;
     stopReconnect();
-    reconnectTimer = setTimeout(() => {
+    const reconnectingSession = get().sessionId;
+    reconnectTimer = setTimeout(async () => {
       reconnectTimer = null;
-      if (lastConnection && authToken && get().status === 'connecting') {
+      if (lastConnection && authToken && get().status === 'connecting' && get().sessionId === reconnectingSession) {
+        // A rejected WebSocket handshake does not expose an HTTP 401.
+        // Reuse refreshed API credentials or refresh the access token once
+        // before reconnecting to the existing classroom session.
+        const currentToken = getAccessToken();
+        if (currentToken && currentToken !== authToken) authToken = currentToken;
+        else if (refreshSocketAuth && !socketAuthRefreshAttempted) {
+          socketAuthRefreshAttempted = true;
+          if (await tryRefreshToken()) {
+            const renewed = getAccessToken();
+            if (renewed) authToken = renewed;
+          }
+        }
+        if (!lastConnection || get().status !== 'connecting' || get().sessionId !== reconnectingSession) return;
         openClassroomSocket(lastConnection, authToken, true);
       }
     }, delayMs);
   }
 
+  let refreshSocketAuth = false;
+  let socketAuthRefreshAttempted = false;
   function openClassroomSocket(connection: ClassroomConnection, token: string, resumeTransport = false) {
     let socket: WebSocket;
+    let opened = false;
     try {
       socket = new WebSocket(wsUrl({ ...connection, sessionId: get().sessionId }, token, resumeTransport));
     } catch {
@@ -1338,6 +1355,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     ws = socket;
     socket.onopen = () => {
       if (ws !== socket) return;
+      opened = true;
+      refreshSocketAuth = false;
+      socketAuthRefreshAttempted = false;
       set((state) => ({
         status: 'live',
         notice: resumeTransport ? CLASSROOM_RESTORING_NOTICE : state.notice,
@@ -1367,6 +1387,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     socket.onclose = () => {
       if (ws !== socket) return;
       ws = null;
+      if (!opened) refreshSocketAuth = true;
       if (lessonFinished) {
         set({ status: 'ended', waitingForScene: false, stallPhase: 'none' });
         return;
@@ -1417,6 +1438,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     connect: (connection: ClassroomConnection) => {
       get().disconnect();
       reconnectCount = 0;
+      refreshSocketAuth = false;
+      socketAuthRefreshAttempted = false;
       lessonFinished = false;
       submittedQuizzes.clear();
       submittedTransfers.clear();

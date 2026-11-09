@@ -13,7 +13,7 @@ import * as boardPresentation from './board-presentation.mjs';
 import * as commonsImage from './commons-image.mjs';
 import * as classroomCast from './classroom-cast.mjs';
 
-function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' } } = {}) {
+function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' }, refreshToken = async () => false } = {}) {
   const sockets = [], timers = [], canceled = [], intervals = [];
   const markedCourses = [];
   let clockMs = Date.now();
@@ -37,7 +37,7 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     zustand: { create }, '@/lib/classroom-audio.mjs': audio,
     '@/lib/classroom-contract.mjs': contract, '@/lib/learner-model.mjs': learner,
     '@/lib/teaching-activity.mjs': visuals, '@/lib/board-presentation.mjs': boardPresentation, '@/lib/classroom-sounds': { playSound() {} },
-    '@/lib/api': { getAccessToken: () => localStorage.getItem('lyo_token'), tryRefreshToken: async () => false },
+    '@/lib/api': { getAccessToken: () => localStorage.getItem('lyo_token'), tryRefreshToken: refreshToken },
     '@/lib/infer-explicit-fraction-visual.mjs': inferredFractions,
     '@/lib/stack': { updateCourseProgress: async () => {}, markCourseInProgress: async (courseId) => { markedCourses.push(courseId); } },
     // The Commons lookup the board shares with Chat. The real module, not a
@@ -513,7 +513,29 @@ test('a dropped socket reattaches to the same lesson without replaying a submitt
   store.getState().disconnect();
 });
 
-test('a repeated network failure eventually stops reconnecting and keeps student work visible', () => {
+test('a rejected WebSocket handshake refreshes the token before resuming', async () => {
+  let refreshes = 0;
+  const { store, sockets, timers, storage } = classroom({
+    storage: { lyo_token: 'expired-access-token' },
+    refreshToken: async () => {
+      refreshes += 1;
+      storage.lyo_token = 'renewed-access-token';
+      return true;
+    },
+  });
+  sockets[0].interrupt();
+  const retry = timers.find(timer => !timer.canceled && timer.delay === 500);
+  assert.ok(retry);
+  await retry.fn();
+  assert.equal(refreshes, 1);
+  assert.equal(sockets.length, 2);
+  assert.equal(new URL(sockets[1].url).searchParams.get('token'), 'renewed-access-token');
+  sockets[1].onopen();
+  assert.equal(store.getState().status, 'live');
+  store.getState().disconnect();
+});
+
+test('a repeated network failure eventually stops reconnecting and keeps student work visible', async () => {
   const { store, sockets, timers } = classroom();
   sockets[0].onopen();
   sockets[0].receive(component('QuizCard', {
@@ -523,7 +545,7 @@ test('a repeated network failure eventually stops reconnecting and keeps student
     sockets.at(-1).interrupt();
     const retry = timers.find(timer => !timer.canceled && timer.delay === delay);
     assert.ok(retry, `retry scheduled at ${delay} ms`);
-    retry.fn();
+    await retry.fn();
   }
   sockets.at(-1).interrupt();
   assert.equal(sockets.length, 4, 'three retries maximum');
