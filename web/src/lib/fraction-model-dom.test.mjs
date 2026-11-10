@@ -52,11 +52,11 @@ function loadTsx(filename) {
 
 const { TeachingVisualCard } = loadTsx(path.join(webRoot, 'src/components/classroom/TeachingVisualView.tsx'));
 
-async function renderVisual(visual) {
+async function renderVisual(visual, readOnly = true) {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
-  await act(async () => root.render(React.createElement(TeachingVisualCard, { id: 'visual:model', visual, readOnly: true })));
+  await act(async () => root.render(React.createElement(TeachingVisualCard, { id: 'visual:model', visual, readOnly })));
   return { container, close: async () => {
     await act(async () => root.unmount());
     container.remove();
@@ -85,6 +85,19 @@ test('fraction bar is a real accessible SVG with five distinct, exactly three sh
       'numerator is encoded as three shaded cells, independent of answer options');
     assert.equal(new Set(partitions.map(part => part.getAttribute('x'))).size, 5,
       'partitions are spatially distinct rather than five rectangles stacked on top');
+  } finally { await view.close(); }
+});
+
+test('fraction bar updates its accessible description when a learner changes the shaded count', async () => {
+  const visual = fraction('fraction_bar', 6, 2, 'The original bar has 2 of 6 pieces shaded.');
+  const view = await renderVisual(visual, false);
+  try {
+    const svg = view.container.querySelector('svg[role="img"]');
+    assert.match(svg.getAttribute('aria-label'), /2\/6 · 2 of 6 equal sections shaded/);
+    await act(async () => view.container.querySelector('button[aria-label="Add one part"]')
+      .dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
+    assert.match(svg.getAttribute('aria-label'), /3\/6 · 3 of 6 equal sections shaded/);
+    assert.equal(svg.querySelectorAll('rect[fill="var(--lyo-300)"]').length, 3);
   } finally { await view.close(); }
 });
 
