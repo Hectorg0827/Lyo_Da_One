@@ -26,6 +26,7 @@ import {
 } from '@/stores/classroom-store';
 import { ClassroomWorkspace } from '@/components/classroom/ClassroomWorkspace';
 import { classroomIsPaused, workspaceScrollAnchor } from '@/lib/board-presentation.mjs';
+import { alignTeachingVisualsOnBoard } from '@/lib/align-teaching-visual.mjs';
 import { upsertCourseOnStart } from '@/lib/stack';
 import { classroomExitHref } from '@/lib/course-destination.mjs';
 import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
@@ -279,7 +280,12 @@ function ClassroomStage() {
   // mid-lesson would discard the lesson the learner is already being taught,
   // which is what leaving the banner up for the whole session invited.
   const openingOnly = board.every((el) => el.kind === 'opening');
-  const shownBoard = viewingBoard === -1 ? board : boardHistory[viewingBoard] ?? board;
+  // Replayed lessons may contain visuals saved before the incoming-event fix.
+  // Normalize only the display, leaving saved counts and pizza models intact.
+  const shownBoard = useMemo(
+    () => alignTeachingVisualsOnBoard(viewingBoard === -1 ? board : boardHistory[viewingBoard] ?? board),
+    [board, boardHistory, viewingBoard],
+  );
   const totalBoards = boardHistory.length;
   const lessonPaused = classroomIsPaused(board);
   const activeCheckpoint = viewingBoard === -1

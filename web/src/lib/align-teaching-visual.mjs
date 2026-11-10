@@ -21,3 +21,21 @@ export function alignTeachingVisualToExample(visual, exampleTitle, exampleConten
     description: `${visual.parts} equal ${label} pieces; ${visual.value} selected`,
   }) || visual;
 }
+
+/** Recheck previously saved boards when displayed, without changing storage. */
+export function alignTeachingVisualsOnBoard(board) {
+  let example = null;
+  let changed = false;
+  const result = board.map(element => {
+    if (element.kind === 'summary') {
+      example = element;
+      return element;
+    }
+    if (element.kind !== 'teaching_visual' || !example) return element;
+    const aligned = alignTeachingVisualToExample(element.visual, example.title, example.content);
+    if (aligned === element.visual) return element;
+    changed = true;
+    return { ...element, visual: aligned };
+  });
+  return changed ? result : board;
+}
