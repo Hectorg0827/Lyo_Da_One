@@ -14,7 +14,7 @@ import * as boardPresentation from './board-presentation.mjs';
 import * as commonsImage from './commons-image.mjs';
 import * as classroomCast from './classroom-cast.mjs';
 
-function classroom({ storage = {}, tabStorage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' }, refreshToken = async () => false } = {}) {
+function classroom({ storage = {}, tabStorage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' }, refreshToken = async () => false, fetcher, speechPlayer } = {}) {
   const sockets = [], timers = [], canceled = [], intervals = [];
   const markedCourses = [];
   let clockMs = Date.now();
@@ -35,7 +35,7 @@ function classroom({ storage = {}, tabStorage = {}, connection = { topic: 'Fract
     receive(message) { this.onmessage({ data: JSON.stringify(message) }); }
   }
   const deps = {
-    zustand: { create }, '@/lib/classroom-audio.mjs': audio,
+    zustand: { create }, '@/lib/classroom-audio.mjs': speechPlayer ? { ...audio, playSpeechResponse: speechPlayer } : audio,
     '@/lib/classroom-contract.mjs': contract, '@/lib/learner-model.mjs': learner,
     '@/lib/teaching-activity.mjs': visuals, '@/lib/board-presentation.mjs': boardPresentation, '@/lib/classroom-sounds': { playSound() {} },
     '@/lib/api': { getAccessToken: () => localStorage.getItem('lyo_token'), tryRefreshToken: refreshToken },
@@ -66,6 +66,7 @@ function classroom({ storage = {}, tabStorage = {}, connection = { topic: 'Fract
     exports: {}, require: name => { if (!deps[name]) throw Error(name); return deps[name]; },
     process: { env: {} }, AbortController, performance, URL, CustomEvent,
     WebSocket: Socket, localStorage,
+    ...(fetcher ? { fetch: fetcher } : {}),
     window: {
       speechSynthesis: { cancel() { canceled.push(true); } },
       dispatchEvent() {},
@@ -290,6 +291,35 @@ test('unavailable natural teacher audio advances captions and retries on future 
   assert.equal(store.getState().caption.text, 'Let us learn with one clear example.');
   assert.ok(timers.some(timer => !timer.canceled && timer.delay <= 4000),
     'the caption remains on screen before the next turn');
+  store.getState().disconnect();
+});
+
+test('autoplay refusal never cools down an otherwise healthy natural teacher voice', async () => {
+  let requests = 0;
+  const blocked = Object.assign(new Error('User activation required'), {
+    name: 'NotAllowedError', playbackStarted: false,
+  });
+  const { store, sockets } = classroom({
+    fetcher: async () => {
+      requests += 1;
+      return new Response('mp3 audio', { headers: { 'Content-Type': 'audio/mpeg' } });
+    },
+    speechPlayer: async () => { throw blocked; },
+  });
+  store.getState().toggleVoice();
+  const socket = sockets[0];
+  socket.onopen();
+  socket.receive(component('TeacherMessage', { text: 'The first explanation.' }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests, 1);
+  assert.match(store.getState().notice, /browser blocked teacher audio/);
+
+  // A learner gesture and the next spoken line can arrive under 15 seconds.
+  // A browser-level denial must not turn that next natural-voice request into
+  // a synthetic server failure and send it to the robotic fallback again.
+  socket.receive(component('TeacherMessage', { text: 'Now a different explanation.' }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(requests, 2, 'the next voice request must reach the healthy server');
   store.getState().disconnect();
 });
 

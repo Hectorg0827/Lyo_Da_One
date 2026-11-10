@@ -656,10 +656,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       window.dispatchEvent(new CustomEvent('classroom:voice-error', {
         detail: { category: permissionBlocked ? 'browser-activation' : 'playback', name: error.name || 'Error', generation },
       }));
-      // One slow or unsupported audio response must not permanently mute the
-      // class. The next spoken line retries the same natural teacher voice.
-      // A short cooldown avoids hammering a single cold CPU on every caption.
-      serverVoiceUnavailableUntil = Math.max(serverVoiceUnavailableUntil, Date.now() + 15_000);
+      // A browser autoplay refusal is not a server outage: the stream was
+      // delivered, but Chrome requires a user gesture to play it. Do not put
+      // the healthy natural-voice provider into cooldown just as the learner
+      // taps the speaker to enable playback. Other failures retain a short
+      // cooldown to avoid hammering a cold or temporarily broken endpoint.
+      if (!permissionBlocked) {
+        serverVoiceUnavailableUntil = Math.max(serverVoiceUnavailableUntil, Date.now() + 15_000);
+      }
       if (error.playbackStarted || voiceStarted) {
         // Do not replay already-heard words through a second, robotic voice.
         set((state) => ({ notice: permissionBlocked ? CLASSROOM_AUDIO_PERMISSION_NOTICE : (state.notice ?? CLASSROOM_VOICE_NOTICE) }));
