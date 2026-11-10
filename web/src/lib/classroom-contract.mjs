@@ -147,13 +147,13 @@ export function classroomSessionStart(courseKey, saved, { resume = false, now = 
  * moments at which they stop pretending.
  *
  * NOTICE: say out loud that this is taking longer than it should.
- * RECOVERY: the step is not coming — resend it once, then hand the learner
- * controls that can actually get the class moving again.
+ * RECOVERY: offer a safe reconnect to replay the server-owned scene. Never
+ * re-submit the original answer while its grading may still be in progress.
  */
 export const CLASSROOM_STALL_NOTICE_MS = 12000;
-// The backend can take ~37s to complete an otherwise successful graded turn.
-// Offer a reattach only after that normal slow-path window has elapsed.
-export const CLASSROOM_STALL_RECOVERY_MS = 60000;
+// Show recovery controls after 30s, without automatically sending another
+// action. The backend may still be generating a valid turn at this point.
+export const CLASSROOM_STALL_RECOVERY_MS = 30000;
 
 export const CLASSROOM_STALL_NOTICE =
   'Your teacher is still checking. Your answer is saved; you do not need to submit it again.';

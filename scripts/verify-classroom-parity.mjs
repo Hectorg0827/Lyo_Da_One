@@ -347,10 +347,12 @@ requireText(
   androidSessionContract, 'STALL_RECOVERY_MS = 30_000L', 'Android stall recovery threshold',
 );
 
-// The one thing the nudge may never be. Re-sending the learner's own answer
-// because the first one was slow coming back is a second attempt on their
-// record for a failure that was not theirs.
-requireText(web, "sendAction('continue', get().nextActionComponentId", 'Web stall nudge is continue');
+// Web safely reattaches to the authoritative scene. Unlike an older nudge
+// contract, it must NOT emit a second action while grading may be in flight.
+const webNudge = web.split('nudgeTeacher: () => {')[1]?.split('restartLesson: () => {')[0] || '';
+requireText(webNudge, 'priorSocket.close()', 'Web stall nudge closes stale socket');
+requireText(webNudge, 'openClassroomSocket(lastConnection, authToken, true)', 'Web stall nudge reattaches');
+rejectText(webNudge, 'sendAction(', 'Web stall nudge never duplicates a learner action');
 requireText(
   iosClassroom, 'sendUserAction(actionIntent: "continue", componentId: "continue")',
   'iOS stall nudge is continue',
