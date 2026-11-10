@@ -9,6 +9,7 @@ import { canResumeClassroom } from './classroom-contract.mjs';
 import * as learner from './learner-model.mjs';
 import * as visuals from './teaching-activity.mjs';
 import * as inferredFractions from './infer-explicit-fraction-visual.mjs';
+import * as alignedFractions from './align-teaching-visual.mjs';
 import * as boardPresentation from './board-presentation.mjs';
 import * as commonsImage from './commons-image.mjs';
 import * as classroomCast from './classroom-cast.mjs';
@@ -39,6 +40,7 @@ function classroom({ storage = {}, tabStorage = {}, connection = { topic: 'Fract
     '@/lib/teaching-activity.mjs': visuals, '@/lib/board-presentation.mjs': boardPresentation, '@/lib/classroom-sounds': { playSound() {} },
     '@/lib/api': { getAccessToken: () => localStorage.getItem('lyo_token'), tryRefreshToken: refreshToken },
     '@/lib/infer-explicit-fraction-visual.mjs': inferredFractions,
+    '@/lib/align-teaching-visual.mjs': alignedFractions,
     '@/lib/stack': { updateCourseProgress: async () => {}, markCourseInProgress: async (courseId) => { markedCourses.push(courseId); } },
     // The Commons lookup the board shares with Chat. The real module, not a
     // stub: no test drives a board image, so it is never called, and a stub
@@ -240,6 +242,26 @@ test('ambiguous narration never fabricates a classroom diagram', () => {
     text: 'Look at the bar model and decide which option is correct.',
   }));
   assert.equal(taught(store).filter(el => el.kind === 'teaching_visual').length, 0);
+  store.getState().disconnect();
+});
+
+test('an adjacent chocolate-bar example converts a mismatched pie to a bar while a pizza example keeps its pie', () => {
+  const { store, sockets } = classroom();
+  const socket = sockets[0];
+  const fraction = { kind: 'fraction_pie', title: '3 out of 6 slices', caption: '3 of 6 slices',
+    description: '3 equal slices from 6', parts: 6, value: 3, whole: 1, unit: 'whole' };
+  socket.receive(component('ExampleBlock', { component_id: 'chocolate', title: 'Chocolate Bar Analogy',
+    content: 'Three of six equal mini-squares make half a chocolate bar.' }));
+  socket.receive(component('LessonBlock', { component_id: 'chocolate-visual', block_type: 'teaching_visual', block: fraction }));
+  assert.equal(taught(store).find(el => el.id === 'chocolate-visual').visual.kind, 'fraction_bar');
+  socket.receive(component('ExampleBlock', { component_id: 'pizza', title: 'Pizza cut into six slices',
+    content: 'Three equal pizza slices make half a circle.' }));
+  socket.receive(component('LessonBlock', { component_id: 'pizza-visual', block_type: 'teaching_visual', block: fraction }));
+  assert.equal(taught(store).find(el => el.id === 'pizza-visual').visual.kind, 'fraction_pie');
+  socket.receive({ event_type: 'scene_start', scene: {} });
+  socket.receive(component('LessonBlock', { component_id: 'new-scene-visual', block_type: 'teaching_visual', block: fraction }));
+  assert.equal(taught(store).find(el => el.id === 'new-scene-visual').visual.kind, 'fraction_pie',
+    'stale examples from the previous scene may not reclassify a new diagram');
   store.getState().disconnect();
 });
 

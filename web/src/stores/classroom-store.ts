@@ -19,6 +19,7 @@ import { markCourseInProgress, updateCourseProgress } from '@/lib/stack';
 import { conceptsFromClassScene, transcriptLabelFor } from '@/lib/learner-model.mjs';
 import { parseTeachingVisual, type TeachingVisual } from '@/lib/teaching-activity.mjs';
 import { inferExplicitFractionVisual } from '@/lib/infer-explicit-fraction-visual.mjs';
+import { alignTeachingVisualToExample } from '@/lib/align-teaching-visual.mjs';
 import { parseBoardDocument, presentationRoleFor, type BoardDocument, type PresentationRole } from '@/lib/board-presentation.mjs';
 import { resolveCommonsImage } from '@/lib/commons-image.mjs';
 import { classroomSpeaker } from '@/lib/classroom-cast.mjs';
@@ -1095,7 +1096,14 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
             // A server-authored visual takes precedence over a conservative
             // narration fallback if both arrive during the same scene.
             set((s) => ({ board: s.board.filter((el) => !el.id.startsWith('inferred-fraction:')) }));
-            addBoardElement({ id: comp.component_id, kind: 'teaching_visual', visual, presentationRole: presentationRoleFor(comp) });
+            // The previous scene stays visible while a new one is prepared.
+            // Never borrow its analogy to rewrite the new scene's visual.
+            const closestExample = pendingErase ? undefined
+              : [...get().board].reverse().find((element) => element.kind === 'summary');
+            const alignedVisual = closestExample?.kind === 'summary'
+              ? alignTeachingVisualToExample(visual, closestExample.title, closestExample.content)
+              : visual;
+            addBoardElement({ id: comp.component_id, kind: 'teaching_visual', visual: alignedVisual, presentationRole: presentationRoleFor(comp) });
           }
         } else if (comp.block_type === 'summary' && comp.block) {
           addBoardElement({
