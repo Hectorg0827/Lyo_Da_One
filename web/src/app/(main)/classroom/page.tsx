@@ -800,7 +800,7 @@ function ClassroomStage() {
       {/* The board grows with the lesson. Only the learning canvas scrolls;
           characters yield their space when they are no longer useful. */}
       {(shownBoard.length > 0 || !prompt || error) && (
-      <div ref={boardScrollRef} className="mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2 sm:mx-4">
+      <div ref={boardScrollRef} className="mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-pb-16 pb-16 sm:mx-4 sm:pb-20">
         <div className={cn(
           'flex min-h-[180px] flex-col rounded-[22px] border border-white/10 overflow-hidden',
           'bg-[var(--surface)]',
