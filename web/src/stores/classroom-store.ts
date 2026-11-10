@@ -315,7 +315,30 @@ let learnerActionStarted: number | null = null;
 let contentLatencyRecorded = false;
 let idCounter = 0;
 let pendingErase = false; // erase lazily when the NEW scene's content arrives
+// A student's position while reviewing earlier boards is UI state, not a
+// backend lesson action. Keep only its index in this tab (never lesson text).
+let preferredBoardView: number | null = null;
 const nextId = () => `cf_${++idCounter}`;
+
+const boardViewKey = (sessionId: string) => `lyo_classroom_board_view:${sessionId}`;
+
+function readBoardView(sessionId: string): number | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage?.getItem(boardViewKey(sessionId));
+    if (raw == null) return null;
+    const index = Number(raw);
+    return Number.isSafeInteger(index) && index >= 0 && index < 200 ? index : null;
+  } catch { return null; }
+}
+
+function saveBoardView(sessionId: string, index: number) {
+  if (typeof window === 'undefined' || !sessionId) return;
+  try {
+    if (index < 0) window.sessionStorage?.removeItem(boardViewKey(sessionId));
+    else window.sessionStorage?.setItem(boardViewKey(sessionId), String(index));
+  } catch { /* storage restrictions must never block the classroom */ }
+}
 
 // ─── Remembering a seat ──────────────────────────────────────────────────────
 
@@ -700,7 +723,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     waitingSince = null;
     stallNudged = false;
     set((s) => ({
-      board: [...s.board, el], viewingBoard: -1, waitingForScene: false, stallPhase: 'none',
+      board: [...s.board, el],
+      viewingBoard: preferredBoardView !== null && preferredBoardView < s.boardHistory.length
+        ? preferredBoardView : -1,
+      waitingForScene: false, stallPhase: 'none',
     }));
   }
 
@@ -753,7 +779,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     set((s) => ({
       boardHistory: [...s.boardHistory, s.board],
       board: [],
-      viewingBoard: -1,
+      viewingBoard: preferredBoardView !== null && preferredBoardView < s.boardHistory.length + 1
+        ? preferredBoardView : -1,
     }));
   }
 
@@ -1469,6 +1496,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         ? { sessionId: connection.sessionId, generation: 1, resumed: false }
         : classroomSessionStart(courseKey, saved, { resume: connection.resume === true });
       const sessionId = start.sessionId;
+      preferredBoardView = start.resumed ? readBoardView(sessionId) : null;
+      if (!start.resumed) saveBoardView(sessionId, -1);
       writeSavedSession(courseKey, {
         id: sessionId,
         startedAt: Date.now(),
@@ -1856,6 +1885,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
     setRevealedCount: (count: number) => set({ revealedCount: Math.max(0, count) }),
 
-    viewBoard: (index: number) => set({ viewingBoard: index }),
+    viewBoard: (index: number) => {
+      preferredBoardView = index >= 0 ? index : null;
+      saveBoardView(get().sessionId, index);
+      set({ viewingBoard: index });
+    },
   };
 });

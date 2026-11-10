@@ -13,7 +13,7 @@ import * as boardPresentation from './board-presentation.mjs';
 import * as commonsImage from './commons-image.mjs';
 import * as classroomCast from './classroom-cast.mjs';
 
-function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' }, refreshToken = async () => false } = {}) {
+function classroom({ storage = {}, tabStorage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' }, refreshToken = async () => false } = {}) {
   const sockets = [], timers = [], canceled = [], intervals = [];
   const markedCourses = [];
   let clockMs = Date.now();
@@ -55,6 +55,11 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     getItem: key => (key in store ? store[key] : null),
     setItem: (key, value) => { store[key] = String(value); },
   };
+  const sessionStorage = {
+    getItem: key => (key in tabStorage ? tabStorage[key] : null),
+    setItem: (key, value) => { tabStorage[key] = String(value); },
+    removeItem: key => { delete tabStorage[key]; },
+  };
   const context = {
     exports: {}, require: name => { if (!deps[name]) throw Error(name); return deps[name]; },
     process: { env: {} }, AbortController, performance, URL, CustomEvent,
@@ -63,6 +68,7 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
       speechSynthesis: { cancel() { canceled.push(true); } },
       dispatchEvent() {},
       localStorage,
+      sessionStorage,
     },
     setTimeout: (fn, delay) => { const timer = { fn, delay, canceled: false }; timers.push(timer); return timer; },
     clearTimeout: timer => { if (timer) timer.canceled = true; },
@@ -87,7 +93,7 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
       intervals.filter(interval => !interval.canceled).forEach(interval => interval.fn());
     }
   };
-  return { store: useClassroomStore, sockets, timers, canceled, intervals, markedCourses, storage: store, tick };
+  return { store: useClassroomStore, sockets, timers, canceled, intervals, markedCourses, storage: store, tabStorage, tick };
 }
 
 /** Everything the teacher has actually put on the board, without the cover
@@ -383,6 +389,33 @@ test('a learner who asks to resume gets the session they left', () => {
   assert.equal(store.getState().resumedSession, true);
   assert.equal(store.getState().resumable, null);
   assert.equal(store.getState().board[0].opening.title, 'Back to Minecraft');
+  store.getState().disconnect();
+});
+
+test('a resumed lesson restores the selected history board when its replay arrives', () => {
+  const tabStorage = { 'lyo_classroom_board_view:Minecraft~2': '1' };
+  const { store, sockets } = classroom({
+    connection: { topic: 'Minecraft', resume: true },
+    storage: { 'lyo_classroom_session:Minecraft': JSON.stringify({
+      id: 'Minecraft~2', startedAt: Date.now(), generation: 2,
+    }) },
+    tabStorage,
+  });
+  assert.equal(store.getState().viewingBoard, -1, 'wait until the saved board exists');
+  sockets[0].receive({ event_type: 'scene_start', scene: {} });
+  sockets[0].receive(component('TeacherMessage', { text: JSON.stringify([{ type: 'board', content: 'First replayed board' }]) }));
+  sockets[0].receive({ event_type: 'scene_start', scene: {} });
+  sockets[0].receive(component('TeacherMessage', { text: JSON.stringify([{ type: 'board', content: 'Second replayed board' }]) }));
+  assert.equal(store.getState().viewingBoard, 1);
+  store.getState().viewBoard(-1);
+  assert.equal(tabStorage['lyo_classroom_board_view:Minecraft~2'], undefined);
+  store.getState().disconnect();
+});
+
+test('a new lesson ignores the board view of the previous session', () => {
+  const tabStorage = { 'lyo_classroom_board_view:Minecraft~2': '1' };
+  const { store } = classroom({ connection: { topic: 'Minecraft' }, tabStorage });
+  assert.equal(store.getState().viewingBoard, -1);
   store.getState().disconnect();
 });
 
