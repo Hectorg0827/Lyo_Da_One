@@ -31,20 +31,20 @@ const communityViewModel = read('android/app/src/main/java/com/lyo/app/ui/screen
 const expectedOrder = [
   'BottomItem(Routes.HOME, "Focus"',
   'BottomItem(Routes.DISCOVER, "Discover"',
-  'BottomItem(Routes.CREATE, "Create"',
+  'BottomItem(Routes.CHAT, "Lyo"',
   'BottomItem(Routes.COMMUNITY, "Community"',
-  'BottomItem(Routes.PROFILE, "Profile"',
+  'BottomItem(Routes.CREATE, "+"',
 ];
 
 let previousIndex = -1;
 for (const marker of expectedOrder) {
   const index = nav.indexOf(marker);
   if (index < 0) throw new Error(`Android primary navigation: missing ${marker}`);
-  if (index <= previousIndex) throw new Error('Android primary navigation order does not match iOS product hierarchy');
+  if (index <= previousIndex) throw new Error('Android primary navigation order does not match approved LYO hierarchy');
   previousIndex = index;
 }
 
-rejectText(nav, 'BottomItem(Routes.CHAT', 'Android primary navigation');
+requireText(nav, 'composable(Routes.CHAT) { ChatScreen(nav) }', 'Android Lyo chat route');
 
 // Both names reach the one reel. "clips" stays registered because links to it
 // have already been shared, and a shared clip that opens nothing is worse than
@@ -82,4 +82,4 @@ requireText(createCommunity, 'vm.createEvent(', 'Android event publish');
 requireText(communityViewModel, 'api.createCommunityEvent(request)', 'Android event publish request');
 requireText(createCommunity, 'endAt.isAfter(startAt)', 'Android event time validation');
 
-console.log('Android primary navigation and complete Create workflows match the supported iOS product hierarchy.');
+console.log('Android primary navigation matches approved LYO hierarchy; Create workflows remain reachable.');
