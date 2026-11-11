@@ -1,0 +1,20 @@
+name: LYO Android navigation staging checks
+on:
+  push:
+    branches:
+      - work/android-web-parity-20261111
+  workflow_dispatch:
+jobs:
+  navigation-contracts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Android primary navigation and Create
+        run: node scripts/verify-android-product-navigation.mjs
+      - name: Verify Android Community reliability contract
+        run: node scripts/verify-android-community-reliability.mjs
