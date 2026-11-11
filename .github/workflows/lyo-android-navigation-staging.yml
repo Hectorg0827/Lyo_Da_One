@@ -1,4 +1,5 @@
 name: LYO Android navigation staging checks
+# PR #211 staging verification; no production deployment
 on:
   push:
     branches:
