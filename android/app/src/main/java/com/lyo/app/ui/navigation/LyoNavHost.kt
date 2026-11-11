@@ -135,8 +135,8 @@ object Routes {
 private data class BottomItem(val route: String, val label: String, val icon: ImageVector)
 
 /**
- * Mirrors the iOS product hierarchy: Focus, Discover, Create, Community, Profile.
- * Chat remains a contextual destination opened from Create and other learning surfaces.
+ * LYO primary hierarchy: Focus, Discover, Lyo, Community, +.
+ * Chat is the primary Lyo destination; Create remains accessible through +.
  *
  * "Discover" is the clip reel. The two were one surface under two names: this
  * bar said Clips and opened [ClipsScreen], while "discover" opened an unrelated
@@ -148,9 +148,9 @@ private data class BottomItem(val route: String, val label: String, val icon: Im
 private val bottomItems = listOf(
     BottomItem(Routes.HOME, "Focus", Icons.Filled.Home),
     BottomItem(Routes.DISCOVER, "Discover", Icons.Filled.PlayCircle),
-    BottomItem(Routes.CREATE, "Create", Icons.Filled.Add),
+    BottomItem(Routes.CHAT, "Lyo", Icons.Filled.Person),
     BottomItem(Routes.COMMUNITY, "Community", Icons.Filled.People),
-    BottomItem(Routes.PROFILE, "Profile", Icons.Filled.Person),
+    BottomItem(Routes.CREATE, "+", Icons.Filled.Add),
 )
 
 @Composable
