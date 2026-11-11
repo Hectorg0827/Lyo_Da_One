@@ -8,7 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -148,7 +148,7 @@ private data class BottomItem(val route: String, val label: String, val icon: Im
 private val bottomItems = listOf(
     BottomItem(Routes.HOME, "Focus", Icons.Filled.Home),
     BottomItem(Routes.DISCOVER, "Discover", Icons.Filled.PlayCircle),
-    BottomItem(Routes.CHAT, "Lyo", Icons.Filled.Person),
+    BottomItem(Routes.CHAT, "Lyo", Icons.Filled.ChatBubble),
     BottomItem(Routes.COMMUNITY, "Community", Icons.Filled.People),
     BottomItem(Routes.CREATE, "+", Icons.Filled.Add),
 )
