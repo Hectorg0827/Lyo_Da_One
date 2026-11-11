@@ -10,7 +10,7 @@ on:
     # listing them here too ran every job twice per push.
     branches: [main]
   pull_request:
-    branches: [main, chat-course-builder-ux-20261001, feat/discover-filter-header-20261012]
+    branches: [main, chat-course-builder-ux-20261001, feat/discover-filter-header-20261012, group-c-web-android-staging]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -116,6 +116,8 @@ jobs:
         run: node scripts/verify-android-release-config.mjs
 
   ios:
+    # Web/Android-only staging gate: do not spend macOS runner minutes on iOS.
+    if: github.base_ref != 'group-c-web-android-staging'
     name: Build & Test (iOS)
     runs-on: macos-14
     timeout-minutes: 40
