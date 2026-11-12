@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
@@ -137,12 +136,9 @@ object ClassroomSocketClient {
             return
         }
 
-        val wsBase = BuildConfig.API_BASE_URL
-            .replaceFirst("https://", "wss://")
-            .replaceFirst("http://", "ws://")
-            .trimEnd('/')
-
-        val urlBuilder = "$wsBase/api/v1/classroom/ws/connect".toHttpUrl().newBuilder()
+        // OkHttp upgrades this HTTP request to a WebSocket itself. HttpUrl
+        // rejects ws/wss schemes before a network request can be made.
+        val urlBuilder = classroomConnectionUrl(BuildConfig.API_BASE_URL).newBuilder()
             .addQueryParameter("session_id", params.sessionId)
             .addQueryParameter("client_contract_version", "2")
             .addQueryParameter("topic", params.topic)

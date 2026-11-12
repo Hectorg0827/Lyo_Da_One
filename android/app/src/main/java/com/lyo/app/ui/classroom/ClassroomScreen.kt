@@ -81,7 +81,7 @@ fun ClassroomScreen(
     var resumeSeat by remember(topic, courseId) { mutableStateOf<ClassroomSavedSession?>(null) }
     // Keyed on the attempt too: engine.dispose() closes this player, so a
     // rebuilt engine inheriting the old one would teach in silence.
-    val voicePlayer = remember(context, topic, courseId, teachingMode, courseBacked, sessionAttempt) {
+    val voicePlayer = remember(context, topic, courseId, teachingMode, courseBacked, reviewConceptId, lessonDuration, sessionAttempt) {
         ClassroomVoicePlayer(context)
     }
     val engine = remember(

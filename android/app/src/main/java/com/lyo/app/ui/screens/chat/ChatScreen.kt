@@ -457,6 +457,7 @@ fun ChatScreen(nav: NavHostController) {
         streamJob?.cancel()
         streamJob = scope.launch {
             var responseCompleted = false
+            val voiceDelivery = VoiceReplyDelivery()
             val conversationId = activeConversationId ?: runCatching {
                 ApiClient.api.createAiConversation(
                     CreateAiConversationRequest(
@@ -533,6 +534,7 @@ fun ChatScreen(nav: NavHostController) {
                                         utteranceId,
                                     ) == TextToSpeech.SUCCESS
                                     if (accepted) {
+                                        voiceDelivery.accepted()
                                         streamedVoiceSegmentKeys.add(key)
                                         lastSpokenVoiceText = listOf(
                                             lastSpokenVoiceText,
@@ -549,6 +551,7 @@ fun ChatScreen(nav: NavHostController) {
                         }
 
                         is ChatStreamEvent.VoiceReady -> {
+                            if (!event.speak) voiceDelivery.suppressFallback()
                             val hadSegments = streamedVoiceSegmentKeys.any {
                                 it.startsWith("${event.messageId}:")
                             }
@@ -564,12 +567,17 @@ fun ChatScreen(nav: NavHostController) {
                                 lastSpokenVoiceText = event.text
                                 spokenRanges[utteranceId] = "" to event.text
                                 speakingMessageId = utteranceId
-                                textToSpeech?.speak(
+                                val accepted = textToSpeech?.speak(
                                     event.text,
                                     TextToSpeech.QUEUE_FLUSH,
                                     null,
                                     utteranceId,
-                                )
+                                ) == TextToSpeech.SUCCESS
+                                if (accepted) voiceDelivery.accepted()
+                                else {
+                                    spokenRanges.remove(utteranceId)
+                                    speakingMessageId = null
+                                }
                             } else if (
                                 voiceConversation &&
                                 pendingVoiceUtterances == 0 &&
@@ -580,6 +588,7 @@ fun ChatScreen(nav: NavHostController) {
                         }
 
                         is ChatStreamEvent.VoiceIncomplete -> {
+                            voiceDelivery.suppressFallback()
                             voiceSegmentStreamOpen = false
                             if (
                                 voiceConversation &&
@@ -616,6 +625,7 @@ fun ChatScreen(nav: NavHostController) {
                 val streamedSegments = streamedVoiceSegmentKeys.isNotEmpty()
                 if (
                     !streamedSegments &&
+                    voiceDelivery.shouldSpeakFallback(responseCompleted) &&
                     assistant != null &&
                     spokenText.isNotBlank() &&
                     textToSpeechReady &&
