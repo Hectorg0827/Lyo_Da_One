@@ -15,6 +15,18 @@ import com.lyo.app.data.api.StackItemDto
  * zero, and an action label is not a measurement.
  */
 object FocusPresentation {
+    private val opaqueConceptId = Regex("^[a-fA-F0-9]{8,}(?:-[a-fA-F0-9]{4,})*$")
+
+    /** Never expose a database key as the learner's review topic. */
+    fun reviewTitle(skillId: String, skillName: String?): String {
+        val name = skillName?.trim()?.takeIf { it.isNotBlank() } ?: skillId.trim()
+        if (name.isBlank() || opaqueConceptId.matches(name)) return "A concept ready to review"
+        return name.replace('_', ' ').replace('-', ' ').split(' ')
+            .filter { it.isNotBlank() }
+            .joinToString(" ") { token ->
+                token.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            }
+    }
 
     /** How far through a course the learner is, or why there is no answer. */
     sealed interface Progress {

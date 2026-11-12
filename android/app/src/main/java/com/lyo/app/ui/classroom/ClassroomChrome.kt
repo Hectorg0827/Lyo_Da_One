@@ -7,8 +7,10 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -46,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lyo.app.data.api.LearnerConceptRecordDto
@@ -114,14 +117,12 @@ fun ClassroomTopBar(
         IconButton(onClick = onBack) {
             Icon(Icons.Filled.ArrowBack, contentDescription = "Leave classroom", tint = TextPrimary)
         }
-        Text(
-            text = topic,
-            color = TextPrimary,
-            style = MaterialTheme.typography.titleSmall,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text("LYO CLASSROOM", color = ClassroomTokens.AccentPurple,
+                style = MaterialTheme.typography.labelSmall)
+            Text(topic, color = TextPrimary, style = MaterialTheme.typography.titleSmall,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
         IconButton(onClick = onToggleNotebook) {
             Icon(Icons.Filled.MenuBook, contentDescription = "Your notebook", tint = TextPrimary)
         }
@@ -147,18 +148,19 @@ fun ClassroomTopBar(
 
 /**
  * Inline settings row (ported from web's classroom/page.tsx settingsOpen
- * panel), trimmed to what's actually wireable on Android v1: reduced
- * motion is the only setting that previously existed as a wire-contract
- * param (ClassroomSocketClient.connect's reducedMotion) with no user
- * control at all — ClassroomEngine.start() hardcoded `false`. Mode/
- * duration/voice-speed are not exposed here because they would require a
- * reconnect or a voice-player speed contract. Teacher voice itself is live
- * and can be muted from the top bar without changing instructional state.
+ * panel). Reduced motion is applied on the next session; spoken captions
+ * are immediate. Lesson length is a server session parameter, so choosing
+ * a different length explicitly starts a new lesson rather than silently
+ * extending or shortening the current one.
  */
 @Composable
 fun SettingsPanel(
     reducedMotion: Boolean,
     onReducedMotionChange: (Boolean) -> Unit,
+    captionsEnabled: Boolean,
+    onCaptionsEnabledChange: (Boolean) -> Unit,
+    durationMinutes: Int,
+    onDurationChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -189,6 +191,34 @@ fun SettingsPanel(
                 onCheckedChange = onReducedMotionChange,
                 colors = SwitchDefaults.colors(checkedTrackColor = ClassroomTokens.AccentPurple),
             )
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Spoken captions", color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+                Text("Brief captions; full lesson in the notebook", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+            }
+            Switch(
+                checked = captionsEnabled,
+                onCheckedChange = onCaptionsEnabledChange,
+                colors = SwitchDefaults.colors(checkedTrackColor = ClassroomTokens.AccentPurple),
+            )
+        }
+        Text("Lesson length", color = TextPrimary, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp))
+        Text("Selecting a new length starts a fresh lesson.", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+            ClassroomLessonDuration.choices.forEach { minutes ->
+                OutlinedButton(
+                    onClick = { onDurationChange(minutes) },
+                    enabled = minutes != durationMinutes,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("$minutes min", color = if (minutes == durationMinutes) ClassroomTokens.AccentPurple else TextPrimary)
+                }
+            }
         }
     }
 }
@@ -442,32 +472,54 @@ fun BottomActionDock(
                 Text("$continueLabel →")
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedButton(onClick = onHint, modifier = Modifier.heightIn(min = 48.dp)) { Text("Help") }
-            OutlinedButton(onClick = onTooEasy, modifier = Modifier.heightIn(min = 48.dp)) { Text("Challenge") }
-            if (handRaised) {
+        if (handRaised) {
+            // Question entry is its own row. Previously Help + Challenge +
+            // text field + two icons competed for one 320dp-wide line,
+            // leaving the input and send control underneath the screen edge.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 androidx.compose.material3.OutlinedTextField(
                     value = question,
                     onValueChange = { question = it },
                     placeholder = { Text("Ask the teacher…", color = TextSecondary) },
+                    singleLine = false,
+                    maxLines = 3,
                     modifier = Modifier.weight(1f),
                 )
                 IconButton(onClick = { startDictation() }) {
-                    Icon(
-                        Icons.Filled.Mic,
-                        contentDescription = "Speak your question",
-                        tint = ClassroomTokens.AccentPurple,
-                    )
+                    Icon(Icons.Filled.Mic, contentDescription = "Speak your question", tint = ClassroomTokens.AccentPurple)
                 }
-                IconButton(onClick = {
-                    onAskQuestion(question)
-                    question = ""
-                    handRaised = false
-                }) {
+                IconButton(
+                    onClick = {
+                        if (question.isNotBlank()) {
+                            onAskQuestion(question.trim())
+                            question = ""
+                            handRaised = false
+                        }
+                    },
+                    enabled = question.isNotBlank(),
+                ) {
                     Icon(Icons.Filled.Send, contentDescription = "Send", tint = ClassroomTokens.AccentPurple)
                 }
-            } else {
-                OutlinedButton(onClick = { handRaised = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedButton(onClick = onHint, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Help") }
+                OutlinedButton(onClick = { handRaised = false }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Close") }
+            }
+        } else {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedButton(onClick = onHint, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Help") }
+                OutlinedButton(onClick = onTooEasy, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) { Text("Challenge") }
+                OutlinedButton(onClick = { handRaised = true }, modifier = Modifier.weight(1f).heightIn(min = 48.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
                     Text("Raise hand", color = LyoGold)
                 }
             }
@@ -475,18 +527,19 @@ fun BottomActionDock(
     }
 }
 
-/** The permanent Teacher badge (never hides with the rest of chrome) sitting
+/** A contextual teacher badge sitting
  *  next to the caption — reuses MascotAvatar's rendering machinery directly
  *  via rememberMascotFrame rather than going through the A2UI tree, since
  *  the Teacher's identity here is 100% locally computed (a fixed portrait
  *  per course, matching web/iOS's `TEACHER_VARIANTS[stableHash(courseId)]`
  *  pattern), never driven by a wire-contract field. */
 @Composable
-fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, modifier: Modifier = Modifier, mascotState: String = "reading", lessonRecovery: Boolean = false, onTranscript: () -> Unit = {}) {
+fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, topic: String, modifier: Modifier = Modifier, lessonRecovery: Boolean = false, onTranscript: () -> Unit = {}) {
     val speaker = caption?.takeIf { it.isJsonObject }?.asJsonObject?.get("speaker")
         ?.takeIf { it.isJsonPrimitive }?.asString
     val text = caption?.takeIf { it.isJsonObject }?.asJsonObject?.get("text")
         ?.takeIf { it.isJsonPrimitive }?.asString
+    val character = ClassroomCast.speaker(speaker, topic)
 
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -497,28 +550,53 @@ fun TeacherBadgeAndCaption(caption: com.google.gson.JsonElement?, modifier: Modi
             .background(Surface, RoundedCornerShape(16.dp))
             .padding(12.dp),
     ) {
-        val frame = com.lyo.app.ui.classroom.catalog.rememberMascotFrame(state = mascotState, variant = "lyo")
-        androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(frame.drawableRes),
-            contentDescription = "Lyo is $mascotState",
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-            modifier = frame.modifier
-                .size(40.dp)
-                .background(Surface, CircleShape),
+        Image(
+            painter = painterResource(character.portrait),
+            contentDescription = "${character.name}, ${if (character.id.startsWith("student_")) "AI classmate" else "AI teacher"}",
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+            modifier = Modifier
+                .size(48.dp)
+                .background(androidx.compose.ui.graphics.Color.White, RoundedCornerShape(12.dp)),
         )
         if (text != null) {
             Column(modifier = Modifier.weight(1f)) {
                 if (speaker != null) {
-                    Text(text = if (speaker == "Teacher") "Lyo explains" else "$speaker speaks", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
+                    Text(text = "${character.name} · ${if (character.id.startsWith("student_")) "AI classmate" else "AI teacher"}", color = ClassroomTokens.AccentPurple, style = MaterialTheme.typography.labelSmall)
                 }
                 Text(text = text, color = TextPrimary, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         } else {
-            Text("Lyo is preparing the next step…", color = TextSecondary, modifier = Modifier.weight(1f))
+            Text("Your teacher is speaking", color = TextSecondary, modifier = Modifier.weight(1f))
         }
         Column {
             if (lessonRecovery) Text("Paused", color = ClassroomTokens.Gold, style = MaterialTheme.typography.labelSmall)
             androidx.compose.material3.TextButton(onClick = onTranscript) { Text("Transcript", color = ClassroomTokens.AccentPurple) }
+        }
+    }
+}
+
+/** Lyo remains beside the learner, not in the teacher's seat. */
+@Composable
+fun LyoCompanionBadge(state: String, spokenClassmates: List<String>, modifier: Modifier = Modifier, caption: com.google.gson.JsonElement? = null) {
+    val frame = com.lyo.app.ui.classroom.catalog.rememberMascotFrame(state = state, variant = "lyo")
+    val text = caption?.takeIf { it.isJsonObject }?.asJsonObject?.get("text")
+        ?.takeIf { it.isJsonPrimitive }?.asString
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp)
+            .background(Surface.copy(alpha = 0.78f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Image(painter = painterResource(frame.drawableRes), contentDescription = "Lyo, your companion",
+            modifier = frame.modifier.size(30.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text("LYO  ·  Your study companion", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+            if (text != null) Text(text, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+        }
+        ClassroomCast.classmates.filter { it.name in spokenClassmates }.forEach { peer ->
+            Image(painter = painterResource(peer.portrait), contentDescription = "${peer.name}, AI classmate",
+                modifier = Modifier.size(28.dp).background(androidx.compose.ui.graphics.Color.White, CircleShape))
         }
     }
 }

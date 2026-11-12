@@ -21,4 +21,5 @@ package com.lyo.app.ui.classroom
  */
 object ClassroomPreferences {
     var reducedMotion: Boolean = false
+    var captionsEnabled: Boolean = true
 }

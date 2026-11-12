@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -15,14 +16,27 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,12 +44,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -44,9 +60,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
@@ -72,15 +92,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
+import com.lyo.app.R
+import com.lyo.app.data.Session
 import com.lyo.app.data.api.AiConversationMessageDto
+import com.lyo.app.data.api.AiConversationSummaryDto
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.ChatStreamClient
 import com.lyo.app.data.api.ChatStreamEvent
@@ -184,10 +214,10 @@ private data class ParsedChatContent(
 )
 
 private val Suggestions = listOf(
-    "Explain quantum computing",
-    "Make me a study plan",
-    "Help me learn Spanish",
-    "Summarize photosynthesis",
+    "Teach me something new",
+    "Create a course for me",
+    "Quiz me on a topic",
+    "Help me study for an exam",
 )
 
 @Composable
@@ -195,12 +225,24 @@ fun ChatScreen(nav: NavHostController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val messages = remember { mutableStateListOf<ChatMsg>() }
+    val conversations = remember { mutableStateListOf<AiConversationSummaryDto>() }
+    var showHistory by remember { mutableStateOf(false) }
+    val mascotEntrance = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        mascotEntrance.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 760, easing = FastOutSlowInEasing),
+        )
+    }
+    BackHandler(enabled = showHistory) { showHistory = false }
+    var historyError by remember { mutableStateOf<String?>(null) }
     var input by remember { mutableStateOf("") }
     var isStreaming by remember { mutableStateOf(false) }
     var activeConversationId by remember { mutableStateOf<String?>(null) }
     val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
     var dictating by remember { mutableStateOf(false) }
+    var recognizerInFlight by remember { mutableStateOf(false) }
     var inputError by remember { mutableStateOf<String?>(null) }
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
@@ -208,7 +250,15 @@ fun ChatScreen(nav: NavHostController) {
     var voiceConversation by remember { mutableStateOf(false) }
     var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
     var liveVoiceTranscript by remember { mutableStateOf("") }
+    var voiceLanguageTag by remember { mutableStateOf(Locale.getDefault().toLanguageTag()) }
+    var enableAutomaticLanguageSwitch by remember { mutableStateOf(Build.VERSION.SDK_INT >= 34) }
+    var spokenVoiceCaption by remember { mutableStateOf("") }
+    var voiceThinkingNudge by remember { mutableStateOf("") }
+    val spokenRanges = remember { mutableMapOf<String, Pair<String, String>>() }
+    var bargeInCandidate by remember { mutableStateOf("") }
+    var bargeInConfirmations by remember { mutableStateOf(0) }
     var lastSpokenVoiceText by remember { mutableStateOf("") }
+    var lastThinkingNudgeText by remember { mutableStateOf("") }
     var voiceListenNonce by remember { mutableStateOf(0) }
     var voiceSegmentStreamOpen by remember { mutableStateOf(false) }
     var pendingVoiceUtterances by remember { mutableStateOf(0) }
@@ -230,10 +280,29 @@ fun ChatScreen(nav: NavHostController) {
             }
         }
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-            override fun onStart(utteranceId: String?) = Unit
+            override fun onStart(utteranceId: String?) {
+                mainHandler.post {
+                    if (voiceConversation && utteranceId != null) {
+                        spokenRanges[utteranceId]?.let { (prefix, _) -> spokenVoiceCaption = prefix }
+                    }
+                }
+            }
+
+            override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
+                mainHandler.post {
+                    if (voiceConversation && utteranceId != null) {
+                        spokenRanges[utteranceId]?.let { (prefix, segment) ->
+                            spokenVoiceCaption = (prefix + " " + segment.take(end.coerceIn(0, segment.length))).trim()
+                        }
+                    }
+                }
+            }
 
             override fun onDone(utteranceId: String?) {
                 mainHandler.post {
+                    if (utteranceId != null) spokenRanges.remove(utteranceId)?.let { (prefix, segment) ->
+                        spokenVoiceCaption = (prefix + " " + segment).trim()
+                    }
                     if (utteranceId?.startsWith("voice-segment:") == true) {
                         pendingVoiceUtterances = (pendingVoiceUtterances - 1).coerceAtLeast(0)
                     }
@@ -356,6 +425,15 @@ fun ChatScreen(nav: NavHostController) {
         if ((trimmed.isEmpty() && attachments.isEmpty()) || isStreaming || uploadingAttachment) return
 
         val content = buildChatContent(trimmed, attachments)
+        if (voiceConversation && textToSpeechReady) {
+            val requestedLocale = Locale.forLanguageTag(voiceLanguageTag)
+            val availability = textToSpeech?.isLanguageAvailable(requestedLocale)
+            if (availability != TextToSpeech.LANG_MISSING_DATA &&
+                availability != TextToSpeech.LANG_NOT_SUPPORTED
+            ) {
+                textToSpeech?.language = requestedLocale
+            }
+        }
         val clientMessageId = UUID.randomUUID().toString()
         val interruptedPreviousTurn = voiceInterruptedPreviousTurn
         voiceInterruptedPreviousTurn = false
@@ -371,6 +449,10 @@ fun ChatScreen(nav: NavHostController) {
         // Echo suppression must compare only against the assistant reply for
         // this turn, never the accumulated speech from earlier turns.
         lastSpokenVoiceText = ""
+        lastThinkingNudgeText = ""
+        spokenVoiceCaption = ""
+        voiceThinkingNudge = ""
+        spokenRanges.clear()
 
         streamJob?.cancel()
         streamJob = scope.launch {
@@ -407,7 +489,7 @@ fun ChatScreen(nav: NavHostController) {
                     voiceSession = voiceConversation,
                     voiceInterruptedPreviousTurn = interruptedPreviousTurn,
                     voiceTurnId = clientMessageId,
-                    voiceLocale = Locale.getDefault().toLanguageTag(),
+                    voiceLocale = voiceLanguageTag,
                 ).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
@@ -439,6 +521,7 @@ fun ChatScreen(nav: NavHostController) {
                                     val utteranceId =
                                         "voice-segment:${event.messageId}:${event.sequence}"
                                     pendingVoiceUtterances += 1
+                                    spokenRanges[utteranceId] = lastSpokenVoiceText to event.text
                                     val accepted = textToSpeech?.speak(
                                         event.text,
                                         if (pendingVoiceUtterances == 1) {
@@ -457,6 +540,7 @@ fun ChatScreen(nav: NavHostController) {
                                         ).filter { it.isNotBlank() }.joinToString(" ")
                                         speakingMessageId = utteranceId
                                     } else {
+                                        spokenRanges.remove(utteranceId)
                                         pendingVoiceUtterances =
                                             (pendingVoiceUtterances - 1).coerceAtLeast(0)
                                     }
@@ -478,6 +562,7 @@ fun ChatScreen(nav: NavHostController) {
                             ) {
                                 val utteranceId = event.messageId
                                 lastSpokenVoiceText = event.text
+                                spokenRanges[utteranceId] = "" to event.text
                                 speakingMessageId = utteranceId
                                 textToSpeech?.speak(
                                     event.text,
@@ -538,6 +623,7 @@ fun ChatScreen(nav: NavHostController) {
                 ) {
                     engine.stop()
                     lastSpokenVoiceText = spokenText
+                    spokenRanges[assistant.id] = "" to spokenText
                     speakingMessageId = assistant.id
                     engine.speak(spokenText, TextToSpeech.QUEUE_FLUSH, null, assistant.id)
                 } else if (
@@ -555,28 +641,16 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
-    fun isLikelyVoiceEcho(heard: String): Boolean {
-        val normalize: (String) -> String = { value ->
-            value.lowercase()
-                .replace(Regex("[^\\p{L}\\p{N}\\s]"), " ")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-        }
-        val a = normalize(heard)
-        val b = normalize(lastSpokenVoiceText)
-        if (a.isBlank() || b.isBlank()) return false
-        if (a.length >= 12 && b.contains(a)) return true
-        if (b.length >= 12 && a.contains(b)) return true
-        val aw = a.split(" ").filter { it.isNotBlank() }.toSet()
-        val bw = b.split(" ").filter { it.isNotBlank() }.toSet()
-        val overlap = aw.intersect(bw).size
-        return overlap.toFloat() / maxOf(1, minOf(aw.size, bw.size)).toFloat() >= 0.82f
-    }
 
     fun stopVoiceConversation() {
         voiceConversation = false
         dictating = false
+        recognizerInFlight = false
         liveVoiceTranscript = ""
+        voiceThinkingNudge = ""
+        spokenRanges.clear()
+        bargeInCandidate = ""
+        bargeInConfirmations = 0
         runCatching { continuousRecognizer?.cancel() }
         textToSpeech?.stop()
         speakingMessageId = null
@@ -586,7 +660,7 @@ fun ChatScreen(nav: NavHostController) {
     }
 
     fun startVoiceRecognition() {
-        if (!voiceConversation || dictating) return
+        if (!voiceConversation || recognizerInFlight) return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) !=
             android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
@@ -596,7 +670,16 @@ fun ChatScreen(nav: NavHostController) {
         val recognizer = continuousRecognizer ?: return
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag())
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, voiceLanguageTag)
+            // Android 14+ can detect and switch between English and Spanish.
+            // Some recognition services ignore this optional hint.
+            if (Build.VERSION.SDK_INT >= 34 && enableAutomaticLanguageSwitch) {
+                putExtra(RecognizerIntent.EXTRA_ENABLE_LANGUAGE_SWITCH, RecognizerIntent.LANGUAGE_SWITCH_BALANCED)
+                putStringArrayListExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_SWITCH_ALLOWED_LANGUAGES,
+                    arrayListOf("en-US", "es-ES", "es-US"),
+                )
+            }
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             // Favor natural conversational turn-taking: complete phrases end
@@ -607,9 +690,11 @@ fun ChatScreen(nav: NavHostController) {
         }
         liveVoiceTranscript = ""
         runCatching {
+            recognizerInFlight = true
             recognizer.startListening(intent)
             dictating = true
         }.onFailure {
+            recognizerInFlight = false
             dictating = false
             inputError = "Speech recognition is not available on this device."
         }
@@ -617,6 +702,7 @@ fun ChatScreen(nav: NavHostController) {
 
     DisposableEffect(context) {
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+            inputError = "Live speech recognition is not available on this device."
             onDispose { }
         } else {
             val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
@@ -627,15 +713,10 @@ fun ChatScreen(nav: NavHostController) {
                 }
 
                 override fun onBeginningOfSpeech() {
-                    // During model generation there is no playback to echo, so
-                    // actual speech can interrupt immediately. While Lyo is
-                    // speaking we wait for partial text and reject likely echo.
-                    if (speakingMessageId == null && isStreaming) {
-                        voiceInterruptedPreviousTurn = true
-                        streamJob?.cancel()
-                        streamJob = null
-                        isStreaming = false
-                    }
+                    // A single speech-start can be the speaker's echo.
+                    // Only confirmed, non-echo words may interrupt Lyo.
+                    bargeInCandidate = ""
+                    bargeInConfirmations = 0
                 }
 
                 override fun onRmsChanged(rmsdB: Float) = Unit
@@ -643,22 +724,43 @@ fun ChatScreen(nav: NavHostController) {
                 override fun onEndOfSpeech() { dictating = false }
 
                 override fun onError(error: Int) {
+                    recognizerInFlight = false
                     dictating = false
+                    if (Build.VERSION.SDK_INT >= 34 && (
+                        error == SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED ||
+                            error == SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE
+                    )) {
+                        // Model pack missing: recover in the selected device
+                        // locale without looping through an unsupported mode.
+                        enableAutomaticLanguageSwitch = false
+                    }
                     if (voiceConversation) {
                         mainHandler.postDelayed({ voiceListenNonce += 1 }, 250)
                     }
                 }
 
                 override fun onResults(results: Bundle?) {
+                    recognizerInFlight = false
                     dictating = false
                     val transcript = results
                         ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         ?.firstOrNull()
                         ?.trim()
                         .orEmpty()
-                    liveVoiceTranscript = transcript
+                    val wasSpeaking = speakingMessageId != null || pendingVoiceUtterances > 0
+                    val accepted = voiceConversation &&
+                        !VoiceTurnSafety.isLikelyEcho(transcript, lastThinkingNudgeText) &&
+                        VoiceTurnSafety.shouldSubmitFinal(
+                        heard = transcript,
+                        assistantText = lastSpokenVoiceText,
+                        assistantAudible = wasSpeaking,
+                        confirmedDuringPlayback = bargeInConfirmations >= 2,
+                    )
+                    liveVoiceTranscript = if (accepted) transcript else ""
+                    bargeInCandidate = ""
+                    bargeInConfirmations = 0
 
-                    if (transcript.isNotBlank() && voiceConversation && !isLikelyVoiceEcho(transcript)) {
+                    if (accepted) {
                         if (speakingMessageId != null || isStreaming) {
                             voiceInterruptedPreviousTurn = true
                         }
@@ -680,22 +782,43 @@ fun ChatScreen(nav: NavHostController) {
                         ?.firstOrNull()
                         ?.trim()
                         .orEmpty()
-                    liveVoiceTranscript = partial
-                    if (
-                        partial.isNotBlank() &&
-                        voiceConversation &&
-                        speakingMessageId != null &&
-                        !isLikelyVoiceEcho(partial)
+                    if (!voiceConversation || partial.isBlank() ||
+                        VoiceTurnSafety.isLikelyEcho(partial, lastSpokenVoiceText) ||
+                        VoiceTurnSafety.isLikelyEcho(partial, lastThinkingNudgeText)
                     ) {
-                        // Confirmed non-echo speech: barge in now instead of
-                        // waiting for the final recognition result.
+                        return
+                    }
+                    liveVoiceTranscript = partial
+                    val speaking = speakingMessageId != null || pendingVoiceUtterances > 0
+                    if (speaking) {
+                        bargeInConfirmations = VoiceTurnSafety.confirmationCount(
+                            bargeInCandidate, bargeInConfirmations, partial
+                        )
+                        bargeInCandidate = partial
+                        if (bargeInConfirmations < 2) return
+                    }
+                    if (speaking || isStreaming) {
                         voiceInterruptedPreviousTurn = true
                         textToSpeech?.stop()
                         speakingMessageId = null
+                        pendingVoiceUtterances = 0
+                        voiceSegmentStreamOpen = false
+                        spokenRanges.clear()
                         if (isStreaming) {
                             streamJob?.cancel()
                             streamJob = null
                             isStreaming = false
+                        }
+                    }
+                }
+
+                override fun onLanguageDetection(results: Bundle) {
+                    if (Build.VERSION.SDK_INT >= 34) {
+                        val detected = results.getString(SpeechRecognizer.DETECTED_LANGUAGE)
+                        if (detected?.startsWith("en", ignoreCase = true) == true ||
+                            detected?.startsWith("es", ignoreCase = true) == true
+                        ) {
+                            voiceLanguageTag = detected
                         }
                     }
                 }
@@ -711,8 +834,35 @@ fun ChatScreen(nav: NavHostController) {
         }
     }
 
+    LaunchedEffect(voiceConversation, isStreaming, speakingMessageId, pendingVoiceUtterances) {
+        voiceThinkingNudge = ""
+        if (voiceConversation && isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0) {
+            delay(2400)
+            if (voiceConversation && isStreaming && speakingMessageId == null &&
+                pendingVoiceUtterances == 0 && !voiceSegmentStreamOpen
+            ) {
+                voiceThinkingNudge = if (voiceLanguageTag.startsWith("es"))
+                    "Mmm, déjame ver…" else "Hmm, let me see…"
+                lastThinkingNudgeText = voiceThinkingNudge
+                // Only the first gentle nudge speaks. Later wait messages are
+                // visual, so Lyo does not chatter or obscure a user interruption.
+                if (textToSpeechReady) {
+                    textToSpeech?.speak(
+                        voiceThinkingNudge, TextToSpeech.QUEUE_FLUSH,
+                        null, "voice-thinking-nudge",
+                    )
+                }
+            }
+            delay(4200)
+            if (voiceConversation && isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0) {
+                voiceThinkingNudge = if (voiceLanguageTag.startsWith("es"))
+                    "Sigo revisando…" else "Still checking…"
+            }
+        }
+    }
+
     LaunchedEffect(voiceConversation, voiceListenNonce, isStreaming, speakingMessageId) {
-        if (voiceConversation && !dictating) {
+        if (voiceConversation && !recognizerInFlight) {
             delay(180)
             startVoiceRecognition()
         }
@@ -818,14 +968,23 @@ fun ChatScreen(nav: NavHostController) {
         )
     }
 
-    // Resume the most recent server conversation on any Android device.
+    // The web Create studio seeds an actual new chat turn to generate a course.
+    // The normal Android entry still restores the last server conversation.
     LaunchedEffect(Unit) {
-        runCatching {
-            val latest = ApiClient.api.aiConversations().conversations.firstOrNull() ?: return@runCatching
-            val detail = ApiClient.api.aiConversation(latest.id)
-            activeConversationId = detail.id
+        val seededPrompt = nav.previousBackStackEntry?.savedStateHandle
+            ?.remove<String>("lyo_chat_seed_prompt")
+        if (!seededPrompt.isNullOrBlank()) {
+            activeConversationId = null
             messages.clear()
-            messages.addAll(detail.messages.map { it.toChatMsg() })
+            send(seededPrompt)
+        } else {
+            runCatching {
+                val latest = ApiClient.api.aiConversations().conversations.firstOrNull() ?: return@runCatching
+                val detail = ApiClient.api.aiConversation(latest.id)
+                activeConversationId = detail.id
+                messages.clear()
+                messages.addAll(detail.messages.map { it.toChatMsg() })
+            }
         }
     }
 
@@ -833,32 +992,86 @@ fun ChatScreen(nav: NavHostController) {
         if (messages.isNotEmpty()) listState.animateScrollToItem(max(0, messages.size - 1))
     }
 
+    LaunchedEffect(showHistory) {
+        if (showHistory) {
+            historyError = null
+            runCatching { ApiClient.api.aiConversations().conversations }
+                .onSuccess { loaded ->
+                    conversations.clear()
+                    conversations.addAll(loaded)
+                }
+                .onFailure { historyError = "Could not load your conversations. Please try again." }
+        }
+    }
+
+    fun newChat() {
+        textToSpeech?.stop()
+        speakingMessageId = null
+        streamJob?.cancel()
+        streamJob = null
+        activeConversationId = null
+        pendingAttachments.clear()
+        inputError = null
+        messages.clear()
+        showHistory = false
+    }
+
+    if (voiceConversation) {
+        LiveVoiceConversationScreen(
+            listening = dictating && !isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0,
+            thinking = isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0,
+            speaking = speakingMessageId != null || pendingVoiceUtterances > 0,
+            userCaption = liveVoiceTranscript,
+            assistantCaption = spokenVoiceCaption,
+            thinkingNudge = voiceThinkingNudge,
+            messages = messages,
+            error = inputError,
+            onEnd = ::stopVoiceConversation,
+        )
+    } else {
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(Color.Transparent)
             .imePadding(),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color(0x550C0C17))
+                .border(0.5.dp, Color.White.copy(alpha = 0.06f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            Text("LYO", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
-            TextButton(onClick = { nav.navigate("test-prep") }) { Text("Test Prep", color = LyoPurple) }
-            TextButton(
+            IconButton(
+                onClick = { showHistory = true },
+                enabled = !isStreaming,
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(Icons.Default.Menu, contentDescription = "Open conversation history", tint = TextSecondary)
+            }
+            Image(
+                painter = painterResource(R.drawable.mascot_standing),
+                contentDescription = null,
+                modifier = Modifier.padding(start = 6.dp).size(30.dp),
+            )
+            Text(
+                "Lyo", style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold, color = TextPrimary,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+            Text(
+                "● online", style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF86EFAC), modifier = Modifier.padding(start = 8.dp).weight(1f),
+            )
+            IconButton(
+                onClick = ::newChat,
                 enabled = !isStreaming && !uploadingAttachment,
-                onClick = {
-                    textToSpeech?.stop()
-                    speakingMessageId = null
-                    streamJob?.cancel()
-                    streamJob = null
-                    activeConversationId = null
-                    pendingAttachments.clear()
-                    inputError = null
-                    messages.clear()
-                },
-            ) { Text("New chat", color = LyoPurple) }
+                modifier = Modifier.size(40.dp),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "New chat", tint = TextPrimary)
+            }
         }
 
         if (messages.isEmpty()) {
@@ -871,32 +1084,69 @@ fun ChatScreen(nav: NavHostController) {
                     .padding(horizontal = 24.dp),
             ) {
                 Text(
-                    text = "LYO",
-                    style = MaterialTheme.typography.headlineLarge,
-                    color = TextPrimary,
+                    text = "Hello, ${Session.user?.displayName?.substringBefore(" ")?.takeIf { it.isNotBlank() } ?: "there"}!",
+                    style = TextStyle(
+                        brush = Brush.horizontalGradient(
+                            listOf(Color(0xFFFFC46A), Color(0xFFFF8956), Color(0xFFED80D4)),
+                        ),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 28.sp,
+                    ),
                 )
                 Text(
-                    text = "Ask me anything about learning",
+                    text = "Ready to embark on a learning journey?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary,
+                    color = TextPrimary.copy(alpha = 0.82f),
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
                 )
-                Suggestions.forEach { suggestion ->
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.graphicsLayer {
+                        // The bottom-tab mascot rises into its full-size greeting,
+                        // following the mobile-web Chat entrance motion.
+                        translationY = (1f - mascotEntrance.value) * 390.dp.toPx()
+                        scaleX = 0.42f + mascotEntrance.value * 0.58f
+                        scaleY = 0.42f + mascotEntrance.value * 0.58f
+                        alpha = 0.45f + mascotEntrance.value * 0.55f
+                    },
+                ) {
                     Box(
-                        modifier = Modifier
-                            .padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(Surface)
-                            .border(1.dp, BorderColor, RoundedCornerShape(20.dp))
-                            .clickable(enabled = !isStreaming) { send(suggestion) }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                    ) {
-                        Text(
-                            text = suggestion,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextPrimary,
-                        )
+                        modifier = Modifier.size(180.dp).background(
+                            Brush.radialGradient(
+                                listOf(Color(0x667C3AED), Color(0x33FF8C00), Color.Transparent),
+                            ),
+                            CircleShape,
+                        ),
+                    )
+                    Image(
+                        painter = painterResource(R.drawable.mascot_standing),
+                        contentDescription = "Lyo is ready to help you learn",
+                        modifier = Modifier.size(160.dp),
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(top = 8.dp, bottom = 8.dp),
+                ) {
+                    Suggestions.forEach { suggestion ->
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(Color.White.copy(alpha = 0.08f))
+                                .border(1.dp, Color.White.copy(alpha = 0.13f), RoundedCornerShape(20.dp))
+                                .clickable(enabled = !isStreaming) { send(suggestion) }
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                        ) {
+                            Text(
+                                text = suggestion,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextPrimary,
+                            )
+                        }
                     }
                 }
             }
@@ -972,114 +1222,283 @@ fun ChatScreen(nav: NavHostController) {
             }
         }
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
+        // The mobile-web input island: text above a compact row of controls.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Surface)
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-        ) {
-            IconButton(
-                onClick = {
-                    attachmentPicker.launch(
-                        arrayOf(
-                            "image/jpeg", "image/png", "image/webp", "image/heic",
-                            "application/pdf", "text/plain", "text/markdown", "text/csv",
-                            "application/json",
-                        ),
-                    )
-                },
-                enabled = !isStreaming && !uploadingAttachment &&
-                    pendingAttachments.size < MAX_CHAT_ATTACHMENTS,
-                modifier = Modifier.size(44.dp),
-            ) {
-                if (uploadingAttachment) {
-                    CircularProgressIndicator(
-                        color = LyoPurple,
-                        strokeWidth = 2.dp,
-                        modifier = Modifier.size(20.dp),
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.AttachFile,
-                        contentDescription = "Attach an image or document",
-                        tint = TextSecondary,
-                    )
-                }
-            }
-
-            IconButton(
-                onClick = {
-                    if (voiceConversation) {
-                        stopVoiceConversation()
-                    } else if (
-                        ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
-                        android.content.pm.PackageManager.PERMISSION_GRANTED
-                    ) {
-                        voiceConversation = true
-                        voiceListenNonce += 1
-                    } else {
-                        voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    }
-                },
-                enabled = !uploadingAttachment,
-                modifier = Modifier.size(44.dp),
-            ) {
-                Icon(
-                    imageVector = if (voiceConversation) Icons.Default.Stop else Icons.Default.Mic,
-                    contentDescription = if (voiceConversation) "End live voice" else "Start live voice",
-                    tint = if (voiceConversation) LyoPurple else TextSecondary,
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color(0xF210111C))
+                .border(
+                    1.dp,
+                    Brush.horizontalGradient(
+                        listOf(Color(0x884C62DB), Color(0x998B5CF6), Color(0x779D4EDD)),
+                    ),
+                    RoundedCornerShape(24.dp),
                 )
-            }
-
-            OutlinedTextField(
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+        ) {
+            BasicTextField(
                 value = input,
                 onValueChange = { if (it.length <= MAX_CHAT_CHARS) input = it },
                 enabled = !isStreaming,
-                placeholder = {
-                    Text(
-                        when {
-                            isStreaming -> "Lyo is thinking…"
-                            voiceConversation && dictating -> "Listening…"
-                            dictating -> "Listening…"
-                            else -> "Ask Lyo anything…"
-                        },
-                        color = TextSecondary,
-                    )
-                },
-                shape = RoundedCornerShape(24.dp),
+                textStyle = TextStyle(color = TextPrimary, fontSize = 16.sp, lineHeight = 23.sp),
+                cursorBrush = SolidColor(LyoPurple),
                 maxLines = 4,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = LyoPurple,
-                    unfocusedBorderColor = BorderColor,
-                    focusedTextColor = TextPrimary,
-                    unfocusedTextColor = TextPrimary,
-                    cursorColor = LyoPurple,
-                ),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 28.dp, max = 120.dp),
+                decorationBox = { innerTextField ->
+                    Box(modifier = Modifier.padding(vertical = 3.dp)) {
+                        if (input.isEmpty()) {
+                            Text(
+                                when {
+                                    isStreaming -> "Lyo is thinking…"
+                                    dictating -> "Listening…"
+                                    else -> "Message Lyo..."
+                                },
+                                color = TextSecondary.copy(alpha = 0.75f),
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
             )
-
-            IconButton(
-                onClick = { send(input) },
-                enabled = !isStreaming &&
-                    !uploadingAttachment &&
-                    (input.isNotBlank() || pendingAttachments.isNotEmpty()),
-                modifier = Modifier
-                    .padding(start = 6.dp)
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (isStreaming || uploadingAttachment) LyoPurple.copy(alpha = 0.4f)
-                        else LyoPurple,
-                    ),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
             ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
-                    contentDescription = "Send",
-                    tint = Color.White,
-                )
+                IconButton(
+                    onClick = {
+                        attachmentPicker.launch(
+                            arrayOf(
+                                "image/jpeg", "image/png", "image/webp", "image/heic",
+                                "application/pdf", "text/plain", "text/markdown", "text/csv",
+                                "application/json",
+                            ),
+                        )
+                    },
+                    enabled = !isStreaming && !uploadingAttachment &&
+                        pendingAttachments.size < MAX_CHAT_ATTACHMENTS,
+                    modifier = Modifier
+                        .size(34.dp).clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.10f)),
+                ) {
+                    if (uploadingAttachment) {
+                        CircularProgressIndicator(
+                            color = LyoPurple, strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    } else {
+                        Icon(Icons.Default.Add, contentDescription = "Attach an image or document",
+                            tint = TextPrimary, modifier = Modifier.size(20.dp))
+                    }
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.10f))
+                        .clickable(enabled = !uploadingAttachment) {
+                            if (voiceConversation) {
+                                stopVoiceConversation()
+                            } else if (
+                                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                                android.content.pm.PackageManager.PERMISSION_GRANTED
+                            ) {
+                                voiceConversation = true
+                                voiceListenNonce += 1
+                            } else {
+                                voicePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Icon(Icons.Default.Mic, contentDescription = null,
+                        tint = TextPrimary, modifier = Modifier.size(16.dp))
+                    Text(
+                        if (voiceConversation) "Stop" else "Talk",
+                        color = TextPrimary,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(start = 6.dp),
+                    )
+                }
+                Box(modifier = Modifier.weight(1f))
+                if (input.length > MAX_CHAT_CHARS * 9 / 10) {
+                    Text(
+                        "${MAX_CHAT_CHARS - input.length}",
+                        color = TextSecondary, style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                IconButton(
+                    onClick = ::startDictation,
+                    enabled = !isStreaming,
+                    modifier = Modifier.size(34.dp),
+                ) {
+                    Icon(Icons.Default.Mic, contentDescription = "Dictate a message",
+                        tint = if (dictating) Color(0xFFFFAC65) else TextPrimary,
+                        modifier = Modifier.size(20.dp))
+                }
+                val canSend = !isStreaming && !uploadingAttachment &&
+                    (input.isNotBlank() || pendingAttachments.isNotEmpty())
+                IconButton(
+                    onClick = { send(input) },
+                    enabled = canSend,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(if (canSend) Color.White else Color.White.copy(alpha = 0.12f)),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowUpward,
+                        contentDescription = "Send message",
+                        tint = if (canSend) Color(0xFF11111A) else TextSecondary.copy(alpha = 0.55f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
             }
         }
+    }
+    AnimatedVisibility(
+        visible = showHistory,
+        enter = slideInHorizontally(
+            initialOffsetX = { -it },
+            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        ) + fadeIn(animationSpec = tween(220)),
+        exit = slideOutHorizontally(
+            targetOffsetX = { -it },
+            animationSpec = tween(durationMillis = 200),
+        ) + fadeOut(animationSpec = tween(170)),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.64f)),
+        ) {
+            Column(
+                modifier = Modifier
+                    .width(288.dp)
+                    .fillMaxHeight()
+                    .background(Color(0xFF11111F))
+                    .border(0.5.dp, Color.White.copy(alpha = 0.10f))
+                    .padding(top = 18.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(9.dp),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Brush.linearGradient(listOf(LyoPurple, Color(0xFF8D49DB)))),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("LYO", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Text("LYO", color = TextPrimary, fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(onClick = { showHistory = false }) {
+                        Icon(Icons.Default.Close, contentDescription = "Close conversation history",
+                            tint = TextSecondary)
+                    }
+                }
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(LyoPurple.copy(alpha = 0.35f),
+                                    Color(0xFF9C4ADA).copy(alpha = 0.20f)),
+                            ),
+                        )
+                        .border(1.dp, LyoPurple.copy(alpha = 0.32f), RoundedCornerShape(14.dp))
+                        .clickable(enabled = !isStreaming) { newChat() }
+                        .padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text("+  New Chat", color = TextPrimary, fontWeight = FontWeight.Medium)
+                }
+                historyError?.let {
+                    Text(it, color = Color(0xFFFF9A9A),
+                        modifier = Modifier.padding(16.dp))
+                }
+                if (conversations.isEmpty() && historyError == null) {
+                    Text(
+                        "No conversations yet. Start chatting!",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(20.dp),
+                    )
+                }
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(conversations, key = { it.id }) { conversation ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (conversation.id == activeConversationId)
+                                        LyoPurple.copy(alpha = 0.22f)
+                                    else Color.Transparent,
+                                )
+                                .clickable(enabled = !isStreaming) {
+                                    scope.launch {
+                                        runCatching { ApiClient.api.aiConversation(conversation.id) }
+                                            .onSuccess { detail ->
+                                                activeConversationId = detail.id
+                                                messages.clear()
+                                                messages.addAll(detail.messages.map { it.toChatMsg() })
+                                                pendingAttachments.clear()
+                                                input = ""
+                                                showHistory = false
+                                            }
+                                            .onFailure {
+                                                historyError = "Could not open this conversation."
+                                            }
+                                    }
+                                }
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                        ) {
+                            Icon(Icons.Default.ChatBubbleOutline, contentDescription = null,
+                                tint = if (conversation.id == activeConversationId)
+                                    LyoPurple else TextSecondary,
+                                modifier = Modifier.size(18.dp))
+                            Text(
+                                conversation.title.ifBlank {
+                                    conversation.lastMessagePreview ?: "New Chat"
+                                },
+                                color = if (conversation.id == activeConversationId)
+                                    TextPrimary else TextSecondary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(start = 10.dp),
+                            )
+                        }
+                    }
+                }
+                Text(
+                    "Powered by LYO · All chats private",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextSecondary.copy(alpha = 0.6f),
+                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                    textAlign = TextAlign.Center,
+                )
+            }
+            Box(
+                modifier = Modifier.weight(1f).fillMaxHeight()
+                    .clickable { showHistory = false },
+            )
+        }
+    }
+    }
     }
 }
 
@@ -1168,8 +1587,8 @@ private fun MessageBubble(
             .let {
                 if (isUser) it.background(LyoBrandGradient)
                 else it
-                    .background(Surface)
-                    .border(1.dp, BorderColor, bubbleShape)
+                    .background(Color.White.copy(alpha = 0.075f))
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), bubbleShape)
             }
             .padding(horizontal = 14.dp, vertical = 10.dp)
 
