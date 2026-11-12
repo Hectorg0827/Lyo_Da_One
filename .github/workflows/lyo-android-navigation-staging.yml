@@ -15,10 +15,89 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Verify Android primary navigation and Create
+      - name: Verify Community capabilities and design tokens
+        run: node scripts/verify-community-parity.mjs
+
+      - name: Verify canonical chat continuity contract
+        run: node scripts/verify-chat-continuity.mjs
+
+      - name: Verify chat structured-content contract
+        run: node scripts/verify-chat-blocks-parity.mjs
+
+      - name: Verify conversational voice stays on canonical Chat
+        run: node scripts/verify-chat-voice-contract.mjs
+
+      - name: Verify canonical learning progress contract
+        run: node scripts/verify-learning-progress-parity.mjs
+
+      - name: Verify AI Classroom interaction and voice parity
+        run: node scripts/verify-classroom-parity.mjs
+
+      - name: Verify product trust (no fabricated learner data, front door, brand)
+        run: node scripts/verify-product-trust.mjs
+
+      - name: Verify Android navigation and Create workflows
         run: node scripts/verify-android-product-navigation.mjs
-      - name: Verify Android Community reliability contract
+
+      - name: Verify navigation naming parity
+        run: node scripts/verify-nav-naming-parity.mjs
+
+      - name: Verify Android Settings honesty
+        run: node scripts/verify-android-settings-honesty.mjs
+
+      - name: Verify Android Focus honesty
+        run: node scripts/verify-android-focus-honesty.mjs
+
+      - name: Verify Focus deck parity
+        run: node scripts/verify-focus-deck-parity.mjs
+
+      - name: Verify teach-it prompt parity
+        run: node scripts/verify-teach-it-parity.mjs
+
+      - name: Verify creator stats parity
+        run: node scripts/verify-creator-stats-parity.mjs
+
+      - name: Verify Android Profile integrity
+        run: node scripts/verify-android-profile-honesty.mjs
+
+      - name: Verify Android Messages reliability
+        run: node scripts/verify-android-messages-reliability.mjs
+
+      - name: Verify Android Discover integrity
+        run: node scripts/verify-android-discover-integrity.mjs
+
+      - name: Verify Discover continuous playback
+        run: node scripts/verify-discover-playback.mjs
+
+      - name: Verify Discover Report and Block parity
+        run: node scripts/verify-discover-safety-parity.mjs
+
+      - name: Verify Continue with Google on web, iOS and Android
+        run: node scripts/verify-google-sign-in.mjs
+
+      - name: Verify Android Notifications reliability
+        run: node scripts/verify-android-notifications-reliability.mjs
+
+      - name: Verify Android Stories reliability
+        run: node scripts/verify-android-stories-reliability.mjs
+
+      - name: Verify Android auth session integrity
+        run: node scripts/verify-android-auth-session-integrity.mjs
+
+      - name: Verify Android Clips reliability
+        run: node scripts/verify-android-clips-reliability.mjs
+
+      - name: Verify Android Community reliability
         run: node scripts/verify-android-community-reliability.mjs
+
+      - name: Verify Android post detail reliability
+        run: node scripts/verify-android-post-detail-reliability.mjs
+
+      - name: Verify Delete account parity (DELETE /auth/me)
+        run: node scripts/verify-account-deletion.mjs
+
+      - name: Verify Android release and staging configuration
+        run: node scripts/verify-android-release-config.mjs
 
   android:
     name: Android debug build and unit tests

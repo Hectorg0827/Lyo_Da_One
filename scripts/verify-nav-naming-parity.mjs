@@ -107,7 +107,15 @@ function requireLabel(source, where, label) {
 // would otherwise satisfy the check for a label nobody renders any more.
 for (const [key, label] of Object.entries(CROSS_PLATFORM_LABELS)) {
   requireLabel(code(ios), `iOS (${key})`, label);
-  requireLabel(code(android), `Android (${key})`, label);
+  // Android's approved five-tab hierarchy uses + for the Create destination.
+  // Assert the route as well as the label so an unrelated + cannot pass.
+  if (key === 'create') {
+    if (!/BottomItem\(Routes\.CREATE,\s*"\+"\s*,/.test(code(android))) {
+      failures.push('Android (create) must label the Create route +');
+    }
+  } else {
+    requireLabel(code(android), `Android (${key})`, label);
+  }
 }
 
 // The web's two navs must read their labels from the shared model rather than
@@ -209,4 +217,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Navigation naming parity: ${Object.keys(CROSS_PLATFORM_LABELS).length} names agree across iOS, Android and web.`);
+console.log(`Navigation naming parity: ${Object.keys(CROSS_PLATFORM_LABELS).length} destinations verified across iOS, Android and web (Android Create uses +).`);
