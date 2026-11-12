@@ -107,8 +107,10 @@ jobs:
     permissions:
       contents: read
     env:
-      # Never let this staging CI artifact fall back to the production API.
-      LYO_STAGING_API_BASE_URL: ${{ vars.LYO_STAGING_API_BASE_URL || 'https://android-ci.invalid/' }}
+      # Verified LyoJourneyStagingBackend in the isolated staging project.
+      LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app/
+      LYO_VERSION_NAME: 1.0.0-pr211-${{ github.run_number }}
+      LYO_VERSION_CODE: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -121,6 +123,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.7'
+      - name: Verify staging backend is reachable
+        run: curl --fail --silent --show-error --retry 2 "${LYO_STAGING_API_BASE_URL}health"
       - name: Build debug APK and run all debug unit tests
         working-directory: android
         shell: bash
