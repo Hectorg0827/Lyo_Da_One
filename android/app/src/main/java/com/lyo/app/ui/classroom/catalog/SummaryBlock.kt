@@ -33,6 +33,7 @@ import com.lyo.app.ui.theme.TextSecondary
  */
 @Composable
 fun A2uiRenderScope.SummaryBlockRenderer() {
+    if (isRepeatedQuestionCard(surface, component)) return
     val title = resolveString("title") ?: "Summary"
     val content = resolveString("content")
     val items = resolveStringList("items")
