@@ -75,6 +75,14 @@ async def run():
               window.WebSocket = class extends Native {
                 constructor(url, protocols) {
                   super(url, protocols);
+                  this.__qaSceneIds = [];
+                  this.addEventListener('message', ev => {
+                    try {
+                      const event = JSON.parse(ev.data);
+                      const scene = event.data?.scene ?? event.scene;
+                      if (scene?.scene_id) this.__qaSceneIds.push(String(scene.scene_id));
+                    } catch {}
+                  });
                   window.__lyoQaSockets.push(this);
                 }
               };
@@ -130,20 +138,45 @@ async def run():
             # to exercise the same onclose/reconnect path without a TCP hang.
             await page.evaluate("""() => {
               const sockets = window.__lyoQaSockets || [];
-              const active = [...sockets].reverse().find(s => s.readyState === WebSocket.OPEN);
-              if (!active) throw new Error('No open WebSocket to interrupt');
+              const active = [...sockets].reverse().find(s =>
+                new URL(s.url).pathname === '/api/v1/classroom/ws/connect'
+                && s.readyState === WebSocket.OPEN);
+              if (!active) throw new Error('No open Classroom WebSocket to interrupt');
               active.close(4000, 'QA simulated transport interruption');
             }""")
-            if not await until(lambda: len(sockets) >= 2, 25):
-                states = await page.evaluate("() => (window.__lyoQaSockets || []).map(s => s.readyState)")
-                raise RuntimeError("Classroom did not reconnect after socket close; states=" + str(states))
-            resumed = sockets[-1]
-            if resumed["session"] != first["session"] or resumed["resume"] != "1":
-                raise RuntimeError("Classroom Web reconnect omitted same session or resume=1")
-            if not await until(lambda: bool(resumed["scenes"]), 55):
-                raise RuntimeError("No server scene returned to reconnected Web UI")
+
+            # Playwright's websocket event stream can omit a replacement socket.
+            # Read only sanitized contract fields and scene IDs from the
+            # browser's actual native WebSocket objects instead.
+            summary_js = """() => (window.__lyoQaSockets || []).map(s => {
+              const u = new URL(s.url);
+              return {
+                path: u.pathname,
+                session: u.searchParams.get('session_id'),
+                resume: u.searchParams.get('resume'),
+                state: s.readyState,
+                scenes: s.__qaSceneIds || [],
+              };
+            })"""
+            resumed = None
+            deadline = time.monotonic() + 55
+            while time.monotonic() < deadline:
+                entries = await page.evaluate(summary_js)
+                matches = [item for item in entries
+                           if item["path"] == "/api/v1/classroom/ws/connect"
+                           and item["session"] == first["session"]
+                           and item["resume"] == "1"]
+                if matches:
+                    resumed = matches[-1]
+                    if initial_scene in resumed["scenes"]:
+                        break
+                await asyncio.sleep(0.5)
+            if not resumed:
+                entries = await page.evaluate(summary_js)
+                states = [item["state"] for item in entries]
+                raise RuntimeError("Browser did not open same-session resume=1 socket; states=" + str(states))
             if initial_scene not in resumed["scenes"]:
-                raise RuntimeError("Reconnected Web UI received wrong persisted scene")
+                raise RuntimeError("Browser resumed socket did not receive the persisted scene")
             if not await page.get_by_role("button", name="Leave classroom").is_visible():
                 raise RuntimeError("Classroom UI was lost after reconnection")
             await page.screenshot(path=str(ARTIFACTS / "classroom_resumed.png"), full_page=True)
