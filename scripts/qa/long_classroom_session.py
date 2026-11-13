@@ -127,7 +127,13 @@ async def main():
     finally:
         if created and token:
             try:
-                code, result = http("DELETE", "/auth/me", token=token)
+                # Reauthenticate before cleanup; the original JWT may have expired.
+                login_code, login = http("POST", "/api/v1/auth/login",
+                                         {"email": user["email"], "password": password})
+                cleanup_token = login.get("access_token") if login_code == 200 else None
+                if not cleanup_token:
+                    raise RuntimeError("Synthetic learner cleanup reauthentication failed")
+                code, result = http("DELETE", "/auth/me", token=cleanup_token)
                 if code == 200 and result.get("deleted") is True:
                     print("QA cleanup: synthetic learner permanently deleted")
                 else:
