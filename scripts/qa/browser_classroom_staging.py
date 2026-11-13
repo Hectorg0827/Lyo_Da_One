@@ -125,24 +125,18 @@ async def run():
             print("PASS: live Classroom scene reached Chromium UI", flush=True)
 
             stage = "Classroom forced disconnect and resumed scene"
-            await context.set_offline(True)
-            await asyncio.sleep(2)
-            await context.set_offline(False)
-            if not await until(lambda: first["closed"], 4):
-                # Offline simulation can leave established WebSockets alive on
-                # Chromium. Force their close, then test the actual app's
-                # WebSocket onclose-based reconnect path deterministically.
-                print("QA NOTE: emulated offline left socket open; forcing transport close")
-                await page.evaluate("""() => {
-                  const sockets = window.__lyoQaSockets || [];
-                  const active = [...sockets].reverse().find(s => s.readyState === WebSocket.OPEN);
-                  if (!active) throw new Error('No active WebSocket for forced disconnect');
-                  active.close(4000, 'QA transport interruption');
-                }""")
-                if not await until(lambda: first["closed"], 5):
-                    raise RuntimeError("Browser never delivered WebSocket close after forced drop")
+            # Browser offline emulation left an existing socket half-open in
+            # CI. Instead, deterministically close an otherwise healthy socket
+            # to exercise the same onclose/reconnect path without a TCP hang.
+            await page.evaluate("""() => {
+              const sockets = window.__lyoQaSockets || [];
+              const active = [...sockets].reverse().find(s => s.readyState === WebSocket.OPEN);
+              if (!active) throw new Error('No open WebSocket to interrupt');
+              active.close(4000, 'QA simulated transport interruption');
+            }""")
             if not await until(lambda: len(sockets) >= 2, 25):
-                raise RuntimeError("Classroom onclose did not reconnect to server")
+                states = await page.evaluate("() => (window.__lyoQaSockets || []).map(s => s.readyState)")
+                raise RuntimeError("Classroom did not reconnect after socket close; states=" + str(states))
             resumed = sockets[-1]
             if resumed["session"] != first["session"] or resumed["resume"] != "1":
                 raise RuntimeError("Classroom Web reconnect omitted same session or resume=1")
