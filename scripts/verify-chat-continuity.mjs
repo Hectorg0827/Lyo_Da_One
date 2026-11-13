@@ -126,6 +126,8 @@ const contracts = [
       'MAX_CHAT_ATTACHMENTS = 4',
       'buildChatContent',
       'parseChatContent',
+      'var input by rememberSaveable { mutableStateOf("") }',
+      'var activeConversationId by rememberSaveable { mutableStateOf<String?>(null) }',
       'ASSISTANT_RESPONSE_WIDTH_FRACTION = 0.99f',
       'Modifier.fillMaxWidth(ASSISTANT_RESPONSE_WIDTH_FRACTION)',
       'is ChatStreamEvent.FinalAnswer',
