@@ -1,5 +1,9 @@
 package com.lyo.app.ui.classroom.catalog
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -60,9 +64,12 @@ fun A2uiRenderScope.QuizCardRenderer() {
     }
     val actionName = literalString("action") ?: "submitQuiz"
 
-    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+        .background(com.lyo.app.ui.theme.Surface, RoundedCornerShape(18.dp))
+        .border(1.dp, com.lyo.app.ui.theme.LyoVioletLight.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
+        .padding(18.dp)) {
         Text("YOUR TURN", color = com.lyo.app.ui.theme.LyoVioletLight, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-        Text(text = question, color = TextPrimary)
+        Text(text = readableClassroomMath(question), color = TextPrimary)
         ClassroomChipRow(
             options = options.map { it.label },
             stateFor = { label ->
@@ -89,7 +96,7 @@ fun A2uiRenderScope.QuizCardRenderer() {
         )
         if (feedback != null) {
             Text(
-                text = feedback,
+                text = readableClassroomMath(feedback),
                 color = if (answered?.isCorrect == true) LyoGreen else LyoRed,
                 modifier = Modifier.padding(top = 4.dp),
             )

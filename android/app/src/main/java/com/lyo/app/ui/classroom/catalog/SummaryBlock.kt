@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -54,18 +55,18 @@ fun A2uiRenderScope.SummaryBlockRenderer() {
             .padding(vertical = 6.dp)
             .border(1.dp, accent.copy(alpha = 0.35f), RoundedCornerShape(12.dp))
             .background(Surface, RoundedCornerShape(12.dp))
-            .padding(12.dp),
+            .padding(18.dp),
     ) {
-        Text(text = label, color = accent)
-        Text(text = title, color = TextPrimary)
+        Text(text = label, color = accent, style = MaterialTheme.typography.labelSmall)
+        Text(text = readableClassroomMath(title), color = TextPrimary, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
         if (role == "details") TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide details" else "Read details") }
         if (expanded && document != null) {
             BoardDocumentView(document)
         } else if (expanded && content != null) {
-            Text(text = content, color = TextPrimary, modifier = Modifier.padding(top = 4.dp))
+            Text(text = readableClassroomMath(content), color = TextPrimary, modifier = Modifier.padding(top = 4.dp))
         }
         if (expanded) items.forEach { item ->
-            Text(text = "•  $item", color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
+            Text(text = "•  ${readableClassroomMath(item)}", color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
         }
         if (retrievalScheduled) {
             Text(

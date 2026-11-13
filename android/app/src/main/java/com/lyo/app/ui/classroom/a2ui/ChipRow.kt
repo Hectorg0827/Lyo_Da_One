@@ -3,7 +3,10 @@ package com.lyo.app.ui.classroom.a2ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -36,9 +39,9 @@ fun ClassroomChipRow(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier.padding(4.dp),
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
     ) {
         options.forEach { option ->
             val state = stateFor(option)
@@ -50,11 +53,14 @@ fun ClassroomChipRow(
             }
             val enabled = enabledFor(option)
             Text(
-                text = option,
+                text = com.lyo.app.ui.classroom.catalog.readableClassroomMath(option),
+                style = MaterialTheme.typography.bodyLarge,
                 color = if (enabled || state != ChipState.DEFAULT) contentColor else contentColor.copy(alpha = 0.45f),
                 fontWeight = if (state == ChipState.SELECTED || state == ChipState.CORRECT) FontWeight.Bold else FontWeight.Normal,
                 modifier = Modifier
-                    .background(background, RoundedCornerShape(50))
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .background(background, RoundedCornerShape(14.dp))
                     .clickable(enabled = enabled) { onSelect(option) }
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             )

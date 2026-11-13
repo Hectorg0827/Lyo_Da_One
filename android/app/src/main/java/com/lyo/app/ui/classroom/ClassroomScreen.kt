@@ -165,7 +165,7 @@ fun ClassroomScreen(
         )
 
         Column(modifier = Modifier.fillMaxSize()) {
-            AnimatedVisibility(visible = chrome.visible) {
+            AnimatedVisibility(visible = true) {
                 ClassroomTopBar(
                     topic = topic,
                     isPaused = engine.isPaused,
