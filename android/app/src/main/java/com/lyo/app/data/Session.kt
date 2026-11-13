@@ -34,6 +34,17 @@ object Session {
     var hydrationError by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * A message for the login screen after the session ended outside it (a
+     * failed account deletion whose expired login could not be renewed). The
+     * nav graph swaps to login as soon as the session ends, so the screen that
+     * started it cannot show the message itself.
+     */
+    private var pendingLoginMessage: String? = null
+
+    /** Returns the pending login message once, then forgets it. */
+    fun takeLoginMessage(): String? = pendingLoginMessage.also { pendingLoginMessage = null }
+
     suspend fun hydrate() {
         isLoading = true
         hydrationError = null
@@ -162,7 +173,9 @@ object Session {
     /**
      * Permanently deletes the account (DELETE /auth/me). Local data is cleared
      * only after the server confirms with 200 or 204. Returns null on success,
-     * or the message to show; on failure the learner stays signed in.
+     * or the message to show. On failure the learner stays signed in, unless
+     * the server no longer accepts their login (see deletionFailed): then the
+     * session ends here and the login screen shows the message.
      */
     suspend fun deleteAccount(context: Context): String? {
         val code = try {
@@ -170,14 +183,30 @@ object Session {
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            return accountDeletionFailureMessage(error)
+            return deletionFailed(accountDeletionFailureMessage(error))
         }
-        if (!accountDeletionSucceeded(code)) return accountDeletionFailureMessage(code)
+        if (!accountDeletionSucceeded(code)) return deletionFailed(accountDeletionFailureMessage(code), code == 401)
 
         RecentCourseStore.clear(context)
         com.lyo.app.data.classroom.ClassroomSessionStore.clearAll()
         clearLocalSession()
         return null
+    }
+
+    /**
+     * The account was not deleted. A 401 here means the login could not be
+     * renewed (no refresh token, a refused refresh, or a refused retry), and
+     * when a renewal failed ApiClient's authenticator has already cleared the
+     * saved tokens. Either way the learner has no usable session left, so it
+     * ends here and the app shows login, carrying the message (log in again)
+     * instead of a signed-in screen that can no longer reach the server.
+     */
+    private fun deletionFailed(message: String, unauthorized: Boolean = false): String {
+        if (unauthorized || TokenManager.accessToken == null) {
+            pendingLoginMessage = message
+            clearLocalSession()
+        }
+        return message
     }
 
     private fun clearLocalSession() {

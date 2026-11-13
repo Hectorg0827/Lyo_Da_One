@@ -1,0 +1,207 @@
+name: LYO Android navigation staging checks
+# PR #211 staging verification; no production deployment
+on:
+  push:
+    branches:
+      - work/android-web-parity-20261111
+      - fix/lyo-android-chat-stream-lifecycle-20261112
+      - integrate/lyo-android-ui-chat-qa-20261112
+      - fix/lyo-classroom-quiz-identity-20261112
+      - qa/lyo-android-compose-instrumentation-20261112
+      - fix/lyo-live-voice-latency-telemetry-20261113
+      - integrate/lyo-web-android-releaseqa-20261113
+  workflow_dispatch:
+jobs:
+  navigation-contracts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Community capabilities and design tokens
+        run: node scripts/verify-community-parity.mjs
+
+      - name: Verify canonical chat continuity contract
+        run: node scripts/verify-chat-continuity.mjs
+
+      - name: Verify chat structured-content contract
+        run: node scripts/verify-chat-blocks-parity.mjs
+
+      - name: Verify conversational voice stays on canonical Chat
+        run: node scripts/verify-chat-voice-contract.mjs
+
+      - name: Verify canonical learning progress contract
+        run: node scripts/verify-learning-progress-parity.mjs
+
+      - name: Verify AI Classroom interaction and voice parity
+        run: node scripts/verify-classroom-parity.mjs
+
+      - name: Verify product trust (no fabricated learner data, front door, brand)
+        run: node scripts/verify-product-trust.mjs
+
+      - name: Verify Android navigation and Create workflows
+        run: node scripts/verify-android-product-navigation.mjs
+      - name: Verify real NavHost route reachability regression
+        run: node --test scripts/lib/android-nav-route-contract.test.mjs
+
+      - name: Verify navigation naming parity
+        run: node scripts/verify-nav-naming-parity.mjs
+
+      - name: Verify Android Settings honesty
+        run: node scripts/verify-android-settings-honesty.mjs
+
+      - name: Verify Android Focus honesty
+        run: node scripts/verify-android-focus-honesty.mjs
+
+      - name: Verify Focus deck parity
+        run: node scripts/verify-focus-deck-parity.mjs
+
+      - name: Verify teach-it prompt parity
+        run: node scripts/verify-teach-it-parity.mjs
+
+      - name: Verify creator stats parity
+        run: node scripts/verify-creator-stats-parity.mjs
+
+      - name: Verify Android Profile integrity
+        run: node scripts/verify-android-profile-honesty.mjs
+
+      - name: Verify Android Messages reliability
+        run: node scripts/verify-android-messages-reliability.mjs
+
+      - name: Verify Android Discover integrity
+        run: node scripts/verify-android-discover-integrity.mjs
+
+      - name: Verify Discover continuous playback
+        run: node scripts/verify-discover-playback.mjs
+
+      - name: Verify Discover Report and Block parity
+        run: node scripts/verify-discover-safety-parity.mjs
+
+      - name: Verify Continue with Google on web, iOS and Android
+        run: node scripts/verify-google-sign-in.mjs
+
+      - name: Verify Android Notifications reliability
+        run: node scripts/verify-android-notifications-reliability.mjs
+
+      - name: Verify Android Stories reliability
+        run: node scripts/verify-android-stories-reliability.mjs
+
+      - name: Verify Android auth session integrity
+        run: node scripts/verify-android-auth-session-integrity.mjs
+
+      - name: Verify Android Clips reliability
+        run: node scripts/verify-android-clips-reliability.mjs
+
+      - name: Verify Android Community reliability
+        run: node scripts/verify-android-community-reliability.mjs
+
+      - name: Verify Android post detail reliability
+        run: node scripts/verify-android-post-detail-reliability.mjs
+
+      - name: Verify Delete account parity (DELETE /auth/me)
+        run: node scripts/verify-account-deletion.mjs
+
+      - name: Verify Android release and staging configuration
+        run: node scripts/verify-android-release-config.mjs
+
+  android:
+    name: Android debug build and unit tests
+    if: github.ref == 'refs/heads/work/android-web-parity-20261111' || github.ref == 'refs/heads/fix/lyo-android-chat-stream-lifecycle-20261112' || github.ref == 'refs/heads/integrate/lyo-android-ui-chat-qa-20261112' || github.ref == 'refs/heads/fix/lyo-classroom-quiz-identity-20261112' || github.ref == 'refs/heads/qa/lyo-android-compose-instrumentation-20261112' || github.ref == 'refs/heads/fix/lyo-live-voice-latency-telemetry-20261113' || github.ref == 'refs/heads/integrate/lyo-web-android-releaseqa-20261113'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      # Verified LyoJourneyStagingBackend in the isolated staging project.
+      LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app/
+      LYO_VERSION_NAME: 1.0.0-integrated-qa-${{ github.run_number }}
+      LYO_VERSION_CODE: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Verify staging backend is reachable
+        run: curl --fail --silent --show-error --retry 2 "${LYO_STAGING_API_BASE_URL}health"
+      - name: Build debug APK and run all debug unit tests
+        working-directory: android
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle assembleDebug testDebugUnitTest --no-daemon 2>&1 | tee android-build.log
+      - name: Upload build log and unit test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-staging-test-results
+          path: |
+            android/android-build.log
+            android/app/build/test-results/testDebugUnitTest/
+            android/app/build/reports/tests/testDebugUnitTest/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: discover-device-validation-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 7
+
+  android-compose-ui:
+    name: Android emulator UI smoke tests
+    if: github.ref == 'refs/heads/qa/lyo-android-compose-instrumentation-20261112' || github.ref == 'refs/heads/integrate/lyo-web-android-releaseqa-20261113'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          # Avoid the removed legacy SDK package 'tools' on Ubuntu 26.
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Enable Android emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise Compose quiz and navigation on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-boot-timeout: 600
+          script: cd android && gradle connectedDebugAndroidTest --no-daemon
+      - name: Upload instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-compose-ui-test-results
+          path: |
+            android/app/build/reports/androidTests/connected/
+            android/app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn
+          retention-days: 7

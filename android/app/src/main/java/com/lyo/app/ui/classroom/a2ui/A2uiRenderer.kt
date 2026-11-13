@@ -1,5 +1,6 @@
 package com.lyo.app.ui.classroom.a2ui
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -32,13 +33,15 @@ fun A2uiSurface(
     // No surface created yet (e.g. before the classroom's first turn
     // arrives) — render nothing; ClassroomScreen owns its own
     // "preparing your classroom…" loading state for that gap.
-    RenderNode(
-        componentId = rootId,
-        state = state,
-        catalog = catalog,
-        scopePath = "/",
-        onAction = onAction,
-    )
+    Box(modifier = modifier) {
+        RenderNode(
+            componentId = rootId,
+            state = state,
+            catalog = catalog,
+            scopePath = "/",
+            onAction = onAction,
+        )
+    }
 }
 
 @Composable

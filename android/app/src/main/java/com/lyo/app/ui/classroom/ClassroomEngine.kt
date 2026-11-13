@@ -13,6 +13,7 @@ import com.lyo.app.data.a2ui.A2uiMessage
 import com.lyo.app.data.a2ui.A2uiSurfaceState
 import com.lyo.app.data.a2ui.resolvePointer
 import com.lyo.app.data.classroom.ClassroomComponent
+import com.lyo.app.data.classroom.ClassroomConnectionState
 import com.lyo.app.data.classroom.ClassroomOpening
 import com.lyo.app.data.classroom.ClassroomSavedSession
 import com.lyo.app.data.classroom.ClassroomServerEvent
@@ -31,6 +32,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
@@ -66,7 +68,7 @@ class ClassroomEngine(
     private val topic: String,
     sessionIdParam: String? = null,
     private val mode: String = "solo",
-    private val durationMinutes: Int = 10,
+    private val durationMinutes: Int = ClassroomLessonDuration.default,
     private val objective: String? = null,
     private val difficulty: String? = null,
     private val courseBacked: Boolean = true,
@@ -132,20 +134,25 @@ class ClassroomEngine(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var collectorJob: Job? = null
+    private var connectionJob: Job? = null
     private var playerJob: Job? = null
     private var promptTimeoutJob: Job? = null
     private var highlightClearJob: Job? = null
     private var activitySaveJob: Job? = null
+    private var cueJob: Job? = null
     private val activityUpdates = mutableMapOf<String, A2uiAction>()
 
     val surface = A2uiSurfaceState(ClassroomBridge.SURFACE_ID)
     val catalog: A2uiCatalog = BasicCatalog + ClassroomCatalog
 
     private val turnQueue = ArrayDeque<DirectorTurn>()
+    private var speakingTurn: DirectorTurn? = null
+    private var replayedSpeechTurn: DirectorTurn? = null
     private var boardChildren: List<String> = emptyList()
     private var pendingErase = false
 
     var status by mutableStateOf("connecting"); private set
+    var connectionState by mutableStateOf(ClassroomConnectionState.CONNECTING); private set
     var errorMessage by mutableStateOf<String?>(null); private set
 
     /**
@@ -171,6 +178,11 @@ class ClassroomEngine(
     private var stallJob: Job? = null
     var isPaused by mutableStateOf(false); private set
     var isVoiceEnabled by mutableStateOf(true); private set
+    var activeSpeaker by mutableStateOf<String?>(null); private set
+    var supportCue by mutableStateOf(false); private set
+    var celebrationCue by mutableStateOf(false); private set
+    var isAwaitingStep by mutableStateOf(true); private set
+    private var speechGeneration = 0
     private var voiceLanguage: String = "auto"
 
     /**
@@ -246,6 +258,18 @@ class ClassroomEngine(
         collectorJob = scope.launch {
             ClassroomSocketClient.events.collect { event -> handleServerEvent(event) }
         }
+        connectionJob = scope.launch {
+            ClassroomSocketClient.connectionState.collect { state ->
+                connectionState = state
+                if (state == ClassroomConnectionState.RECONNECTING && hasBoardContent) {
+                    notice = "Connection interrupted. Your lesson is still here; reconnecting…"
+                } else if (state == ClassroomConnectionState.CONNECTED &&
+                    notice?.startsWith("Connection interrupted") == true
+                ) {
+                    notice = null
+                }
+            }
+        }
         ClassroomSocketClient.connect(
             topic = topic,
             sessionId = sessionId,
@@ -264,6 +288,7 @@ class ClassroomEngine(
         flushActivities()
         stallJob?.cancel()
         stallJob = null
+        cueJob?.cancel()
         voicePlayer?.close()
         ClassroomSocketClient.disconnect()
         scope.cancel()
@@ -301,6 +326,7 @@ class ClassroomEngine(
         when (event) {
             is ClassroomServerEvent.ComponentRenderEvent -> {
                 status = "live"
+                errorMessage = null
                 clearWait()
                 processComponent(event.component)
             }
@@ -310,12 +336,16 @@ class ClassroomEngine(
                 processedComponentIds.clear()
                 hasActiveCheckpoint = false
                 status = "live"
+                errorMessage = null
                 recordConcepts = event.metadata?.target_concepts.orEmpty()
                 surface.applyUpdateDataModel(A2uiMessage.UpdateDataModel(ClassroomBridge.SURFACE_ID, "/lessonRecovery", JsonPrimitive(event.metadata?.presentation_focus == "recovery")))
                 if (event.metadata?.course_complete == true) {
                     ClassroomSessionStore.markFinished(sessionId, courseKey)
                     resumableSession = null
+                    celebrationCue = true
+                    queueCueClear()
                 }
+                if (event.metadata?.presentation_focus == "recovery") signalSupportCue()
                 // Lazy erase: don't clear the board the instant scene_start
                 // arrives on its own — wait until real content actually
                 // lands, so the board never flashes empty during ordinary
@@ -340,6 +370,7 @@ class ClassroomEngine(
                 if (event.fatal) {
                     status = "error"
                     errorMessage = event.message ?: "The classroom hit a snag."
+                    stallPhase = ClassroomStallPhase.STALLED
                 } else {
                     notice = event.message ?: "The classroom hit a snag."
                 }
@@ -420,6 +451,7 @@ class ClassroomEngine(
     /** The class is waiting on the engine again. */
     private fun beginWait() {
         awaitingStep = true
+        isAwaitingStep = true
         waitingSince = System.currentTimeMillis()
         stallNudged = false
         if (stallPhase != ClassroomStallPhase.NONE) stallPhase = ClassroomStallPhase.NONE
@@ -428,6 +460,7 @@ class ClassroomEngine(
     /** Content arrived: the wait is over now, not on the next tick. */
     private fun clearWait() {
         awaitingStep = false
+        isAwaitingStep = false
         waitingSince = null
         stallNudged = false
         if (stallPhase != ClassroomStallPhase.NONE) stallPhase = ClassroomStallPhase.NONE
@@ -448,11 +481,34 @@ class ClassroomEngine(
         val sent = ClassroomSocketClient.send(
             ClassroomBridge.continueLessonAction(sessionId, "continue", "android_continue"),
         )
-        if (!sent) return
+        if (!sent) {
+            // No answer is ever replayed while reconnecting. A fresh socket
+            // resumes the same server seat; the learner may ask again once live.
+            ClassroomSocketClient.reconnectNow()
+            notice = "Reconnecting to your class. Your answer has not been resubmitted."
+            return
+        }
+        status = "live"
+        errorMessage = null
         awaitingStep = true
+        isAwaitingStep = true
         waitingSince = System.currentTimeMillis()
         stallNudged = true
         stallPhase = ClassroomStallPhase.SLOW
+    }
+
+    private fun signalSupportCue() {
+        supportCue = true
+        queueCueClear()
+    }
+
+    private fun queueCueClear() {
+        cueJob?.cancel()
+        cueJob = scope.launch {
+            delay(4_000L)
+            supportCue = false
+            celebrationCue = false
+        }
     }
 
     fun dismissNotice() {
@@ -481,6 +537,10 @@ class ClassroomEngine(
             // immediately — the wire contract never paces these.
             applyMutation(ClassroomBridge.onImmediateComponentRender(component, boardChildren))
             if (component.type == "ProgressBar") syncStackProgress(component)
+            if (component.type == "Celebration") {
+                celebrationCue = true
+                queueCueClear()
+            }
         }
     }
 
@@ -526,6 +586,10 @@ class ClassroomEngine(
     // ── Turn-queue playback ──────────────────────────────────────────────
 
     private fun stopNarration() {
+        speechGeneration += 1
+        activeSpeaker = null
+        speakingTurn = null
+        replayedSpeechTurn = null
         playerJob?.cancel()
         playerJob = null
         promptTimeoutJob?.cancel()
@@ -553,24 +617,50 @@ class ClassroomEngine(
         val mutation = ClassroomBridge.directorTurnToA2ui(turn, boardChildren)
         applyMutation(mutation)
 
+        if (turn.type == "lyo_state" && turn.state == "celebrating") {
+            celebrationCue = true
+            queueCueClear()
+        }
+
         when (turn.type) {
             "speech", "user_prompt" -> {
                 val spoken = turn.text.orEmpty()
-                pushTranscript(turn.speaker ?: "Teacher", spoken)
+                speakingTurn = if (turn.type == "speech") turn else null
+                // A learner may pause mid-sentence; replay its audio on
+                // resume but keep exactly one line in the full notebook.
+                val isReplay = turn === replayedSpeechTurn
+                replayedSpeechTurn = null
+                if (!isReplay) pushTranscript(turn.speaker ?: "Teacher", spoken)
+                val speechId = ++speechGeneration
+                if (spoken.isNotBlank()) activeSpeaker = turn.speaker ?: "Teacher"
                 if (isVoiceEnabled && spoken.isNotBlank()) {
                     if (turn.type == "speech" && voicePlayer != null) {
                         // Advance on actual audio completion, never on a reading
                         // estimate that can cut a slow response off mid-sentence.
                         withTimeoutOrNull(180_000L) {
                             suspendCancellableCoroutine<Unit> { continuation ->
-                                voicePlayer.play(spoken, voiceLanguage) {
+                                voicePlayer.play(spoken, voiceLanguage, ClassroomCast.speaker(turn.speaker, topic).id) {
                                     if (continuation.isActive) continuation.resume(Unit)
                                 }
                                 continuation.invokeOnCancellation { voicePlayer.stop() }
                             }
                         }
+                        if (speechId == speechGeneration) {
+                            activeSpeaker = null
+                            speakingTurn = null
+                        }
                     } else {
-                        voicePlayer?.play(spoken, voiceLanguage)
+                        if (voicePlayer != null) {
+                            voicePlayer.play(spoken, voiceLanguage, ClassroomCast.speaker(turn.speaker, topic).id) {
+                                if (speechId == speechGeneration) activeSpeaker = null
+                            }
+                        }
+                    }
+                }
+                if (turn.type == "user_prompt" && (!isVoiceEnabled || voicePlayer == null)) {
+                    scope.launch {
+                        delay(readingDurationMs(spoken))
+                        if (speechId == speechGeneration) activeSpeaker = null
                     }
                 }
             }
@@ -599,6 +689,10 @@ class ClassroomEngine(
 
         if (!(turn.type == "speech" && isVoiceEnabled && voicePlayer != null)) {
             delay(pacingDelayMs(turn))
+        }
+        if (turn.type == "speech") {
+            activeSpeaker = null
+            speakingTurn = null
         }
         playNext()
     }
@@ -650,7 +744,7 @@ class ClassroomEngine(
         val sent = ClassroomSocketClient.send(
             ClassroomBridge.actionToUserAction(action, sessionId),
         )
-        if (!sent) return
+        if (!sent) return onUnsentAction()
         if (action.name == "submitPrompt") {
             promptTimeoutJob?.cancel()
             hasActiveCheckpoint = false
@@ -665,12 +759,25 @@ class ClassroomEngine(
         }
     }
 
+    private fun onUnsentAction() {
+        // An unsuccessful send must not advance or mutate the prompt; there
+        // is no confirmed grade to replay over a fresh connection.
+        ClassroomSocketClient.reconnectNow()
+        notice = "Connection interrupted. Your answer was not submitted; please try again after reconnecting."
+    }
+
     // ── Outgoing: chrome-originated actions ──────────────────────────────
 
     fun toggleVoice() {
         isVoiceEnabled = !isVoiceEnabled
         voicePlayer?.setEnabled(isVoiceEnabled)
         if (!isVoiceEnabled) {
+            speakingTurn?.let {
+                replayedSpeechTurn = it
+                turnQueue.addFirst(it)
+            }
+            speakingTurn = null
+            activeSpeaker = null
             playerJob?.cancel()
             playerJob = null
             if (!hasActiveCheckpoint && !isPaused) startPlayer()
@@ -692,6 +799,14 @@ class ClassroomEngine(
             if (!hasActiveCheckpoint) startPlayer()
         } else {
             isPaused = true
+            // Replaying narration is safe; replaying a submitted answer is
+            // not. The active speech turn is the only interruption we queue.
+            speakingTurn?.let {
+                replayedSpeechTurn = it
+                turnQueue.addFirst(it)
+            }
+            speakingTurn = null
+            activeSpeaker = null
             voicePlayer?.stop()
             playerJob?.cancel()
             promptTimeoutJob?.cancel()
@@ -731,6 +846,7 @@ class ClassroomEngine(
 
     fun requestHint(level: String) {
         stopNarration()
+        signalSupportCue()
         flushActivities()
         if (ClassroomSocketClient.send(ClassroomBridge.requestHintAction(sessionId, level))) {
             pushTranscript("You", "Requested a hint")
@@ -740,6 +856,7 @@ class ClassroomEngine(
 
     fun signalConfused() {
         stopNarration()
+        signalSupportCue()
         flushActivities()
         if (ClassroomSocketClient.send(ClassroomBridge.signalConfusedAction(sessionId))) {
             pushTranscript("You", "Requested a small nudge")

@@ -59,6 +59,7 @@ android {
         applicationId = "com.lyo.app"
         minSdk = 26
         targetSdk = 35
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Every Play upload needs a higher versionCode than the last one.
         // Override per build with LYO_VERSION_CODE / LYO_VERSION_NAME.
         versionCode = setting("LYO_VERSION_CODE")?.let {
@@ -183,4 +184,11 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+
+    // Staging-only UI acceptance: exercise actual Compose tap targets and semantics.
+    androidTestImplementation(composeBom)
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
