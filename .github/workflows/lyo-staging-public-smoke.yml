@@ -1,0 +1,21 @@
+name: LYO staging public smoke
+on:
+  push:
+    branches: [qa/lyo-staging-public-smoke-20261113]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Staging HTTP and Next.js assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Probe isolated Railway staging only
+        run: node scripts/qa/verify-lyo-staging-public.mjs
