@@ -72,6 +72,19 @@ async def run():
                 timeout=30000)
             print("PASS: Chromium signed in through visible Web login form", flush=True)
 
+            # Install before the next navigation: expose a QA-only handle to
+            # forcibly terminate one live WebSocket if Chromium's offline
+            # emulation does not actually close an already-open socket.
+            await context.add_init_script("""(() => {
+              const Native = window.WebSocket;
+              window.__lyoQaSockets = [];
+              window.WebSocket = class extends Native {
+                constructor(url, protocols) {
+                  super(url, protocols);
+                  window.__lyoQaSockets.push(this);
+                }
+              };
+            })();""")
             sockets = []
             def on_socket(ws):
                 u = urlsplit(ws.url)
@@ -82,8 +95,12 @@ async def run():
                     "session": qs.get("session_id", [""])[0],
                     "resume": qs.get("resume", [""])[0],
                     "scenes": [],
+                    "closed": False,
                 }
                 sockets.append(info)
+                def on_close():
+                    info["closed"] = True
+                ws.on("close", on_close)
                 def on_frame(frame):
                     try:
                         event = json.loads(frame if isinstance(frame, str) else frame.decode())
@@ -117,8 +134,21 @@ async def run():
             await context.set_offline(True)
             await asyncio.sleep(2)
             await context.set_offline(False)
+            if not await until(lambda: first["closed"], 4):
+                # Offline simulation can leave established WebSockets alive on
+                # Chromium. Force their close, then test the actual app's
+                # WebSocket onclose-based reconnect path deterministically.
+                print("QA NOTE: emulated offline left socket open; forcing transport close")
+                await page.evaluate("""() => {
+                  const sockets = window.__lyoQaSockets || [];
+                  const active = [...sockets].reverse().find(s => s.readyState === WebSocket.OPEN);
+                  if (!active) throw new Error('No active WebSocket for forced disconnect');
+                  active.close(4000, 'QA transport interruption');
+                }""")
+                if not await until(lambda: first["closed"], 5):
+                    raise RuntimeError("Browser never delivered WebSocket close after forced drop")
             if not await until(lambda: len(sockets) >= 2, 25):
-                raise RuntimeError("Classroom did not reconnect after network recovery")
+                raise RuntimeError("Classroom onclose did not reconnect to server")
             resumed = sockets[-1]
             if resumed["session"] != first["session"] or resumed["resume"] != "1":
                 raise RuntimeError("Classroom Web reconnect omitted same session or resume=1")
