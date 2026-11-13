@@ -28,6 +28,8 @@ async function probe(path, base, expect) {
 }
 
 await probe('/health', api, 'health');
+await probe('/api/v1/classroom/health', api, 'health');
+await probe('/api/v1/classroom/capabilities', api, 'capabilities');
 const html = await probe('/', web, 'html');
 await probe('/auth/login', web, 'html');
 
@@ -38,4 +40,4 @@ const chunk = scripts.find(url => url.startsWith('/_next/static/') && url.includ
 if (!chunk) throw new Error('No Next.js static script referenced by the staging home page');
 const source = await probe(chunk, web, 'asset');
 if (!source || source.length < 100) throw new Error('Next.js script was empty or truncated');
-console.log('PASS: staging Web, auth screen, backend health, and a Next.js asset are reachable');
+console.log('PASS: staging Web, auth screen, Classroom endpoints, backend health, and a Next.js asset are reachable');
