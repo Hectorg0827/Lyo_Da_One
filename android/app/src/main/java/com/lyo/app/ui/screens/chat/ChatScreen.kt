@@ -86,6 +86,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -236,9 +237,12 @@ fun ChatScreen(nav: NavHostController) {
     }
     BackHandler(enabled = showHistory) { showHistory = false }
     var historyError by remember { mutableStateOf<String?>(null) }
-    var input by remember { mutableStateOf("") }
+    // NavHost saves/restores destination state when switching bottom tabs.
+    // Keep the unfinished composer text instead of discarding it on tab change.
+    var input by rememberSaveable { mutableStateOf("") }
     var isStreaming by remember { mutableStateOf(false) }
-    var activeConversationId by remember { mutableStateOf<String?>(null) }
+    // Restore the same server conversation when returning to Chat.
+    var activeConversationId by rememberSaveable { mutableStateOf<String?>(null) }
     val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
     var dictating by remember { mutableStateOf(false) }
