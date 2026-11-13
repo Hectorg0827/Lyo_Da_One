@@ -1,0 +1,25 @@
+name: LYO authenticated Classroom staging acceptance
+
+on:
+  push:
+    branches:
+      - qa/lyo-authenticated-classroom-staging-20261113
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  classroom-live:
+    name: Synthetic learner auth, scene and resume
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install only WebSocket test dependency
+        run: python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Authenticate synthetic learner; restore exact Classroom scene; delete learner
+        run: python -u scripts/qa/live_classroom_auth.py
