@@ -45,7 +45,9 @@ for (const marker of expectedOrder) {
   previousIndex = index;
 }
 
-requireText(nav, 'composable(Routes.CHAT) { ChatScreen(nav) }', 'Android Lyo chat route');
+requireText(nav, 'composable(Routes.CHAT) { ChatScreen(nav, chatSession) }', 'Android Lyo chat route');
+requireText(nav, 'val chatSession: ChatSessionViewModel = viewModel()', 'Chat session above navigation destination');
+requireText(nav, 'chatSession.resetForLogout()', 'Chat session cleared on logout');
 
 // Edge-to-edge rendering is enabled by MainActivity. Keep the native tab row
 // above either gesture navigation or Samsung's three-button system bar.
