@@ -1062,6 +1062,7 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
         speakingMessageId = null
         streamJob?.cancel()
         streamJob = null
+        isStreaming = false
         activeConversationId = null
         pendingAttachments.clear()
         inputError = null
