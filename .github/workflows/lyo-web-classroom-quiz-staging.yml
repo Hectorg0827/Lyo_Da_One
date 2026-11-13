@@ -1,0 +1,35 @@
+name: LYO Web Classroom quiz staging QA
+
+on:
+  push:
+    branches:
+      - fix/lyo-web-classroom-option-identity-20261112
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  web-classroom-qa:
+    name: Web Classroom tests, types and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked Web dependencies
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+      - name: Recheck option identity and complete Web test suite
+        working-directory: web
+        run: npm test
+      - name: Verify Web types
+        working-directory: web
+        run: npx tsc --noEmit
+      - name: Build Web staging candidate
+        working-directory: web
+        run: npm run build
