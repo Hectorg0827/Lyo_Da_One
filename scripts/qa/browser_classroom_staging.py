@@ -55,16 +55,22 @@ async def run():
 
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox"])
-            context = await browser.new_context(viewport={"width": 412, "height": 915},
-                                                device_scale_factor=1)
+            # Seed localStorage before any page JavaScript or AuthProvider
+            # hydration can run; post-load injection was vulnerable to a race
+            # that cleared the token before Classroom's first connect().
+            context = await browser.new_context(
+                viewport={"width": 412, "height": 915},
+                device_scale_factor=1,
+                storage_state={"cookies": [], "origins": [{
+                    "origin": WEB,
+                    "localStorage": [{"name": "lyo_token", "value": token}]
+                }]},
+            )
             page = await context.new_page()
-            # The visible login form has already passed once in run
-            # #43508877955. Use the verified synthetic API token directly for
-            # subsequent reconnect runs to avoid auth rate-limit interference.
-            stage = "Web auth hydration"
-            await page.goto(WEB + "/auth/login", wait_until="domcontentloaded", timeout=25000)
-            await page.evaluate("(token) => localStorage.setItem('lyo_token', token)", token)
-            print("PASS: staging browser hydrated with disposable authenticated token", flush=True)
+            # Verified visible login is covered in run #43508877955.
+            # This test validates an actual pre-authenticated browser session.
+            stage = "Web auth initialization"
+            print("PASS: isolated Chromium context seeded with disposable token before page load", flush=True)
 
             # Install before the next navigation: expose a QA-only handle to
             # forcibly terminate one live WebSocket if Chromium's offline
@@ -163,6 +169,7 @@ async def run():
             if first is None:
                 entries = await page.evaluate(summary_js)
                 state_summary = [(entry["state"], len(entry["scenes"])) for entry in entries]
+                token_present = await page.evaluate("() => Boolean(localStorage.getItem('lyo_token'))")
                 status_signals = await page.evaluate("""() => {
                   const body = document.body.innerText || '';
                   return ['Connecting…', 'Sign in to start a secure AI classroom.',
@@ -174,7 +181,8 @@ async def run():
                       + " observed_ws_paths=" + str(observed_socket_paths[:12])
                       + " api_responses=" + str(api_responses[-12:])
                       + " page_errors=" + str(len(page_errors))
-                      + " status_signals=" + str(status_signals), flush=True)
+                      + " status_signals=" + str(status_signals)
+                      + " token_present=" + str(token_present), flush=True)
                 try:
                     await page.screenshot(path=str(ARTIFACTS / "classroom_failed_initial.png"), full_page=True)
                 except Exception:
