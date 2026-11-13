@@ -141,7 +141,9 @@ async def main():
     finally:
         if created and token:
             try:
-                status, response = http("DELETE", "/api/v1/auth/me", token=token)
+                # Enhanced auth routes are mounted at /auth, distinct from
+                # the legacy /api/v1/auth GET-only alias.
+                status, response = http("DELETE", "/auth/me", token=token)
                 if status == 200 and response.get("deleted") is True:
                     print("QA cleanup: synthetic learner deleted")
                 else:
