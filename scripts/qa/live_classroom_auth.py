@@ -96,13 +96,24 @@ async def main():
     try:
         print("QA: registering synthetic learner on staging")
         status, registration = http("POST", "/api/v1/auth/register", payload)
-        if status != 201:
+        # Some staging deployments expose the lightweight registration alias:
+        # 200 {user_id, message}; the enhanced auth service returns 201 + JWT.
+        # Accept either contract, then authenticate with the supported login
+        # endpoint instead of treating a created account as a failed signup.
+        if status not in (200, 201):
             raise RuntimeError("Registration HTTP " + str(status))
         created = True
         token = registration.get("access_token")
+        print("PASS: registration HTTP " + str(status))
         if not token:
-            raise RuntimeError("Registration produced no access token")
-        print("PASS: registration 201")
+            login_status, login = http("POST", "/api/v1/auth/login",
+                                       {"email": payload["email"], "password": password})
+            if login_status != 200:
+                raise RuntimeError("Login after registration HTTP " + str(login_status))
+            token = login.get("access_token")
+            if not token:
+                raise RuntimeError("Login returned no access token")
+            print("PASS: login yielded access token (not printed)")
 
         status, account = http("GET", "/api/v1/auth/me", token=token)
         if status != 200 or not account.get("id"):
