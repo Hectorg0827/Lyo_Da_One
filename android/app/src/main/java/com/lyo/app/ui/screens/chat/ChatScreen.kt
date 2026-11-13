@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.provider.OpenableColumns
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -111,6 +112,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.lyo.app.R
+import com.lyo.app.BuildConfig
 import com.lyo.app.data.Session
 import com.lyo.app.data.api.AiConversationMessageDto
 import com.lyo.app.data.api.AiConversationSummaryDto
@@ -295,6 +297,7 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
     var streamJob by chatState.streamJob
     val listState = rememberLazyListState()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val voiceLatency = remember { VoiceLatencyMeter() }
 
     DisposableEffect(context) {
         lateinit var engine: TextToSpeech
@@ -311,6 +314,26 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
             override fun onStart(utteranceId: String?) {
                 mainHandler.post {
                     if (voiceConversation && utteranceId != null) {
+                        // Only actual response speech counts. The UI's optional
+                        // progress text is never a substitute for first audio.
+                        if (spokenRanges.containsKey(utteranceId)) {
+                            voiceLatency.firstAudio()?.let { sample ->
+                                if (BuildConfig.DEBUG) {
+                                    Log.d(
+                                        "LYO_VOICE_LATENCY",
+                                        "asr_end_to_final_ms=${sample.endOfSpeechToFinalMs} " +
+                                            "asr_final_to_submit_ms=${sample.finalToSubmitMs} " +
+                                            "submit_to_text_ms=${sample.submitToFirstTextMs} " +
+                                            "submit_to_voice_payload_ms=${sample.submitToFirstVoicePayloadMs} " +
+                                            "submit_to_audio_ms=${sample.submitToFirstAudioMs} " +
+                                            "end_of_speech_to_audio_ms=${sample.endOfSpeechToFirstAudioMs} " +
+                                            "p50_audio_ms=${sample.p50FirstAudioMs} " +
+                                            "p95_audio_ms=${sample.p95FirstAudioMs} " +
+                                            "audio_turns=${sample.completedAudioTurns}",
+                                    )
+                                }
+                            }
+                        }
                         spokenRanges[utteranceId]?.let { (prefix, _) -> spokenVoiceCaption = prefix }
                     }
                 }
@@ -463,6 +486,7 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
             }
         }
         val clientMessageId = UUID.randomUUID().toString()
+        if (voiceConversation) voiceLatency.submitted()
         val interruptedPreviousTurn = voiceInterruptedPreviousTurn
         voiceInterruptedPreviousTurn = false
         messages.add(ChatMsg(role = "user", content = content, id = clientMessageId))
@@ -526,11 +550,13 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                 ).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
+                            if (voiceConversation) voiceLatency.firstText()
                             val last = messages.last()
                             messages[messages.lastIndex] = last.copy(content = last.content + event.text)
                         }
 
                         is ChatStreamEvent.FinalAnswer -> {
+                            if (voiceConversation) voiceLatency.firstText()
                             val last = messages.last()
                             messages[messages.lastIndex] = last.copy(content = event.text)
                         }
@@ -545,6 +571,7 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
 
                         is ChatStreamEvent.VoiceSegment -> {
                             if (voiceConversation && event.text.isNotBlank()) {
+                                voiceLatency.firstVoicePayload()
                                 val key = "${event.messageId}:${event.sequence}"
                                 voiceSegmentStreamOpen = true
                                 if (
@@ -583,6 +610,9 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                         }
 
                         is ChatStreamEvent.VoiceReady -> {
+                            if (voiceConversation && event.speak && event.text.isNotBlank()) {
+                                voiceLatency.firstVoicePayload()
+                            }
                             if (!event.speak) voiceDelivery.suppressFallback()
                             val hadSegments = streamedVoiceSegmentKeys.any {
                                 it.startsWith("${event.messageId}:")
@@ -759,6 +789,7 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                 }
 
                 override fun onBeginningOfSpeech() {
+                    voiceLatency.speechBegan()
                     // A single speech-start can be the speaker's echo.
                     // Only confirmed, non-echo words may interrupt Lyo.
                     bargeInCandidate = ""
@@ -767,7 +798,10 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
 
                 override fun onRmsChanged(rmsdB: Float) = Unit
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
-                override fun onEndOfSpeech() { dictating = false }
+                override fun onEndOfSpeech() {
+                    voiceLatency.speechEnded()
+                    dictating = false
+                }
 
                 override fun onError(error: Int) {
                     recognizerInFlight = false
@@ -807,6 +841,7 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                     bargeInConfirmations = 0
 
                     if (accepted) {
+                        voiceLatency.recognitionFinal()
                         if (speakingMessageId != null || isStreaming) {
                             voiceInterruptedPreviousTurn = true
                         }
@@ -890,14 +925,8 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                 voiceThinkingNudge = if (voiceLanguageTag.startsWith("es"))
                     "Mmm, déjame ver…" else "Hmm, let me see…"
                 lastThinkingNudgeText = voiceThinkingNudge
-                // Only the first gentle nudge speaks. Later wait messages are
-                // visual, so Lyo does not chatter or obscure a user interruption.
-                if (textToSpeechReady) {
-                    textToSpeech?.speak(
-                        voiceThinkingNudge, TextToSpeech.QUEUE_FLUSH,
-                        null, "voice-thinking-nudge",
-                    )
-                }
+                // A spoken filler competes with TTS and can interrupt the real
+                // response. Keep the progress indication visual only.
             }
             delay(4200)
             if (voiceConversation && isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0) {
