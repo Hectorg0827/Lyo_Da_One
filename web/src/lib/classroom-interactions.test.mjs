@@ -396,7 +396,7 @@ test('durably completed guided scenes stop being offered back without a director
 test('unexpected disconnect reconnects the exact same lesson without clearing its board', async () => {
   const { store, sockets, timers } = classroom();
   const old = sockets[0];
-  old.receive(component('TeacherMessage', { text: 'The fraction 2/3 is two parts out of three.' }));
+  old.receive(component('TeacherMessage', { text: JSON.stringify([{ type: 'board', content: 'The fraction 2/3 is two parts out of three.' }]) }));
   const priorBoard = taught(store);
   assert.ok(priorBoard.length > 0);
 
