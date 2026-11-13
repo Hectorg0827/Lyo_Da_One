@@ -10,8 +10,9 @@ import * as learner from './learner-model.mjs';
 import * as visuals from './teaching-activity.mjs';
 import * as boardPresentation from './board-presentation.mjs';
 import * as commonsImage from './commons-image.mjs';
+import * as recovery from './classroom-websocket-recovery.mjs';
 
-function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' } } = {}) {
+function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' }, onRefreshToken = null } = {}) {
   const sockets = [], timers = [], canceled = [], intervals = [];
   let clockMs = Date.now();
   let state;
@@ -24,10 +25,11 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     static OPEN = 1;
     readyState = 1;
     sent = [];
-    constructor() { sockets.push(this); }
+    constructor(url) { this.url = url; sockets.push(this); }
     send(message) { this.sent.push(JSON.parse(message)); }
     close() {}
     receive(message) { this.onmessage({ data: JSON.stringify(message) }); }
+    drop(code = 1006) { this.readyState = 3; this.onclose?.({ code }); }
   }
   const deps = {
     zustand: { create }, '@/lib/classroom-audio.mjs': audio,
@@ -38,6 +40,11 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     // stub: no test drives a board image, so it is never called, and a stub
     // would hide the day one does.
     '@/lib/commons-image.mjs': commonsImage,
+    '@/lib/classroom-websocket-recovery.mjs': recovery,
+    '@/lib/api': {
+      getAccessToken: () => localStorage.getItem('lyo_token'),
+      refreshRealtimeAccessToken: async () => onRefreshToken ? onRefreshToken(localStorage) : null,
+    },
   };
   // A real key/value store, not a stub that answers every key with a token:
   // the classroom now reads the session it last started out of the same
