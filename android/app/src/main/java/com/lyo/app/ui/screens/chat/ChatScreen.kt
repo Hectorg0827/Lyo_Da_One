@@ -106,6 +106,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.lyo.app.R
@@ -135,6 +137,7 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.max
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -221,11 +224,32 @@ private val Suggestions = listOf(
     "Help me study for an exam",
 )
 
+/**
+ * Owns an AI response independently of the Chat destination. Tab navigation
+ * disposes the screen, but does not cancel the stream or discard messages.
+ */
+class ChatSessionViewModel : ViewModel() {
+    val messages = mutableStateListOf<ChatMsg>()
+    val isStreaming = mutableStateOf(false)
+    val activeConversationId = mutableStateOf<String?>(null)
+    val streamJob = mutableStateOf<Job?>(null)
+    var initialized = false
+
+    fun resetForLogout() {
+        streamJob.value?.cancel()
+        streamJob.value = null
+        messages.clear()
+        isStreaming.value = false
+        activeConversationId.value = null
+        initialized = false
+    }
+}
+
 @Composable
-fun ChatScreen(nav: NavHostController) {
+fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val messages = remember { mutableStateListOf<ChatMsg>() }
+    val messages = chatState.messages
     val conversations = remember { mutableStateListOf<AiConversationSummaryDto>() }
     var showHistory by remember { mutableStateOf(false) }
     val mascotEntrance = remember { Animatable(0f) }
@@ -240,9 +264,9 @@ fun ChatScreen(nav: NavHostController) {
     // NavHost saves/restores destination state when switching bottom tabs.
     // Keep the unfinished composer text instead of discarding it on tab change.
     var input by rememberSaveable { mutableStateOf("") }
-    var isStreaming by remember { mutableStateOf(false) }
+    var isStreaming by chatState.isStreaming
     // Restore the same server conversation when returning to Chat.
-    var activeConversationId by rememberSaveable { mutableStateOf<String?>(null) }
+    var activeConversationId by chatState.activeConversationId
     val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
     var dictating by remember { mutableStateOf(false) }
@@ -268,7 +292,7 @@ fun ChatScreen(nav: NavHostController) {
     var pendingVoiceUtterances by remember { mutableStateOf(0) }
     val streamedVoiceSegmentKeys = remember { mutableSetOf<String>() }
     var continuousRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
-    var streamJob by remember { mutableStateOf<Job?>(null) }
+    var streamJob by chatState.streamJob
     val listState = rememberLazyListState()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
 
@@ -348,8 +372,8 @@ fun ChatScreen(nav: NavHostController) {
             speakingMessageId = null
             continuousRecognizer?.destroy()
             continuousRecognizer = null
-            streamJob?.cancel()
-            streamJob = null
+            // The voice UI ends when leaving, but a text response keeps streaming.
+            voiceConversation = false
         }
     }
 
@@ -459,7 +483,7 @@ fun ChatScreen(nav: NavHostController) {
         spokenRanges.clear()
 
         streamJob?.cancel()
-        streamJob = scope.launch {
+        streamJob = chatState.viewModelScope.launch {
             var responseCompleted = false
             val voiceDelivery = VoiceReplyDelivery()
             val conversationId = activeConversationId ?: runCatching {
@@ -468,11 +492,15 @@ fun ChatScreen(nav: NavHostController) {
                         title = trimmed.ifBlank { attachments.firstOrNull()?.name.orEmpty() }.take(80),
                     ),
                 ).id
-            }.getOrElse {
-                messages[messages.lastIndex] = messages.last().copy(
-                    content = "I couldn't save this conversation. Please check your connection and try again.",
-                )
+            }.getOrElse { error ->
+                if (error is CancellationException) return@launch
+                messages.lastOrNull()?.let { last ->
+                    messages[messages.lastIndex] = last.copy(
+                        content = "I couldn't save this conversation. Please check your connection and try again.",
+                    )
+                }
                 isStreaming = false
+                streamJob = null
                 return@launch
             }
             activeConversationId = conversationId
@@ -613,14 +641,18 @@ fun ChatScreen(nav: NavHostController) {
                     }
                 }
             }.onFailure { error ->
-                if (error !is CancellationException || !voiceConversation) {
-                    messages[messages.lastIndex] = messages.last().copy(
+                if (error is CancellationException) return@launch
+                messages.lastOrNull()?.let { last ->
+                    messages[messages.lastIndex] = last.copy(
                         content = "The response was interrupted. Your conversation is saved—please try again.",
                     )
                 }
             }
-            isStreaming = false
-            streamJob = null
+            // A cancelled older turn must not clear a replacement turn's status.
+            if (streamJob === currentCoroutineContext()[Job]) {
+                isStreaming = false
+                streamJob = null
+            }
 
             if (voiceConversation && responseCompleted) {
                 val assistant = messages.lastOrNull { it.role == "assistant" && it.content.isNotBlank() }
@@ -988,16 +1020,23 @@ fun ChatScreen(nav: NavHostController) {
         val seededPrompt = nav.previousBackStackEntry?.savedStateHandle
             ?.remove<String>("lyo_chat_seed_prompt")
         if (!seededPrompt.isNullOrBlank()) {
+            chatState.initialized = true
+            streamJob?.cancel()
+            streamJob = null
+            isStreaming = false
             activeConversationId = null
             messages.clear()
             send(seededPrompt)
-        } else {
+        } else if (!chatState.initialized) {
+            // Re-entry must never replace an in-flight reply with stale history.
+            chatState.initialized = true
             runCatching {
                 val latest = ApiClient.api.aiConversations().conversations.firstOrNull() ?: return@runCatching
                 val detail = ApiClient.api.aiConversation(latest.id)
-                activeConversationId = detail.id
-                messages.clear()
-                messages.addAll(detail.messages.map { it.toChatMsg() })
+                if (!isStreaming && activeConversationId == null && messages.isEmpty()) {
+                    activeConversationId = detail.id
+                    messages.addAll(detail.messages.map { it.toChatMsg() })
+                }
             }
         }
     }
