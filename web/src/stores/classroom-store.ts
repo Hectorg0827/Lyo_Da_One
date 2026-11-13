@@ -129,7 +129,7 @@ export type BoardElement = (
   | { id: string; kind: 'bullets'; items: string[] }
   | { id: string; kind: 'chart'; chartType: 'bar' | 'line'; labels: string[]; values: number[] }
   | { id: string; kind: 'explorable'; expression: string; params: { name: string; min: number; max: number; initial: number; step?: number }[]; xMin?: number; xMax?: number; prompt?: string }
-  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string; skipped?: boolean }
+  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; answeredOptionId?: string; wasCorrect?: boolean; feedback?: string; skipped?: boolean }
   | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean; skipped?: boolean }
   | { id: string; kind: 'summary'; title: string; content?: string; items: string[]; retrievalScheduled?: boolean }
   | { id: string; kind: 'source'; labels: string[] }
@@ -1303,7 +1303,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       set((state) => ({
         board: state.board.map((item) =>
           item.id === elementId && item.kind === 'quiz'
-            ? { ...item, answered: option.label }
+            ? { ...item, answered: option.label, answeredOptionId: option.id }
             : item),
         lyoState: 'thinking',
         waitingForScene: true,

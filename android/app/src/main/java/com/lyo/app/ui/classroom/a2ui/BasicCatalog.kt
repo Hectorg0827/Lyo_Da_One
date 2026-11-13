@@ -251,9 +251,9 @@ private fun A2uiRenderScope.ChoicePickerRenderer() {
 
     ClassroomChipRow(
         options = options,
-        stateFor = { option -> if (option == selected) ChipState.SELECTED else ChipState.DEFAULT },
-        enabledFor = { selected == null },
-        onSelect = { option ->
+        stateFor = { _, option -> if (option == selected) ChipState.SELECTED else ChipState.DEFAULT },
+        enabledFor = { _, _ -> selected == null },
+        onSelect = { _, option ->
             if (path != null) writeLocalDataModel(path, JsonPrimitive(option))
             if (actionName != null) {
                 fireAction(actionName, mapOf("selectedLabel" to JsonPrimitive(option)))

@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.provider.OpenableColumns
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -86,6 +87,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -105,9 +107,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.lyo.app.R
+import com.lyo.app.BuildConfig
 import com.lyo.app.data.Session
 import com.lyo.app.data.api.AiConversationMessageDto
 import com.lyo.app.data.api.AiConversationSummaryDto
@@ -134,6 +139,7 @@ import java.util.Locale
 import java.util.UUID
 import kotlin.math.max
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -220,11 +226,32 @@ private val Suggestions = listOf(
     "Help me study for an exam",
 )
 
+/**
+ * Owns an AI response independently of the Chat destination. Tab navigation
+ * disposes the screen, but does not cancel the stream or discard messages.
+ */
+class ChatSessionViewModel : ViewModel() {
+    val messages = mutableStateListOf<ChatMsg>()
+    val isStreaming = mutableStateOf(false)
+    val activeConversationId = mutableStateOf<String?>(null)
+    val streamJob = mutableStateOf<Job?>(null)
+    var initialized = false
+
+    fun resetForLogout() {
+        streamJob.value?.cancel()
+        streamJob.value = null
+        messages.clear()
+        isStreaming.value = false
+        activeConversationId.value = null
+        initialized = false
+    }
+}
+
 @Composable
-fun ChatScreen(nav: NavHostController) {
+fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val messages = remember { mutableStateListOf<ChatMsg>() }
+    val messages = chatState.messages
     val conversations = remember { mutableStateListOf<AiConversationSummaryDto>() }
     var showHistory by remember { mutableStateOf(false) }
     val mascotEntrance = remember { Animatable(0f) }
@@ -236,9 +263,12 @@ fun ChatScreen(nav: NavHostController) {
     }
     BackHandler(enabled = showHistory) { showHistory = false }
     var historyError by remember { mutableStateOf<String?>(null) }
-    var input by remember { mutableStateOf("") }
-    var isStreaming by remember { mutableStateOf(false) }
-    var activeConversationId by remember { mutableStateOf<String?>(null) }
+    // NavHost saves/restores destination state when switching bottom tabs.
+    // Keep the unfinished composer text instead of discarding it on tab change.
+    var input by rememberSaveable { mutableStateOf("") }
+    var isStreaming by chatState.isStreaming
+    // Restore the same server conversation when returning to Chat.
+    var activeConversationId by chatState.activeConversationId
     val pendingAttachments = remember { mutableStateListOf<PendingChatAttachment>() }
     var uploadingAttachment by remember { mutableStateOf(false) }
     var dictating by remember { mutableStateOf(false) }
@@ -264,9 +294,10 @@ fun ChatScreen(nav: NavHostController) {
     var pendingVoiceUtterances by remember { mutableStateOf(0) }
     val streamedVoiceSegmentKeys = remember { mutableSetOf<String>() }
     var continuousRecognizer by remember { mutableStateOf<SpeechRecognizer?>(null) }
-    var streamJob by remember { mutableStateOf<Job?>(null) }
+    var streamJob by chatState.streamJob
     val listState = rememberLazyListState()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    val voiceLatency = remember { VoiceLatencyMeter() }
 
     DisposableEffect(context) {
         lateinit var engine: TextToSpeech
@@ -283,6 +314,26 @@ fun ChatScreen(nav: NavHostController) {
             override fun onStart(utteranceId: String?) {
                 mainHandler.post {
                     if (voiceConversation && utteranceId != null) {
+                        // Only actual response speech counts. The UI's optional
+                        // progress text is never a substitute for first audio.
+                        if (spokenRanges.containsKey(utteranceId)) {
+                            voiceLatency.firstAudio()?.let { sample ->
+                                if (BuildConfig.DEBUG) {
+                                    Log.d(
+                                        "LYO_VOICE_LATENCY",
+                                        "asr_end_to_final_ms=${sample.endOfSpeechToFinalMs} " +
+                                            "asr_final_to_submit_ms=${sample.finalToSubmitMs} " +
+                                            "submit_to_text_ms=${sample.submitToFirstTextMs} " +
+                                            "submit_to_voice_payload_ms=${sample.submitToFirstVoicePayloadMs} " +
+                                            "submit_to_audio_ms=${sample.submitToFirstAudioMs} " +
+                                            "end_of_speech_to_audio_ms=${sample.endOfSpeechToFirstAudioMs} " +
+                                            "p50_audio_ms=${sample.p50FirstAudioMs} " +
+                                            "p95_audio_ms=${sample.p95FirstAudioMs} " +
+                                            "audio_turns=${sample.completedAudioTurns}",
+                                    )
+                                }
+                            }
+                        }
                         spokenRanges[utteranceId]?.let { (prefix, _) -> spokenVoiceCaption = prefix }
                     }
                 }
@@ -344,8 +395,8 @@ fun ChatScreen(nav: NavHostController) {
             speakingMessageId = null
             continuousRecognizer?.destroy()
             continuousRecognizer = null
-            streamJob?.cancel()
-            streamJob = null
+            // The voice UI ends when leaving, but a text response keeps streaming.
+            voiceConversation = false
         }
     }
 
@@ -435,6 +486,7 @@ fun ChatScreen(nav: NavHostController) {
             }
         }
         val clientMessageId = UUID.randomUUID().toString()
+        if (voiceConversation) voiceLatency.submitted()
         val interruptedPreviousTurn = voiceInterruptedPreviousTurn
         voiceInterruptedPreviousTurn = false
         messages.add(ChatMsg(role = "user", content = content, id = clientMessageId))
@@ -455,7 +507,7 @@ fun ChatScreen(nav: NavHostController) {
         spokenRanges.clear()
 
         streamJob?.cancel()
-        streamJob = scope.launch {
+        streamJob = chatState.viewModelScope.launch {
             var responseCompleted = false
             val voiceDelivery = VoiceReplyDelivery()
             val conversationId = activeConversationId ?: runCatching {
@@ -464,11 +516,15 @@ fun ChatScreen(nav: NavHostController) {
                         title = trimmed.ifBlank { attachments.firstOrNull()?.name.orEmpty() }.take(80),
                     ),
                 ).id
-            }.getOrElse {
-                messages[messages.lastIndex] = messages.last().copy(
-                    content = "I couldn't save this conversation. Please check your connection and try again.",
-                )
+            }.getOrElse { error ->
+                if (error is CancellationException) return@launch
+                messages.lastOrNull()?.let { last ->
+                    messages[messages.lastIndex] = last.copy(
+                        content = "I couldn't save this conversation. Please check your connection and try again.",
+                    )
+                }
                 isStreaming = false
+                streamJob = null
                 return@launch
             }
             activeConversationId = conversationId
@@ -494,11 +550,13 @@ fun ChatScreen(nav: NavHostController) {
                 ).collect { event ->
                     when (event) {
                         is ChatStreamEvent.Chunk -> {
+                            if (voiceConversation) voiceLatency.firstText()
                             val last = messages.last()
                             messages[messages.lastIndex] = last.copy(content = last.content + event.text)
                         }
 
                         is ChatStreamEvent.FinalAnswer -> {
+                            if (voiceConversation) voiceLatency.firstText()
                             val last = messages.last()
                             messages[messages.lastIndex] = last.copy(content = event.text)
                         }
@@ -513,6 +571,7 @@ fun ChatScreen(nav: NavHostController) {
 
                         is ChatStreamEvent.VoiceSegment -> {
                             if (voiceConversation && event.text.isNotBlank()) {
+                                voiceLatency.firstVoicePayload()
                                 val key = "${event.messageId}:${event.sequence}"
                                 voiceSegmentStreamOpen = true
                                 if (
@@ -551,6 +610,9 @@ fun ChatScreen(nav: NavHostController) {
                         }
 
                         is ChatStreamEvent.VoiceReady -> {
+                            if (voiceConversation && event.speak && event.text.isNotBlank()) {
+                                voiceLatency.firstVoicePayload()
+                            }
                             if (!event.speak) voiceDelivery.suppressFallback()
                             val hadSegments = streamedVoiceSegmentKeys.any {
                                 it.startsWith("${event.messageId}:")
@@ -609,14 +671,18 @@ fun ChatScreen(nav: NavHostController) {
                     }
                 }
             }.onFailure { error ->
-                if (error !is CancellationException || !voiceConversation) {
-                    messages[messages.lastIndex] = messages.last().copy(
+                if (error is CancellationException) return@launch
+                messages.lastOrNull()?.let { last ->
+                    messages[messages.lastIndex] = last.copy(
                         content = "The response was interrupted. Your conversation is saved—please try again.",
                     )
                 }
             }
-            isStreaming = false
-            streamJob = null
+            // A cancelled older turn must not clear a replacement turn's status.
+            if (streamJob === currentCoroutineContext()[Job]) {
+                isStreaming = false
+                streamJob = null
+            }
 
             if (voiceConversation && responseCompleted) {
                 val assistant = messages.lastOrNull { it.role == "assistant" && it.content.isNotBlank() }
@@ -723,6 +789,7 @@ fun ChatScreen(nav: NavHostController) {
                 }
 
                 override fun onBeginningOfSpeech() {
+                    voiceLatency.speechBegan()
                     // A single speech-start can be the speaker's echo.
                     // Only confirmed, non-echo words may interrupt Lyo.
                     bargeInCandidate = ""
@@ -731,7 +798,10 @@ fun ChatScreen(nav: NavHostController) {
 
                 override fun onRmsChanged(rmsdB: Float) = Unit
                 override fun onBufferReceived(buffer: ByteArray?) = Unit
-                override fun onEndOfSpeech() { dictating = false }
+                override fun onEndOfSpeech() {
+                    voiceLatency.speechEnded()
+                    dictating = false
+                }
 
                 override fun onError(error: Int) {
                     recognizerInFlight = false
@@ -771,6 +841,7 @@ fun ChatScreen(nav: NavHostController) {
                     bargeInConfirmations = 0
 
                     if (accepted) {
+                        voiceLatency.recognitionFinal()
                         if (speakingMessageId != null || isStreaming) {
                             voiceInterruptedPreviousTurn = true
                         }
@@ -854,14 +925,8 @@ fun ChatScreen(nav: NavHostController) {
                 voiceThinkingNudge = if (voiceLanguageTag.startsWith("es"))
                     "Mmm, déjame ver…" else "Hmm, let me see…"
                 lastThinkingNudgeText = voiceThinkingNudge
-                // Only the first gentle nudge speaks. Later wait messages are
-                // visual, so Lyo does not chatter or obscure a user interruption.
-                if (textToSpeechReady) {
-                    textToSpeech?.speak(
-                        voiceThinkingNudge, TextToSpeech.QUEUE_FLUSH,
-                        null, "voice-thinking-nudge",
-                    )
-                }
+                // A spoken filler competes with TTS and can interrupt the real
+                // response. Keep the progress indication visual only.
             }
             delay(4200)
             if (voiceConversation && isStreaming && speakingMessageId == null && pendingVoiceUtterances == 0) {
@@ -984,17 +1049,25 @@ fun ChatScreen(nav: NavHostController) {
         val seededPrompt = nav.previousBackStackEntry?.savedStateHandle
             ?.remove<String>("lyo_chat_seed_prompt")
         if (!seededPrompt.isNullOrBlank()) {
+            chatState.initialized = true
+            streamJob?.cancel()
+            streamJob = null
+            isStreaming = false
             activeConversationId = null
             messages.clear()
             send(seededPrompt)
-        } else {
+        } else if (!chatState.initialized) {
+            // Re-entry must not replace an in-flight reply with stale history.
+            // Mark hydration complete only after success. A transient network
+            // error or cancellation can then retry when Chat is reopened.
             runCatching {
                 val latest = ApiClient.api.aiConversations().conversations.firstOrNull() ?: return@runCatching
                 val detail = ApiClient.api.aiConversation(latest.id)
-                activeConversationId = detail.id
-                messages.clear()
-                messages.addAll(detail.messages.map { it.toChatMsg() })
-            }
+                if (!isStreaming && activeConversationId == null && messages.isEmpty()) {
+                    activeConversationId = detail.id
+                    messages.addAll(detail.messages.map { it.toChatMsg() })
+                }
+            }.onSuccess { chatState.initialized = true }
         }
     }
 
@@ -1019,6 +1092,7 @@ fun ChatScreen(nav: NavHostController) {
         speakingMessageId = null
         streamJob?.cancel()
         streamJob = null
+        isStreaming = false
         activeConversationId = null
         pendingAttachments.clear()
         inputError = null

@@ -19,7 +19,18 @@ import com.lyo.app.ui.theme.LyoGreen
 import com.lyo.app.ui.theme.LyoRed
 import com.lyo.app.ui.theme.TextPrimary
 
-private data class QuizOptionView(val id: String, val label: String, val isCorrect: Boolean?)
+internal data class QuizOptionView(val id: String, val label: String, val isCorrect: Boolean?)
+
+/** Resolve a displayed option by its position, never by potentially duplicate label. */
+internal fun quizOptionForIndex(options: List<QuizOptionView>, index: Int): QuizOptionView? =
+    options.getOrNull(index)
+
+/** Unknown correctness cannot be treated as an incorrect answer. */
+internal fun quizFeedbackKey(option: QuizOptionView): String? = when (option.isCorrect) {
+    true -> "feedback_correct"
+    false -> "feedback_incorrect"
+    null -> null
+}
 
 /**
  * A `QuizCard` component — a graded recognition check, distinct from a
@@ -57,8 +68,8 @@ fun A2uiRenderScope.QuizCardRenderer() {
     val answeredId = resolveString("answeredOptionId")
     val answered = options.firstOrNull { it.id == answeredId }
     val feedback = answered?.let { opt ->
-        val key = if (opt.isCorrect == true) "feedback_correct" else "feedback_incorrect"
-        optionsJson.firstOrNull {
+        val key = quizFeedbackKey(opt)
+        if (key == null) null else optionsJson.firstOrNull {
             it.isJsonObject && it.asJsonObject.get("id")?.asString == opt.id
         }?.asJsonObject?.get(key)?.takeIf { it.isJsonPrimitive }?.asString
     }
@@ -72,26 +83,28 @@ fun A2uiRenderScope.QuizCardRenderer() {
         Text(text = readableClassroomMath(question), color = TextPrimary)
         ClassroomChipRow(
             options = options.map { it.label },
-            stateFor = { label ->
-                val option = options.first { it.label == label }
+            stateFor = { index, _ ->
+                val option = quizOptionForIndex(options, index)
                 when {
-                    option.id != answeredId -> ChipState.DEFAULT
+                    option == null || option.id != answeredId -> ChipState.DEFAULT
                     option.isCorrect == true -> ChipState.CORRECT
                     option.isCorrect == false -> ChipState.INCORRECT
                     else -> ChipState.SELECTED
                 }
             },
-            enabledFor = { answeredId == null },
-            onSelect = { label ->
-                val option = options.first { it.label == label }
-                if (answeredPath != null) writeLocalDataModel(answeredPath, JsonPrimitive(option.id))
-                fireAction(
-                    actionName,
-                    mapOf(
-                        "selectedOptionId" to JsonPrimitive(option.id),
-                        "selectedOptionLabel" to JsonPrimitive(option.label),
-                    ),
-                )
+            enabledFor = { _, _ -> answeredId == null },
+            onSelect = { index, _ ->
+                val option = quizOptionForIndex(options, index)
+                if (option != null) {
+                    if (answeredPath != null) writeLocalDataModel(answeredPath, JsonPrimitive(option.id))
+                    fireAction(
+                        actionName,
+                        mapOf(
+                            "selectedOptionId" to JsonPrimitive(option.id),
+                            "selectedOptionLabel" to JsonPrimitive(option.label),
+                        ),
+                    )
+                }
             },
         )
         if (feedback != null) {

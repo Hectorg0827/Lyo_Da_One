@@ -28,6 +28,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -48,6 +49,7 @@ import com.lyo.app.data.Session
 import com.lyo.app.ui.screens.auth.LoginScreen
 import com.lyo.app.ui.screens.auth.SignupScreen
 import com.lyo.app.ui.screens.chat.ChatScreen
+import com.lyo.app.ui.screens.chat.ChatSessionViewModel
 import com.lyo.app.ui.screens.classroom.ClassroomScreen
 import com.lyo.app.ui.screens.clips.ClipsScreen
 import com.lyo.app.ui.screens.community.GroupsScreen
@@ -169,24 +171,28 @@ private val bottomItems = listOf(
 
 @Composable
 fun LyoApp() {
+    // Resolve above NavHost so a bottom-tab pop cannot destroy the active chat.
+    val chatSession: ChatSessionViewModel = viewModel()
     when {
         Session.isLoading -> SessionLoadingScreen()
         Session.hydrationError != null -> SessionRecoveryScreen(
             message = Session.hydrationError
                 ?: "LYO could not verify your saved session.",
         )
-        else -> LyoNavHost()
+        else -> LyoNavHost(chatSession)
     }
 }
 
 @Composable
-private fun LyoNavHost() {
+private fun LyoNavHost(chatSession: ChatSessionViewModel) {
     val nav: NavHostController = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
 
     val context = LocalContext.current
     LaunchedEffect(Session.isAuthenticated) {
+        // The activity-scoped session must not leak another account's messages.
+        if (!Session.isAuthenticated) chatSession.resetForLogout()
         if (Session.isAuthenticated) runCatching {
             com.lyo.app.notifications.StudyReminders.refreshIfEnabled(context)
         }
@@ -248,7 +254,7 @@ private fun LyoNavHost() {
             composable(Routes.LOGIN) { LoginScreen(nav) }
             composable(Routes.SIGNUP) { SignupScreen(nav) }
             composable(Routes.HOME) { HomeScreen(nav) }
-            composable(Routes.CHAT) { ChatScreen(nav) }
+            composable(Routes.CHAT) { ChatScreen(nav, chatSession) }
             composable(Routes.TEST_PREP) { com.lyo.app.ui.screens.testprep.TestPrepScreen(nav) }
             composable(Routes.PREP_CLASSROOM) { entry ->
                 ClassroomScreen(nav, entry.arguments?.getString("sessionId") ?: "",

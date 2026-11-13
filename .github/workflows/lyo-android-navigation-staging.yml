@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - work/android-web-parity-20261111
+      - fix/lyo-android-chat-stream-lifecycle-20261112
+      - integrate/lyo-android-ui-chat-qa-20261112
+      - fix/lyo-classroom-quiz-identity-20261112
+      - qa/lyo-android-compose-instrumentation-20261112
+      - fix/lyo-live-voice-latency-telemetry-20261113
+      - integrate/lyo-web-android-releaseqa-20261113
   workflow_dispatch:
 jobs:
   navigation-contracts:
@@ -101,7 +107,7 @@ jobs:
 
   android:
     name: Android debug build and unit tests
-    if: github.ref == 'refs/heads/work/android-web-parity-20261111'
+    if: github.ref == 'refs/heads/work/android-web-parity-20261111' || github.ref == 'refs/heads/fix/lyo-android-chat-stream-lifecycle-20261112' || github.ref == 'refs/heads/integrate/lyo-android-ui-chat-qa-20261112' || github.ref == 'refs/heads/fix/lyo-classroom-quiz-identity-20261112' || github.ref == 'refs/heads/qa/lyo-android-compose-instrumentation-20261112' || github.ref == 'refs/heads/fix/lyo-live-voice-latency-telemetry-20261113' || github.ref == 'refs/heads/integrate/lyo-web-android-releaseqa-20261113'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -109,7 +115,7 @@ jobs:
     env:
       # Verified LyoJourneyStagingBackend in the isolated staging project.
       LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app/
-      LYO_VERSION_NAME: 1.0.0-pr211-${{ github.run_number }}
+      LYO_VERSION_NAME: 1.0.0-integrated-qa-${{ github.run_number }}
       LYO_VERSION_CODE: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
@@ -148,4 +154,52 @@ jobs:
           name: discover-device-validation-apk
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+          retention-days: 7
+
+  android-compose-ui:
+    name: Android emulator UI smoke tests
+    if: github.ref == 'refs/heads/qa/lyo-android-compose-instrumentation-20261112' || github.ref == 'refs/heads/integrate/lyo-web-android-releaseqa-20261113'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          # Avoid the removed legacy SDK package 'tools' on Ubuntu 26.
+          packages: "platform-tools platforms;android-35 build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Enable Android emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise Compose quiz and navigation on Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-boot-timeout: 600
+          script: cd android && gradle connectedDebugAndroidTest --no-daemon
+      - name: Upload instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-compose-ui-test-results
+          path: |
+            android/app/build/reports/androidTests/connected/
+            android/app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn
           retention-days: 7
