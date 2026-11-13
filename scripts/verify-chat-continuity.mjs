@@ -134,6 +134,7 @@ const contracts = [
       'streamJob = chatState.viewModelScope.launch',
       'chatState.initialized = true',
       'if (!isStreaming && activeConversationId == null && messages.isEmpty()) {',
+      '}.onSuccess { chatState.initialized = true }',
       'ASSISTANT_RESPONSE_WIDTH_FRACTION = 0.99f',
       'Modifier.fillMaxWidth(ASSISTANT_RESPONSE_WIDTH_FRACTION)',
       'is ChatStreamEvent.FinalAnswer',
