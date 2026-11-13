@@ -5,6 +5,7 @@ on:
     branches:
       - fix/lyo-web-classroom-option-identity-20261112
       - integrate/lyo-web-android-releaseqa-20261113
+      - fix/lyo-web-classroom-websocket-resume-20261113
   workflow_dispatch:
 
 permissions:
