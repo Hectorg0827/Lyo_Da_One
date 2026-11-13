@@ -6,6 +6,7 @@ on:
       - work/android-web-parity-20261111
       - fix/lyo-android-chat-stream-lifecycle-20261112
       - integrate/lyo-android-ui-chat-qa-20261112
+      - fix/lyo-classroom-quiz-identity-20261112
   workflow_dispatch:
 jobs:
   navigation-contracts:
@@ -103,7 +104,7 @@ jobs:
 
   android:
     name: Android debug build and unit tests
-    if: github.ref == 'refs/heads/work/android-web-parity-20261111' || github.ref == 'refs/heads/fix/lyo-android-chat-stream-lifecycle-20261112' || github.ref == 'refs/heads/integrate/lyo-android-ui-chat-qa-20261112'
+    if: github.ref == 'refs/heads/work/android-web-parity-20261111' || github.ref == 'refs/heads/fix/lyo-android-chat-stream-lifecycle-20261112' || github.ref == 'refs/heads/integrate/lyo-android-ui-chat-qa-20261112' || github.ref == 'refs/heads/fix/lyo-classroom-quiz-identity-20261112'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
