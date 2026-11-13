@@ -1,5 +1,9 @@
 package com.lyo.app.ui.classroom.catalog
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -15,7 +19,18 @@ import com.lyo.app.ui.theme.LyoGreen
 import com.lyo.app.ui.theme.LyoRed
 import com.lyo.app.ui.theme.TextPrimary
 
-private data class QuizOptionView(val id: String, val label: String, val isCorrect: Boolean?)
+internal data class QuizOptionView(val id: String, val label: String, val isCorrect: Boolean?)
+
+/** Resolve a displayed option by its position, never by potentially duplicate label. */
+internal fun quizOptionForIndex(options: List<QuizOptionView>, index: Int): QuizOptionView? =
+    options.getOrNull(index)
+
+/** Unknown correctness cannot be treated as an incorrect answer. */
+internal fun quizFeedbackKey(option: QuizOptionView): String? = when (option.isCorrect) {
+    true -> "feedback_correct"
+    false -> "feedback_incorrect"
+    null -> null
+}
 
 /**
  * A `QuizCard` component — a graded recognition check, distinct from a
@@ -53,43 +68,48 @@ fun A2uiRenderScope.QuizCardRenderer() {
     val answeredId = resolveString("answeredOptionId")
     val answered = options.firstOrNull { it.id == answeredId }
     val feedback = answered?.let { opt ->
-        val key = if (opt.isCorrect == true) "feedback_correct" else "feedback_incorrect"
-        optionsJson.firstOrNull {
+        val key = quizFeedbackKey(opt)
+        if (key == null) null else optionsJson.firstOrNull {
             it.isJsonObject && it.asJsonObject.get("id")?.asString == opt.id
         }?.asJsonObject?.get(key)?.takeIf { it.isJsonPrimitive }?.asString
     }
     val actionName = literalString("action") ?: "submitQuiz"
 
-    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+        .background(com.lyo.app.ui.theme.Surface, RoundedCornerShape(18.dp))
+        .border(1.dp, com.lyo.app.ui.theme.LyoVioletLight.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
+        .padding(18.dp)) {
         Text("YOUR TURN", color = com.lyo.app.ui.theme.LyoVioletLight, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-        Text(text = question, color = TextPrimary)
+        Text(text = readableClassroomMath(question), color = TextPrimary)
         ClassroomChipRow(
             options = options.map { it.label },
-            stateFor = { label ->
-                val option = options.first { it.label == label }
+            stateFor = { index, _ ->
+                val option = quizOptionForIndex(options, index)
                 when {
-                    option.id != answeredId -> ChipState.DEFAULT
+                    option == null || option.id != answeredId -> ChipState.DEFAULT
                     option.isCorrect == true -> ChipState.CORRECT
                     option.isCorrect == false -> ChipState.INCORRECT
                     else -> ChipState.SELECTED
                 }
             },
-            enabledFor = { answeredId == null },
-            onSelect = { label ->
-                val option = options.first { it.label == label }
-                if (answeredPath != null) writeLocalDataModel(answeredPath, JsonPrimitive(option.id))
-                fireAction(
-                    actionName,
-                    mapOf(
-                        "selectedOptionId" to JsonPrimitive(option.id),
-                        "selectedOptionLabel" to JsonPrimitive(option.label),
-                    ),
-                )
+            enabledFor = { _, _ -> answeredId == null },
+            onSelect = { index, _ ->
+                val option = quizOptionForIndex(options, index)
+                if (option != null) {
+                    if (answeredPath != null) writeLocalDataModel(answeredPath, JsonPrimitive(option.id))
+                    fireAction(
+                        actionName,
+                        mapOf(
+                            "selectedOptionId" to JsonPrimitive(option.id),
+                            "selectedOptionLabel" to JsonPrimitive(option.label),
+                        ),
+                    )
+                }
             },
         )
         if (feedback != null) {
             Text(
-                text = feedback,
+                text = readableClassroomMath(feedback),
                 color = if (answered?.isCorrect == true) LyoGreen else LyoRed,
                 modifier = Modifier.padding(top = 4.dp),
             )

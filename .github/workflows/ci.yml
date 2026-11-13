@@ -210,6 +210,12 @@ jobs:
         with:
           gradle-version: "8.7"
 
+      # A staging-targeted PR must never produce an installable APK that
+      # silently calls production. The debug Gradle build type reads this key.
+      - name: Select isolated staging API for staging-targeted PR
+        if: github.event_name == 'pull_request' && github.base_ref == 'group-c-web-android-staging'
+        run: echo 'LYO_STAGING_API_BASE_URL=https://lyojourneystagingbackend-staging.up.railway.app/' >> "$GITHUB_ENV"
+
       - name: Build debug APK and test classroom contracts
         id: android-build
         continue-on-error: true
@@ -232,8 +238,24 @@ jobs:
         if: steps.android-build.outcome == 'failure'
         run: exit 1
 
+      - name: Assert staging Android APK contains no production API endpoint
+        id: staging-apk-check
+        if: github.event_name == 'pull_request' && github.base_ref == 'group-c-web-android-staging' && steps.android-build.outcome == 'success'
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          apk = next(Path('android/app/build/outputs/apk/debug').glob('*.apk'))
+          with ZipFile(apk) as package:
+              dex = b''.join(package.read(name) for name in package.namelist() if name.endswith('.dex'))
+          assert b'lyojourneystagingbackend-staging.up.railway.app' in dex, 'APK is not configured for staging'
+          assert b'api.lyoai.app' not in dex, 'APK contains the production API endpoint'
+          print('Staging-only Android APK runtime endpoint verified')
+          PY
+
       - name: Upload Android build for device validation
-        if: steps.android-build.outcome == 'success'
+        if: steps.android-build.outcome == 'success' && (github.base_ref != 'group-c-web-android-staging' || steps.staging-apk-check.outcome == 'success')
         uses: actions/upload-artifact@v4
         with:
           name: discover-device-validation-apk

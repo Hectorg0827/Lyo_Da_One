@@ -114,8 +114,6 @@ interface LyoApiService {
     @GET("api/v1/learning/courses/{courseId}")
     suspend fun course(@Path("courseId") courseId: String): CourseDto
 
-    @POST("api/v1/learning/courses/generate")
-    suspend fun generateCourse(@Body body: GenerateCourseRequest): JsonObject
 
     // ── Clips ── (same /api/v1 paths as web api.ts and iOS Endpoints)
     @GET("api/v1/clips")
@@ -129,7 +127,12 @@ interface LyoApiService {
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
         @Query("subject") subject: String? = null,
+        @Query("sort") sort: String? = null,
+        @Query("q") query: String? = null,
     ): ClipsResponse
+
+    @GET("api/v1/clips/discover/filters")
+    suspend fun discoverClipFilters(): DiscoverClipFiltersResponse
 
     @POST("api/v1/clips/{clipId}/like")
     suspend fun likeClip(@Path("clipId") clipId: String): JsonObject
@@ -164,6 +167,8 @@ interface LyoApiService {
     suspend fun savedClips(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
+        @Query("subject") subject: String? = null,
+        @Query("q") query: String? = null,
     ): ClipsResponse
 
     @POST("api/v1/clips")
@@ -206,6 +211,9 @@ interface LyoApiService {
     // ── Gamification ──
     @GET("gamification/overview")
     suspend fun gamificationOverview(): JsonObject
+
+    @GET("api/v1/personalization/concepts/summary")
+    suspend fun conceptSummary(): JsonObject
 
     @GET("gamification/my-achievements")
     suspend fun achievements(

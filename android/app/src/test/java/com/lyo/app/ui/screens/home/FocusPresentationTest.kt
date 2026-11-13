@@ -15,6 +15,14 @@ import org.junit.Test
  * The rule being defended: a figure the app does not have is not a zero.
  */
 class FocusPresentationTest {
+    @Test
+    fun `review titles never expose opaque concept UUIDs`() {
+        val id = "b945f989-0961-496e-9e75-6974397d71bb"
+        assertEquals("A concept ready to review", FocusPresentation.reviewTitle(id, null))
+        assertEquals("A concept ready to review", FocusPresentation.reviewTitle(id, id))
+        assertEquals("Adding Fractions", FocusPresentation.reviewTitle(id, "Adding Fractions"))
+        assertEquals("Equivalent Fractions", FocusPresentation.reviewTitle("equivalent_fractions", null))
+    }
 
     private fun course(
         title: String = "A course",
