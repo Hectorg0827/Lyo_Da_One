@@ -1,7 +1,7 @@
 name: LYO 30 minute Classroom staging acceptance
 on:
   push:
-    branches: [qa/lyo-classroom-30min-staging-20261113]
+    branches: [qa/lyo-classroom-30min-staging-20261113, qa/lyo-classroom-cleanup-fix-20261113]
   workflow_dispatch:
 permissions:
   contents: read
