@@ -1028,8 +1028,9 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
             messages.clear()
             send(seededPrompt)
         } else if (!chatState.initialized) {
-            // Re-entry must never replace an in-flight reply with stale history.
-            chatState.initialized = true
+            // Re-entry must not replace an in-flight reply with stale history.
+            // Mark hydration complete only after success. A transient network
+            // error or cancellation can then retry when Chat is reopened.
             runCatching {
                 val latest = ApiClient.api.aiConversations().conversations.firstOrNull() ?: return@runCatching
                 val detail = ApiClient.api.aiConversation(latest.id)
@@ -1037,7 +1038,7 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                     activeConversationId = detail.id
                     messages.addAll(detail.messages.map { it.toChatMsg() })
                 }
-            }
+            }.onSuccess { chatState.initialized = true }
         }
     }
 
