@@ -225,6 +225,14 @@ async function tryRefreshToken(): Promise<boolean> {
   }
 }
 
+/**
+ * WebSocket handshakes cannot use the ordinary request() 401 retry. Allow
+ * Classroom to refresh its access token before rejoining the *same* session.
+ */
+export async function refreshRealtimeAccessToken(): Promise<string | null> {
+  return await tryRefreshToken() ? getAccessToken() : null;
+}
+
 // ── Adapters (backend → frontend types) ──────────────────────────────────────
 
 export function adaptUser(raw: Record<string, unknown>): User {
