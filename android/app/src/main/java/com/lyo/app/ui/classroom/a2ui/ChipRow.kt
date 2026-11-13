@@ -27,31 +27,33 @@ import com.lyo.app.ui.theme.TextPrimary
  * concept) and ui.classroom.catalog.QuizCardView (a QuizCard's options,
  * which DO have a correct/incorrect state once answered). Pulled out once
  * so the "3 real options, no padding/truncation, wraps to a new line"
- * layout logic lives in exactly one place.
+ * layout logic lives in exactly one place. Selection is index-aware because
+ * AI-generated quiz options can have duplicate display labels; dispatching by
+ * the label would silently send the wrong option ID to the grading endpoint.
  */
 enum class ChipState { DEFAULT, SELECTED, CORRECT, INCORRECT }
 
 @Composable
 fun ClassroomChipRow(
     options: List<String>,
-    stateFor: (String) -> ChipState,
-    enabledFor: (String) -> Boolean,
-    onSelect: (String) -> Unit,
+    stateFor: (Int, String) -> ChipState,
+    enabledFor: (Int, String) -> Boolean,
+    onSelect: (Int, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
     ) {
-        options.forEach { option ->
-            val state = stateFor(option)
+        options.forEachIndexed { index, option ->
+            val state = stateFor(index, option)
             val (background, contentColor) = when (state) {
                 ChipState.CORRECT -> LyoGreen.copy(alpha = 0.25f) to LyoGreen
                 ChipState.INCORRECT -> LyoRed.copy(alpha = 0.25f) to LyoRed
                 ChipState.SELECTED -> LyoPurple to Color.White
                 ChipState.DEFAULT -> SurfaceElevated to TextPrimary
             }
-            val enabled = enabledFor(option)
+            val enabled = enabledFor(index, option)
             Text(
                 text = com.lyo.app.ui.classroom.catalog.readableClassroomMath(option),
                 style = MaterialTheme.typography.bodyLarge,
@@ -61,7 +63,7 @@ fun ClassroomChipRow(
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .background(background, RoundedCornerShape(14.dp))
-                    .clickable(enabled = enabled) { onSelect(option) }
+                    .clickable(enabled = enabled) { onSelect(index, option) }
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             )
         }
