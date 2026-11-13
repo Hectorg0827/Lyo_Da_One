@@ -1,0 +1,30 @@
+name: LYO Classroom browser staging acceptance
+on:
+  push:
+    branches: [qa/lyo-classroom-browser-staging-20261113]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  chromium-classroom:
+    name: Chromium login, Classroom scene and reconnect
+    runs-on: ubuntu-latest
+    # The host currently runs Ubuntu 26.04, unsupported by Playwright 1.56.
+    # Pin the official browser container on supported Ubuntu 24.04 (Noble).
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.56.0-noble
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Python test package (browser is present in official image)
+        run: python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+      - name: Exercise real staging Web UI with disposable QA learner
+        run: python -u scripts/qa/browser_classroom_staging.py
+      - name: Preserve only synthetic-user Classroom screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-classroom-browser-qa-screenshots
+          path: artifacts/browser-classroom-staging/*.png
+          if-no-files-found: ignore
+          retention-days: 7
