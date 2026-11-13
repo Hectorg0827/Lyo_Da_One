@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - work/android-web-parity-20261111
+      - fix/lyo-android-nav-contract-a11y-20261112
   workflow_dispatch:
 jobs:
   navigation-contracts:
@@ -101,7 +102,7 @@ jobs:
 
   android:
     name: Android debug build and unit tests
-    if: github.ref == 'refs/heads/work/android-web-parity-20261111'
+    if: github.ref == 'refs/heads/work/android-web-parity-20261111' || github.ref == 'refs/heads/fix/lyo-android-nav-contract-a11y-20261112'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -109,7 +110,7 @@ jobs:
     env:
       # Verified LyoJourneyStagingBackend in the isolated staging project.
       LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app/
-      LYO_VERSION_NAME: 1.0.0-pr211-${{ github.run_number }}
+      LYO_VERSION_NAME: 1.0.0-nav-staging-${{ github.run_number }}
       LYO_VERSION_CODE: ${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
