@@ -58,11 +58,15 @@ async def run():
             context = await browser.new_context(viewport={"width": 412, "height": 915},
                                                 device_scale_factor=1)
             page = await context.new_page()
-            stage = "Web login"
+            stage = "Web login navigation"
             await page.goto(WEB + "/auth/login", wait_until="domcontentloaded", timeout=25000)
+            stage = "Web email input"
             await page.get_by_label("Email").fill(person["email"])
+            stage = "Web password input"
             await page.get_by_label("Password").fill(password)
+            stage = "Web login submit"
             await page.get_by_role("button", name="Log In", exact=True).click()
+            stage = "Web login redirect"
             await page.wait_for_url(
                 lambda u: "/auth/login" not in urlsplit(str(u)).path,
                 timeout=30000)
@@ -128,8 +132,17 @@ async def run():
             print("PASS: real Chromium Web UI rejoined identical server scene with resume=1", flush=True)
             success = True
     except Exception as exc:
-        print("BROWSER QA FAIL at stage: " + stage + " [" + type(exc).__name__ + "]",
-              file=sys.stderr)
+        # The first exception line may contain the public page URL; redact
+        # everything that could be a test credential or signed socket URL.
+        first_line = str(exc).splitlines()[0][:240]
+        first_line = first_line.replace(person["email"], "[synthetic-email]")
+        first_line = first_line.replace(password, "[secret]")
+        if token:
+            first_line = first_line.replace(token, "[token]")
+        if "wss://" in first_line:
+            first_line = first_line.split("wss://")[0] + "[signed-socket]"
+        print("BROWSER QA FAIL at stage: " + stage + " [" + type(exc).__name__ +
+              "] " + first_line, file=sys.stderr)
     finally:
         if browser is not None:
             try: await browser.close()
