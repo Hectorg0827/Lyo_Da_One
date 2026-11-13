@@ -116,6 +116,20 @@ async def run():
                         pass
                 ws.on("framereceived", on_frame)
             page.on("websocket", on_socket)
+            # Record only structural, non-secret diagnostics. No socket URLs,
+            # request bodies, tokens, scene text or browser content in logs.
+            page_errors = []
+            api_responses = []
+            observed_socket_paths = []
+            page.on("pageerror", lambda _: page_errors.append("pageerror"))
+            page.on("websocket", lambda sock: observed_socket_paths.append(
+                urlsplit(sock.url).path[:100]))
+            def on_api_response(response):
+                parsed = urlsplit(response.url)
+                if parsed.path in ("/auth/me", "/api/v1/auth/me") or parsed.path.startswith("/api/v1/classroom"):
+                    host_kind = "staging" if (parsed.hostname or "").endswith("-staging.up.railway.app") else "non-staging"
+                    api_responses.append([host_kind, parsed.path[:80], response.status])
+            page.on("response", on_api_response)
 
             summary_js = """() => (window.__lyoQaSockets || []).map(s => {
               const u = new URL(s.url);
@@ -149,6 +163,22 @@ async def run():
             if first is None:
                 entries = await page.evaluate(summary_js)
                 state_summary = [(entry["state"], len(entry["scenes"])) for entry in entries]
+                status_signals = await page.evaluate("""() => {
+                  const body = document.body.innerText || '';
+                  return ['Connecting…', 'Sign in to start a secure AI classroom.',
+                    'Sign in again to resume this lesson.', 'Not connected to the classroom.',
+                    'The class session ended.', 'Retry to rejoin.', '● Live']
+                    .filter(x => body.includes(x));
+                }""")
+                print("BROWSER QA safe diagnostics: native_ws=" + str(len(entries))
+                      + " observed_ws_paths=" + str(observed_socket_paths[:12])
+                      + " api_responses=" + str(api_responses[-12:])
+                      + " page_errors=" + str(len(page_errors))
+                      + " status_signals=" + str(status_signals), flush=True)
+                try:
+                    await page.screenshot(path=str(ARTIFACTS / "classroom_failed_initial.png"), full_page=True)
+                except Exception:
+                    pass
                 raise RuntimeError("No Classroom scene in actual browser sockets; states=" + str(state_summary))
             if first["resume"]:
                 raise RuntimeError("Fresh Web lesson incorrectly requested resume")
