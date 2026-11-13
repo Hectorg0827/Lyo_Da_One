@@ -117,13 +117,39 @@ async def run():
                 ws.on("framereceived", on_frame)
             page.on("websocket", on_socket)
 
+            summary_js = """() => (window.__lyoQaSockets || []).map(s => {
+              const u = new URL(s.url);
+              return {
+                path: u.pathname,
+                session: u.searchParams.get('session_id'),
+                resume: u.searchParams.get('resume'),
+                state: s.readyState,
+                scenes: s.__qaSceneIds || [],
+              };
+            })"""
             stage = "Classroom initial scene"
             await page.goto(WEB + "/classroom?topic=Fractions&duration=3&language=en-US",
                             wait_until="domcontentloaded", timeout=25000)
             await page.get_by_role("button", name="Leave classroom").wait_for(timeout=25000)
-            if not await until(lambda: any(item["scenes"] for item in sockets), 90):
-                raise RuntimeError("No Classroom scene received in browser")
-            first = next(item for item in sockets if item["scenes"])
+            # Prefer what actual in-page WebSockets received. The external
+            # Playwright event observer can miss frames, especially after
+            # Next.js hydration and WebSocket replacement.
+
+            first = None
+            deadline = time.monotonic() + 95
+            while time.monotonic() < deadline:
+                entries = await page.evaluate(summary_js)
+                matches = [entry for entry in entries
+                           if entry["path"] == "/api/v1/classroom/ws/connect"
+                           and entry["scenes"]]
+                if matches:
+                    first = matches[0]
+                    break
+                await asyncio.sleep(0.5)
+            if first is None:
+                entries = await page.evaluate(summary_js)
+                state_summary = [(entry["state"], len(entry["scenes"])) for entry in entries]
+                raise RuntimeError("No Classroom scene in actual browser sockets; states=" + str(state_summary))
             if first["resume"]:
                 raise RuntimeError("Fresh Web lesson incorrectly requested resume")
             initial_scene = first["scenes"][0]
@@ -145,19 +171,8 @@ async def run():
               active.close(4000, 'QA simulated transport interruption');
             }""")
 
-            # Playwright's websocket event stream can omit a replacement socket.
-            # Read only sanitized contract fields and scene IDs from the
-            # browser's actual native WebSocket objects instead.
-            summary_js = """() => (window.__lyoQaSockets || []).map(s => {
-              const u = new URL(s.url);
-              return {
-                path: u.pathname,
-                session: u.searchParams.get('session_id'),
-                resume: u.searchParams.get('resume'),
-                state: s.readyState,
-                scenes: s.__qaSceneIds || [],
-              };
-            })"""
+            # Read sanitized contract fields and scene IDs from the
+            # native browser WebSocket objects, never the signed URLs.
             resumed = None
             deadline = time.monotonic() + 55
             while time.monotonic() < deadline:
