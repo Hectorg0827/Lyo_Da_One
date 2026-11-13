@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { directNavHostRoutes, requireExactlyOneDirectRoute } from './lib/android-nav-route-contract.mjs';
 
 function read(path) {
   return readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
@@ -37,6 +38,13 @@ const expectedTabs = [
   ['CREATE', '+'],
 ];
 
+// Registration is not the same as the route text appearing somewhere in a
+// Kotlin file. Reject nested if(false) declarations, duplicates and dead code.
+const actualNavHost = directNavHostRoutes(nav);
+for (const [route] of expectedTabs) {
+  requireExactlyOneDirectRoute(nav, route);
+}
+
 // Verify the *entire* list rather than merely finding five strings in order.
 // The older check silently accepted a sixth bottom tab or a duplicate route.
 const declaredTabs = nav.match(/private val bottomItems\s*=\s*listOf\(([\s\S]*?)\n\)/);
@@ -53,7 +61,7 @@ if (rawEntryCount !== expectedTabs.length || tabEntries.length !== expectedTabs.
   );
 }
 
-requireText(nav, 'composable(Routes.CHAT) { ChatScreen(nav, chatSession) }', 'Android Lyo chat route');
+requireText(actualNavHost.body, 'composable(Routes.CHAT) { ChatScreen(nav, chatSession) }', 'Android Lyo chat route');
 requireText(nav, 'val chatSession: ChatSessionViewModel = viewModel()', 'Chat session above navigation destination');
 requireText(nav, 'chatSession.resetForLogout()', 'Chat session cleared on logout');
 
@@ -93,21 +101,21 @@ requireText(bottomBar,
   'GhostTab("Create", Routes.CREATE, "create", currentRoute == Routes.CREATE, onNavigate)',
   'Android Create studio entry');
 rejectText(bottomBar, 'LyoCreateSheet(', 'Android legacy Create sheet interception');
-requireText(nav, 'composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }', 'Community tab navigation');
+requireText(actualNavHost.body, 'composable(Routes.COMMUNITY) { LearningAroundCommunityScreen(nav) }', 'Community tab navigation');
 
 
 // Both names reach the one reel. "clips" stays registered because links to it
 // have already been shared, and a shared clip that opens nothing is worse than
 // an extra route. The places browser keeps its own route rather than sitting
 // on "discover", where it answered to a name that belongs to the feed.
-requireText(nav, 'composable(Routes.DISCOVER) { ClipsScreen(nav) }', 'Android Discover reel route');
-requireText(nav, 'composable(Routes.CLIPS) { ClipsScreen(nav) }', 'Android legacy clips route');
-requireText(nav, 'composable(Routes.PLACES) { DiscoverScreen(nav) }', 'Android places browser route');
-requireText(nav, 'composable(Routes.CREATE) { CreateScreen(nav) }', 'Android Create route');
-requireText(nav, 'composable(Routes.CREATE_CLIP) { CreateClipScreen(nav) }', 'Android clip creator route');
-requireText(nav, 'composable(Routes.CREATE_POST) { CreatePostScreen(nav) }', 'Android post creator route');
-requireText(nav, 'composable(Routes.CREATE_GROUP)', 'Android group creator route');
-requireText(nav, 'composable(Routes.CREATE_EVENT)', 'Android event creator route');
+requireText(actualNavHost.body, 'composable(Routes.DISCOVER) { ClipsScreen(nav) }', 'Android Discover reel route');
+requireText(actualNavHost.body, 'composable(Routes.CLIPS) { ClipsScreen(nav) }', 'Android legacy clips route');
+requireText(actualNavHost.body, 'composable(Routes.PLACES) { DiscoverScreen(nav) }', 'Android places browser route');
+requireText(actualNavHost.body, 'composable(Routes.CREATE) { CreateScreen(nav) }', 'Android Create route');
+requireText(actualNavHost.body, 'composable(Routes.CREATE_CLIP) { CreateClipScreen(nav) }', 'Android clip creator route');
+requireText(actualNavHost.body, 'composable(Routes.CREATE_POST) { CreatePostScreen(nav) }', 'Android post creator route');
+requireText(actualNavHost.body, 'composable(Routes.CREATE_GROUP)', 'Android group creator route');
+requireText(actualNavHost.body, 'composable(Routes.CREATE_EVENT)', 'Android event creator route');
 
 requireText(createHub, 'Every visible action is connected to a real service.', 'Android Create honesty');
 for (const route of [
