@@ -63,7 +63,7 @@ async def run():
             stage = "Web email input"
             await page.get_by_label("Email").fill(person["email"])
             stage = "Web password input"
-            await page.get_by_label("Password").fill(password)
+            await page.get_by_label("Password", exact=True).fill(password)
             stage = "Web login submit"
             await page.get_by_role("button", name="Log In", exact=True).click()
             stage = "Web login redirect"
