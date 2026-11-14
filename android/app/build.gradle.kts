@@ -227,6 +227,6 @@ dependencies {
 // Android Gradle plugin merges these generated assets into every app variant.
 tasks.matching {
     (it.name.startsWith("merge") && it.name.endsWith("Assets")) ||
-        it.name.endsWith("LintVitalReportModel")
+        it.name.contains("lint", ignoreCase = true)
 }.configureEach { dependsOn(prepareKatexAssets) }
 
