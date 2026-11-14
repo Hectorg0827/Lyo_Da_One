@@ -46,7 +46,7 @@ fun A2uiRenderScope.TransferInputRenderer() {
 
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
         Text("YOUR TURN", color = com.lyo.app.ui.theme.LyoVioletLight, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-        Text(text = question, color = TextPrimary)
+        ClassroomMathRichText(question, color = TextPrimary)
         if (submitted) {
             Text(
                 text = text,
