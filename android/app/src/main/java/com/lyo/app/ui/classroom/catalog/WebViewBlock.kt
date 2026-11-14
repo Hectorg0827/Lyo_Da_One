@@ -2,43 +2,63 @@ package com.lyo.app.ui.classroom.catalog
 
 import android.annotation.SuppressLint
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import org.json.JSONObject
 
 /**
- * Shared visual rendering surface for Classroom and Chat. Mermaid and KaTeX
- * render in a constrained WebView, with legible source fallback when JavaScript
- * or the external library cannot load (offline, CSP or network failure).
- *
- * Device-level WebView validation is still required before deployment.
+ * Classroom math and diagrams. Math has readable text in the initial HTML,
+ * BEFORE a remote CSS/JS library can load: no network/JS means not a blank card.
+ * KaTeX enhances that same DOM when its script AND stylesheet are available.
  */
-enum class WebViewBlockKind { MERMAID, LATEX }
+enum class WebViewBlockKind { MERMAID, LATEX, MATH_TEXT }
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebViewBlock(kind: WebViewBlockKind, source: String, modifier: Modifier = Modifier) {
     val html = remember(kind, source) { buildHtml(kind, source) }
+    var contentHeightDp by remember(kind, source) {
+        mutableIntStateOf(if (kind == WebViewBlockKind.MERMAID) 220 else 96)
+    }
     AndroidView(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(220.dp), // fixed height: WebView can't natively report content-height back into Compose's layout pass without a JS bridge round-trip, which needs a real device to validate the timing of — see the class doc comment.
+        modifier = modifier.fillMaxWidth().height(contentHeightDp.dp),
         factory = { context ->
             WebView(context).apply {
                 settings.javaScriptEnabled = true
+                settings.domStorageEnabled = false
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                settings.javaScriptCanOpenWindowsAutomatically = false
                 settings.loadWithOverviewMode = true
                 settings.useWideViewPort = true
+                isVerticalScrollBarEnabled = false
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                webViewClient = object : WebViewClient() {
+                    override fun onPageFinished(view: WebView?, url: String?) {
+                        view?.evaluateJavascript(
+                            "(function(){return Math.max(document.body.scrollHeight," +
+                                "document.documentElement.scrollHeight)})()"
+                        ) { result ->
+                            val cssHeight = result.trim().trim('"').toFloatOrNull()
+                            if (cssHeight != null && cssHeight.isFinite()) {
+                                contentHeightDp = (cssHeight.toInt() + 12).coerceIn(64, 480)
+                            }
+                        }
+                    }
+                }
             }
         },
         update = { webView ->
-            // Compose may recompose while the learner is answering. Re-loading
-            // a WebView on every recomposition erases the diagram and flickers.
+            // Recomposition must not reload a diagram or erase an equation.
             if (webView.tag != html) {
                 webView.tag = html
                 webView.loadDataWithBaseURL(
@@ -53,63 +73,98 @@ fun WebViewBlock(kind: WebViewBlockKind, source: String, modifier: Modifier = Mo
     )
 }
 
-private fun buildHtml(kind: WebViewBlockKind, source: String): String {
-    // JSONObject.quote() gives a properly-escaped JS string literal —
-    // safer than manual string interpolation for arbitrary
-    // LLM-generated source text (backslashes, quotes, newlines).
-    val escapedSource = JSONObject.quote(source)
-    return when (kind) {
-        WebViewBlockKind.MERMAID -> """
-            <!DOCTYPE html><html><head><meta charset="utf-8">
-            <meta name="viewport" content="width=device-width,initial-scale=1">
-            <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
-            <style>body{margin:0;padding:8px;background:transparent;color:#eee;font:13px sans-serif;}
-            #diagram{max-width:100%;overflow:auto}#diagram svg{max-width:100%;height:auto}
-            #fallback{display:none;white-space:pre-wrap;overflow-wrap:anywhere}</style></head>
-            <body>
-              <div id="diagram" class="mermaid">${source.htmlEscape()}</div>
-              <pre id="fallback">${source.htmlEscape()}</pre>
-              <script>
-                function showFallback(){
-                  document.getElementById('diagram').style.display='none';
-                  document.getElementById('fallback').style.display='block';
-                }
-                window.addEventListener('load',function(){
-                  if(typeof mermaid==='undefined'){showFallback();return;}
-                  try{
-                    mermaid.initialize({startOnLoad:false,securityLevel:'strict',theme:'dark'});
-                    mermaid.run({nodes:[document.getElementById('diagram')]}).catch(showFallback);
-                  }catch(e){showFallback();}
-                });
-              </script>
-            </body></html>
-        """.trimIndent()
+private fun buildHtml(kind: WebViewBlockKind, source: String): String = when (kind) {
+    WebViewBlockKind.MERMAID -> """
+        <!DOCTYPE html><html><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+        <style>body{margin:0;padding:8px;background:transparent;color:#eee;font:13px sans-serif}
+        #diagram{max-width:100%;overflow:auto}#diagram svg{max-width:100%;height:auto}
+        #fallback{display:none;white-space:pre-wrap;overflow-wrap:anywhere}</style></head>
+        <body>
+          <div id="diagram" class="mermaid">${source.htmlEscape()}</div>
+          <pre id="fallback">${source.htmlEscape()}</pre>
+          <script>
+            function showFallback(){
+              document.getElementById('diagram').style.display='none';
+              document.getElementById('fallback').style.display='block';
+            }
+            window.addEventListener('load',function(){
+              if(typeof mermaid==='undefined'){showFallback();return;}
+              try{
+                mermaid.initialize({startOnLoad:false,securityLevel:'strict',theme:'dark'});
+                mermaid.run({nodes:[document.getElementById('diagram')]}).catch(showFallback);
+              }catch(e){showFallback();}
+            });
+          </script>
+        </body></html>
+    """.trimIndent()
 
-        WebViewBlockKind.LATEX -> """
-            <!DOCTYPE html><html><head><meta charset="utf-8">
-            <meta name="viewport" content="width=device-width,initial-scale=1">
-            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
-            <script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
-            <style>body{margin:0;padding:8px;background:transparent;color:#eee;font:13px sans-serif}
-            #fallback{display:none;white-space:pre-wrap;overflow-wrap:anywhere}</style></head>
-            <body>
-              <div id="math"></div>
-              <pre id="fallback">${source.htmlEscape()}</pre>
-              <script>
-                try {
-                  if (typeof katex==='undefined') throw new Error('KaTeX unavailable');
-                  katex.render($escapedSource,document.getElementById('math'),{
-                    throwOnError:false,displayMode:true
-                  });
-                } catch(e) {
-                  document.getElementById('math').style.display='none';
-                  document.getElementById('fallback').style.display='block';
-                }
-              </script>
-            </body></html>
-        """.trimIndent()
+    WebViewBlockKind.LATEX -> {
+        val tex = unwrapClassroomFormula(source)
+        val fallback = readableClassroomMath("\\(" + tex + "\\)").htmlEscape()
+        katexHtml(
+            """<div id="math-0" class="math-display">${fallback}</div>""",
+            """[{id:"math-0",tex:${safeJs(tex)},display:true}]""",
+        )
+    }
+
+    WebViewBlockKind.MATH_TEXT -> {
+        val runs = classroomMathRuns(source)
+        val html = runs.mapIndexed { index, part ->
+            if (part.formula) {
+                val fallback = readableClassroomMath("\\(" + part.text + "\\)").htmlEscape()
+                val cssClass = if (part.display) "math-display" else "math-inline"
+                """<span id="math-${index}" class="${cssClass}">${fallback}</span>"""
+            } else {
+                "<span>" + part.text.htmlEscape() + "</span>"
+            }
+        }.joinToString("")
+        val equations = runs.mapIndexedNotNull { index, part ->
+            if (part.formula) """{id:"math-${index}",tex:${safeJs(part.text)},display:${part.display}}""" else null
+        }.joinToString(",")
+        katexHtml(html, "[$equations]")
     }
 }
+
+/** The fallback is visible without JavaScript, CSS, internet, or any CDN response.
+ * Only replace it after KaTeX and its layout stylesheet are available.
+ */
+private fun katexHtml(fallbackMarkup: String, equations: String): String = """
+    <!DOCTYPE html><html><head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <link id="katex-css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
+    <style>
+      html,body{margin:0;background:transparent;color:#f7f6ff;font:16px/1.55 sans-serif}
+      main{padding:6px 4px;white-space:pre-wrap;overflow-wrap:anywhere}
+      .math-display{display:block;overflow-x:auto;white-space:nowrap;margin:6px 0}
+      .math-inline{display:inline-block;vertical-align:middle;white-space:nowrap;max-width:100%;overflow-x:auto}
+      .katex-display{margin:.25em 0;overflow-x:auto;overflow-y:hidden}
+    </style></head>
+    <body><main id="content">${fallbackMarkup}</main>
+    <script>
+      window.addEventListener('load',function(){
+        var css=document.getElementById('katex-css');
+        if(typeof katex==='undefined'||!css||!css.sheet) return;
+        var equations=${equations};
+        equations.forEach(function(eq){
+          var node=document.getElementById(eq.id);
+          if(!node) return;
+          var replacement=document.createElement('span');
+          try{
+            katex.render(eq.tex,replacement,{throwOnError:true,displayMode:eq.display,trust:false});
+            node.replaceChildren(replacement);
+          }catch(err){/* keep readable text; never show an empty equation */}
+        });
+      });
+    </script>
+    </body></html>
+""".trimIndent()
+
+/** JSONObject.quote escapes slash/quotes/newlines. Escape HTML script end too. */
+private fun safeJs(value: String): String =
+    JSONObject.quote(value).replace("</", "<\\/")
 
 private fun String.htmlEscape(): String =
     replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
