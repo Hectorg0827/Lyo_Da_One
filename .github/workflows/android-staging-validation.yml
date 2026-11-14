@@ -5,7 +5,7 @@ name: Android Staging Validation
 on:
   workflow_dispatch:
   push:
-    branches: [feat/classroom-retention-20261105, ccr-3bc562fc-kn237t]
+    branches: [feat/classroom-retention-20261105, ccr-3bc562fc-kn237t, fix/lyo-android-classroom-latex-20261113]
   pull_request:
     branches: [feat/classroom-retention-20261105]
 
