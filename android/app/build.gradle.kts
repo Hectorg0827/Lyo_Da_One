@@ -18,13 +18,13 @@ val prepareKatexAssets = tasks.register<Copy>("prepareKatexAssets") {
         include("META-INF/resources/webjars/katex/0.16.22/dist/katex.min.css")
         include("META-INF/resources/webjars/katex/0.16.22/dist/fonts/*.woff2")
         eachFile {
-            relativePath = RelativePath(true, *relativePath.segments.drop(6).toTypedArray())
+            relativePath = RelativePath(true, "katex", *relativePath.segments.drop(6).toTypedArray())
         }
         includeEmptyDirs = false
     }
-    into(layout.buildDirectory.dir("generated/katexAssets/katex"))
+    into(layout.buildDirectory.dir("generated/katexAssets"))
     doLast {
-        val bundled = destinationDir
+        val bundled = destinationDir.resolve("katex")
         check(bundled.resolve("katex.min.js").isFile &&
               bundled.resolve("katex.min.css").isFile &&
               bundled.resolve("fonts").listFiles()?.any { it.extension == "woff2" } == true) {
@@ -154,7 +154,9 @@ android {
         buildConfig = true
     }
     sourceSets.getByName("test").resources.srcDir("../../Sources/Tests/Fixtures")
-    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/katexAssets"))
+    // Wiring the Copy task itself also gives lint, packaging and IDE builds
+    // a declared dependency on its generated asset directory.
+    sourceSets.getByName("main").assets.srcDir(prepareKatexAssets)
 }
 
 // A Play Store build without the upload key would be rejected; stop early
@@ -223,6 +225,8 @@ dependencies {
 }
 
 // Android Gradle plugin merges these generated assets into every app variant.
-tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
-    .configureEach { dependsOn(prepareKatexAssets) }
+tasks.matching {
+    (it.name.startsWith("merge") && it.name.endsWith("Assets")) ||
+        it.name.endsWith("LintVitalReportModel")
+}.configureEach { dependsOn(prepareKatexAssets) }
 
