@@ -38,7 +38,25 @@ class ClassroomMathTextTest {
     @Test fun recognizesDollarMathAndUnwrapsFormulaForTheRenderer() {
         assertEquals("\\frac{2}{3}", unwrapClassroomFormula("$$\\frac{2}{3}$$"))
         assertEquals("\\sqrt{9}", unwrapClassroomFormula("\\(\\sqrt{9}\\)"))
-        assertEquals(true, hasClassroomMath("Solve $x^2$ today"))
+        assertEquals(true, hasClassroomMath("Solve ${')
+    }
+
+    @Test fun neverTreatsNonMathProseAsAFormula() {
+        assertEquals(false, hasClassroomMath("Fractions are parts of a whole."))
+        assertEquals("Fractions are parts of a whole.", unwrapClassroomFormula(" Fractions are parts of a whole. "))
+    }
+
+}
+}x^2${')
+    }
+
+    @Test fun neverTreatsNonMathProseAsAFormula() {
+        assertEquals(false, hasClassroomMath("Fractions are parts of a whole."))
+        assertEquals("Fractions are parts of a whole.", unwrapClassroomFormula(" Fractions are parts of a whole. "))
+    }
+
+}
+} today"))
     }
 
     @Test fun neverTreatsNonMathProseAsAFormula() {
