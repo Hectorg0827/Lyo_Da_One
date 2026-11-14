@@ -108,8 +108,8 @@ fun A2uiRenderScope.QuizCardRenderer() {
             },
         )
         if (feedback != null) {
-            Text(
-                text = readableClassroomMath(feedback),
+            ClassroomMathRichText(
+                text = feedback,
                 color = if (answered?.isCorrect == true) LyoGreen else LyoRed,
                 modifier = Modifier.padding(top = 4.dp),
             )
