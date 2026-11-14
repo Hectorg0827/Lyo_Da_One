@@ -513,7 +513,9 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                     if (lockedVoice != null) engine?.setVoice(lockedVoice)
                     else engine?.setLanguage(requestedLocale)
                     engine?.voice?.let { selected ->
-                        liveVoiceProfiles.putIfAbsent(requestedLanguage, selected)
+                        if (requestedLanguage !in liveVoiceProfiles) {
+                            liveVoiceProfiles[requestedLanguage] = selected
+                        }
                     }
                 }
             } else if (lockedVoice != null && engine?.voice?.name != lockedVoice.name) {
