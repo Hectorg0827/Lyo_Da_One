@@ -1,7 +1,10 @@
 package com.lyo.app.ui.classroom.catalog
 
 import android.annotation.SuppressLint
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import androidx.webkit.WebViewAssetLoader
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,7 +21,7 @@ import org.json.JSONObject
 /**
  * Classroom math and diagrams. Math has readable text in the initial HTML,
  * BEFORE a remote CSS/JS library can load: no network/JS means not a blank card.
- * KaTeX enhances that same DOM when its script AND stylesheet are available.
+ * Bundled KaTeX enhances that same DOM from APK assets, even offline.
  */
 enum class WebViewBlockKind { MERMAID, LATEX, MATH_TEXT }
 
@@ -32,6 +35,9 @@ fun WebViewBlock(kind: WebViewBlockKind, source: String, modifier: Modifier = Mo
     AndroidView(
         modifier = modifier.fillMaxWidth().height(contentHeightDp.dp),
         factory = { context ->
+            val assetLoader = WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(context))
+                .build()
             WebView(context).apply {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = false
@@ -43,6 +49,10 @@ fun WebViewBlock(kind: WebViewBlockKind, source: String, modifier: Modifier = Mo
                 isVerticalScrollBarEnabled = false
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(
+                        view: WebView?, request: WebResourceRequest?
+                    ): WebResourceResponse? = request?.url?.let { assetLoader.shouldInterceptRequest(it) }
+
                     override fun onPageFinished(view: WebView?, url: String?) {
                         view?.evaluateJavascript(
                             "(function(){return Math.max(document.body.scrollHeight," +
@@ -62,7 +72,7 @@ fun WebViewBlock(kind: WebViewBlockKind, source: String, modifier: Modifier = Mo
             if (webView.tag != html) {
                 webView.tag = html
                 webView.loadDataWithBaseURL(
-                    "https://cdn.jsdelivr.net/",
+                    "https://appassets.androidplatform.net/assets/katex/",
                     html,
                     "text/html",
                     "UTF-8",
@@ -133,8 +143,8 @@ private fun buildHtml(kind: WebViewBlockKind, source: String): String = when (ki
 private fun katexHtml(fallbackMarkup: String, equations: String): String = """
     <!DOCTYPE html><html><head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <link id="katex-css" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
+    <link id="katex-css" rel="stylesheet" href="katex.min.css">
+    <script src="katex.min.js"></script>
     <style>
       html,body{margin:0;background:transparent;color:#f7f6ff;font:16px/1.55 sans-serif}
       main{padding:6px 4px;white-space:pre-wrap;overflow-wrap:anywhere}
