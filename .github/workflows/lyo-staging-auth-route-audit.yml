@@ -1,0 +1,29 @@
+name: LYO staging auth route audit
+on:
+  push:
+    branches: [qa/lyo-staging-auth-route-audit-20261113]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read staging OpenAPI route methods only
+        run: |
+          node --input-type=module - <<'NODE'
+          const base='https://lyojourneystagingbackend-staging.up.railway.app';
+          const response=await fetch(base+'/openapi.json',{signal:AbortSignal.timeout(15000)});
+          if(!response.ok)throw Error('OpenAPI HTTP '+response.status);
+          const schema=await response.json();
+          for(const [path,endpoint] of Object.entries(schema.paths||{})){
+            if(path.includes('auth') || path.includes('account') || path.includes('delete')){
+              const methods=Object.keys(endpoint).filter(x=>['post','get','delete','patch','put'].includes(x));
+              console.log(path+' '+methods.join(','));
+            }
+          }
+          NODE
