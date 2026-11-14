@@ -12,7 +12,6 @@ import com.lyo.app.ui.classroom.catalog.WebViewBlockKind
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
-import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
 import org.junit.Rule
 import org.junit.Test
@@ -58,7 +57,7 @@ class ClassroomLatexUiTest {
             }
             webView = find(compose.activity.window.decorView)
         }
-        val web = webView ?: fail("Math WebView not mounted")
+        val web = webView ?: throw AssertionError("Math WebView not mounted")
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
         while (System.nanoTime() < deadline) {
             val answer = AtomicReference<String>("")
