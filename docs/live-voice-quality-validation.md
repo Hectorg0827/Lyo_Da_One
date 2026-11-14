@@ -107,3 +107,36 @@ meet the targets above.
 - Automated tests simulate browser events. Real speaker echo, Bluetooth routing,
   browser permission behavior, latency and perceived voice quality still require
   the device run above; do not mark the release gate passed from unit tests alone.
+
+## Voice identity continuity gate (Android and browser)
+
+A release-blocking defect was reported in which Lyo alternates between a calm,
+well-paced female voice and a faster, higher-pitched female voice, then returns
+to the natural voice on a later segment/turn. Treat this separately from latency.
+
+**Android native:** use the staging/debug APK. Run at least 20 audible responses
+in one session, with 5 rapid follow-ups, 5 interruptions/skip-to-next actions,
+and an English -> Spanish -> English sequence. Include a lost-network/reconnect
+case. The same language must retain the same voice identity through regional
+recognizer tag changes. A real switch between English and Spanish may select
+an appropriate language-specific voice, which must remain stable on switching
+back. Record human observations of voice identity, pitch, pacing and natural
+pauses; do not accept an all-green CI run as an audible quality pass.
+
+For staging Android, inspect `LYO_VOICE_PROFILE` and `LYO_VOICE_LATENCY`
+logcat tags. Compare the selected voice name and language around any audible
+change. Do not log or upload spoken words, raw audio, transcripts or account
+identifiers. If the same profile is logged before and after an audible change,
+investigate the platform TTS engine, playback routing and device audio settings;
+profile locking alone is not proof of stable audible speech.
+
+**Web/Android Chrome:** inspect privacy-bounded backend `VOICE_QUALITY` events
+for `tts_fallback_transition` (`server_tts` -> `device_tts`). A transition
+confirms device TTS was invoked after a server audio error, not that the spoken
+voice remained identical. Reproduce after a partial segment failure and after
+interruption. An aborted response must not produce a fallback transition.
+
+**Pass requires:** no unexplained changes in speaker identity, timbre, speed or
+pitch during 20 audible responses, plus the separate existing p50/p95 latency
+and interruption gates. Reproduce and recheck on the actual Android device
+before staging signoff. No production rollout from automated results alone.
