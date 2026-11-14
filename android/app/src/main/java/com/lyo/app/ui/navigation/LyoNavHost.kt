@@ -169,6 +169,9 @@ private val bottomItems = listOf(
     BottomItem(Routes.CREATE, "+", Icons.Filled.Add),
 )
 
+/** The approved bottom-bar order, exposed for unit tests. */
+internal val primaryTabRoutes: List<String> get() = bottomItems.map { it.route }
+
 @Composable
 fun LyoApp() {
     // Resolve above NavHost so a bottom-tab pop cannot destroy the active chat.
