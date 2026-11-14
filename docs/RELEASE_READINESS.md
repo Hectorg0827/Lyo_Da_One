@@ -4,10 +4,7 @@ Updated 14 November 2026 (UTC). CI results verified against GitHub Actions on 13
 
 ## The short version
 
-The 30-minute Classroom test and the browser test passed on **staging** (the
-private test copy). But the code they tested was never joined into one piece,
-and none of it is on the live site yet. Production (`lyoai.app`,
-`api.lyoai.app`) is still running the code from 4–5 November.
+The earlier 30-minute Classroom transport test and Chromium browser test passed on older, partial **staging** code. The joined release candidates are now **deployed successfully to staging** and new QA tests are running. The previous passes are not evidence that the combined app is accepted. Production (`lyoai.app`, `api.lyoai.app`) is unchanged.
 
 So before this work there was nothing that could be released, even if every
 test were green: the fixes lived in about 60 separate draft pull requests, on
@@ -61,27 +58,27 @@ That is now fixed. There is **one release candidate** per repository:
 | Website: 718 unit tests, type check, production build, 30 contract checks | **PASS** — Android Staging Validation run #17, web job, on `e4b9d5d` | — |
 | Android: test app builds and unit tests pass | **PASS** — Android Staging Validation run #17, Android job: `:app:assembleStaging` + `:app:testStagingUnitTest` successful; staging-only APK artifact #14092486100 | — |
 | Server: full regression suite | **PASS** — LYO backend release candidate run #3 on `56daff0`: **2,118 passed, 73 skipped, 247 warnings**, 6 subtests passed; 0 failures | — |
-| Release candidate deployed to staging | **NOT DONE** — needs your OK (changes what staging runs) | You + Claude |
-| 30-minute Classroom + browser tests re-run on the release candidate | **NOT DONE** — the 13 Nov passes were on older, partial code | Claude, after staging deploy |
+| Release candidate deployed to staging | **DONE** — Railway backend deployment `dc04c560` at commit `56daff0` and web deployment `29fd32da` at commit `70836eb` both **SUCCESS** and online (1/1 replicas, 0 issues) | — |
+| Automated 30-minute Classroom transport + Chromium browser smoke on joined staging | **RUNNING** — [release-candidate staging acceptance run](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43543251711); do not mark passed until both job logs and synthetic-account cleanup are verified | QA | 
+| Human 30-minute interactive/audible Classroom acceptance | **NOT VERIFIED** — a 30-minute WebSocket heartbeat test alone does not cover audible speech, grading feedback, UI interaction, or the human checkpoints in the acceptance guide | Human tester |
 | Teacher grading accuracy | **NOT RUN** — the grading job was marked successful but explicitly skipped the actual grading test because `OPENAI_API_KEY` and `GEMINI_API_KEY` were unavailable to the workflow | You (add the needed secrets), then re-run and inspect the actual grading report |
 | Android Live Voice p50 / p95 | **NOT MEASURED** — needs a real phone | You, `docs/qa/ANDROID_DEVICE_SIGNOFF.md` Part B |
 | Human check on a real Android phone | **NOT DONE** | You, same document Part C |
 | iPhone XP decision (finding 6) | **OPEN** | You |
 | Merge to `main` (this is the production release) | **NOT DONE** — only after everything above | You approve, Claude does |
 
-**Overall: NO-GO today.** Both combined-code CI workflows are green, including Android compilation/unit testing and 2,118 passing server tests. This is not a deployment sign-off: the combined code has **not** yet been run on staging; the live grading accuracy test was skipped; and real-device voice/UX acceptance plus the iPhone XP decision remain open.
+**Overall: NO-GO today.** Both release candidates are successfully deployed to staging and their CI has passed. The new live staging browser and transport acceptance is in progress. The human 30-minute interactive Classroom pass, live grading accuracy, real-device voice/UX acceptance, and iPhone XP decision remain open.
 
 ## Verified CI run links
 
 - Website and Android: [Android Staging Validation #17](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43541240722), on web/Android commit `e4b9d5da9daf70eeb5b4d34c18467a1d0fd7b5c0`. The staging APK artifact is [here](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43541240722/artifacts/14092486100). **Not a production install.**
 - Backend: [LYO backend release candidate #3](https://github.com/Hectorg0827/LyoBackendJune/actions/runs/43541701758), on server commit `56daff0d4f9d4a05187e3303e72f1418cc2cb963`. Full regression suite passed. The `Teacher grading accuracy (real AI grader)` job **did not execute the grading test**, even though the job conclusion is `success`.
-- These results verify the two code heads above. Any subsequent commits to the release candidate must be rechecked.
+- Web/Android revalidation on the exact deployed code commit `70836eb` also [passed](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43542707577). Any later QA/docs-only commits do not change the code deployed to staging, which is pinned to the two SHAs above.
+- Both staging services' Railway health checks and running deployment status were verified as SUCCESS, with no observed crashed replicas. New automated staging acceptance: [run 43543251711](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43543251711), not yet signed off.
 
 ## Your steps, in order
 
-1. **Say "deploy the release candidate to staging".** Claude will point the
-   staging server and staging website at the release candidate and re-run the
-   30-minute and browser tests against it.
+1. **Staging deployment approved and completed.** The combined backend and website are now pinned to their approved commit SHAs in Railway staging. New automated browser and 30-minute transport tests are running. Review both completed job logs and perform the separate human-audible 30-minute Classroom interaction test before considering this gate passed.
 2. **Add the AI keys so grading can be measured** (once):
    GitHub → `LyoBackendJune` → Settings → Secrets and variables → Actions →
    **New repository secret**. Add `OPENAI_API_KEY` and `GEMINI_API_KEY` with
