@@ -140,4 +140,26 @@ class VoiceLatencyMeterTest {
         org.junit.Assert.assertTrue(voiceLatencyReadout(requireNotNull(sample)).contains("speed-only FAIL"))
     }
 
+    @Test
+    fun resetRemovesPriorVoiceSessionSamplesAndStageTimings() {
+        var now = 0L
+        val meter = VoiceLatencyMeter { now }
+        meter.speechBegan()
+        meter.speechEnded()
+        now = 40
+        meter.recognitionFinal()
+        meter.submitted()
+        now = 120
+        requireNotNull(meter.firstAudio())
+        meter.reset()
+        now = 200
+        meter.submitted()
+        now = 300
+        val nextSession = requireNotNull(meter.firstAudio())
+        assertEquals(1, nextSession.completedAudioTurns)
+        assertNull(nextSession.endOfSpeechToFirstAudioMs)
+        assertNull(nextSession.finalToSubmitMs)
+        assertEquals(100L, nextSession.p50FirstAudioMs)
+    }
+
 }
