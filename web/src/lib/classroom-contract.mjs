@@ -45,6 +45,9 @@ export function buildClassroomWsUrl(apiUrl, connection, token) {
   if (connection.reviewConceptId) params.set('review_concept_id', connection.reviewConceptId);
   if (connection.objective) params.set('objective', connection.objective);
   if (connection.difficulty) params.set('difficulty', connection.difficulty);
+  // The backend restores its persisted scene only when resume=1 is explicit.
+  // Starting a fresh session must omit this flag to avoid stale lesson state.
+  if (connection.resume === true) params.set('resume', '1');
   if (token) params.set('token', token);
   return `${base}/api/v1/classroom/ws/connect?${params}`;
 }

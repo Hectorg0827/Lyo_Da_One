@@ -43,6 +43,21 @@ test('classroom URL preserves learner controls and course context', () => {
   assert.equal(url.searchParams.get('token'), 'token-1');
 });
 
+
+test('Classroom resume flag is explicit and absent for new sessions', () => {
+  const base = 'https://lyojourneystagingbackend-staging.up.railway.app';
+  const fresh = new URL(buildClassroomWsUrl(base, {
+    topic: 'Fractions', sessionId: 'session-1',
+  }, 'token'));
+  const recovered = new URL(buildClassroomWsUrl(base, {
+    topic: 'Fractions', sessionId: 'session-1', resume: true,
+  }, 'token'));
+  assert.equal(fresh.searchParams.has('resume'), false);
+  assert.equal(recovered.searchParams.get('resume'), '1');
+  assert.equal(recovered.searchParams.get('session_id'), fresh.searchParams.get('session_id'));
+  assert.equal(recovered.searchParams.get('token'), fresh.searchParams.get('token'));
+});
+
 test('invalid modes fail safely to solo teacher mode', () => {
   assert.equal(normalizeClassroomMode('party'), 'solo');
 });

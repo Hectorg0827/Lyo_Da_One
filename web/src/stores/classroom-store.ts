@@ -1260,16 +1260,22 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
             return;
           }
           authToken = freshToken;
-          openSocket(freshToken);
+          openSocket(freshToken, true);
         }, delay);
       };
 
-      const openSocket = (accessToken: string) => {
+      const openSocket = (accessToken: string, recovering = false) => {
         if (socketEpoch !== epoch) return;
         openedAt = 0;
         let socket: WebSocket;
         try {
-          socket = new WebSocket(wsUrl(classroomRejoinConnection(connection, sessionId), accessToken));
+          // Backend resume_saved_scene is opt-in. A transport reconnect must
+          // request the previously persisted scene, not a fresh AI welcome.
+          const resumedConnection = classroomRejoinConnection(connection, sessionId);
+          socket = new WebSocket(wsUrl({
+            ...resumedConnection,
+            resume: recovering || start.resumed,
+          }, accessToken));
         } catch {
           scheduleReconnect();
           return;

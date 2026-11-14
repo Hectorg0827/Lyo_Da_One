@@ -475,7 +475,9 @@ test('unexpected disconnect reconnects the exact same lesson without clearing it
   await retry.fn();
 
   assert.equal(sockets.length, 2);
+  assert.equal(new URL(sockets[0].url).searchParams.has('resume'), false, 'new lesson must not request stale scene');
   assert.equal(new URL(sockets[1].url).searchParams.get('session_id'), 'lesson');
+  assert.equal(new URL(sockets[1].url).searchParams.get('resume'), '1', 'rejoin must restore persisted teacher scene');
   assert.equal(sockets[1].sent.length, 0, 'never replay previously submitted answers');
   assert.equal(taught(store).length, priorBoard.length);
   sockets[1].onopen();
@@ -505,6 +507,7 @@ test('first reconnect can refresh the expired WebSocket access token', async () 
   sockets[0].drop();
   await timers.find(t => t.delay === 400 && !t.canceled).fn();
   assert.equal(new URL(sockets[1].url).searchParams.get('token'), 'renewed-staging-token');
+  assert.equal(new URL(sockets[1].url).searchParams.get('resume'), '1');
   assert.equal(new URL(sockets[1].url).searchParams.get('session_id'), 'lesson');
   store.getState().disconnect();
 });
@@ -516,6 +519,7 @@ test('repeated handshake failures exhaust bounded retries instead of looping for
     const retry = timers.find(t => t.delay === delay && !t.canceled);
     assert.ok(retry, 'expected bounded retry ' + delay);
     await retry.fn();
+    assert.equal(new URL(sockets.at(-1).url).searchParams.get('resume'), '1');
   }
   sockets.at(-1).drop();
   assert.equal(store.getState().status, 'error');
