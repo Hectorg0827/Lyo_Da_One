@@ -298,6 +298,8 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
     val listState = rememberLazyListState()
     val mainHandler = remember { Handler(Looper.getMainLooper()) }
     val voiceLatency = remember { VoiceLatencyMeter() }
+    // Shown only in non-production builds; see voiceLatencyReadout.
+    var voiceTimingText by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(context) {
         lateinit var engine: TextToSpeech
@@ -318,7 +320,9 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                         // progress text is never a substitute for first audio.
                         if (spokenRanges.containsKey(utteranceId)) {
                             voiceLatency.firstAudio()?.let { sample ->
-                                if (BuildConfig.DEBUG) {
+                                val testBuild = BuildConfig.DEBUG || BuildConfig.API_ENVIRONMENT != "production"
+                                if (testBuild) voiceTimingText = voiceLatencyReadout(sample)
+                                if (testBuild) {
                                     Log.d(
                                         "LYO_VOICE_LATENCY",
                                         "asr_end_to_final_ms=${sample.endOfSpeechToFinalMs} " +
@@ -1110,6 +1114,7 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
             thinkingNudge = voiceThinkingNudge,
             messages = messages,
             error = inputError,
+            qaReadout = voiceTimingText,
             onEnd = ::stopVoiceConversation,
         )
     } else {

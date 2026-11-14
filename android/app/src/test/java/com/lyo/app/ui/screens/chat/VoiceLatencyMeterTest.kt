@@ -75,4 +75,21 @@ class VoiceLatencyMeterTest {
         // The screen will record a missing-TTS case separately in QA;
         // no sample is counted until speech genuinely starts.
     }
+
+    @Test
+    fun readoutShowsTheNumbersAcceptanceNeedsInPlainSeconds() {
+        var now = 0L
+        val meter = VoiceLatencyMeter { now }
+        meter.speechBegan()
+        meter.speechEnded()
+        now = 300
+        meter.recognitionFinal()
+        meter.submitted()
+        now = 1500
+        val sample = requireNotNull(meter.firstAudio())
+        assertEquals(
+            "Test build timing · last 1.2 s · pause 1.5 s · p50 1.2 s · p95 1.2 s · 1 of 20 turns",
+            voiceLatencyReadout(sample),
+        )
+    }
 }

@@ -63,6 +63,7 @@ internal fun LiveVoiceConversationScreen(
     messages: List<ChatMsg>,
     error: String?,
     onEnd: () -> Unit,
+    qaReadout: String? = null,
 ) {
     var transcriptVisible by remember { mutableStateOf(false) }
     var readingFrame by remember { mutableStateOf(0) }
@@ -202,6 +203,16 @@ internal fun LiveVoiceConversationScreen(
                         it,
                         color = Color(0xFFFF9A9A),
                         style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+                // Test builds only: first-audio timing for device acceptance.
+                qaReadout?.let {
+                    Text(
+                        it,
+                        color = Color(0xFF95EDC3),
+                        style = MaterialTheme.typography.labelSmall,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 }

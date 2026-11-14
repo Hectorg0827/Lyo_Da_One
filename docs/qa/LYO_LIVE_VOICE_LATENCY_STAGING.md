@@ -4,9 +4,18 @@
 
 **Scope:** Android device connected to isolated LYO staging backend, a non-production account, English and Spanish prompts. No production writes. iOS is outside this gate.
 
-## Android local timing
+## Android on-screen timing (no computer needed)
 
-Install the **staging debug APK from the same GitHub Actions commit being assessed**, then connect Android Debug Bridge (ADB). Check the APK's backend is staging before testing.
+Staging and debug builds show a green line under the Live Voice captions after
+every spoken answer, for example
+`Test build timing · last 1.2 s · pause 1.5 s · p50 1.1 s · p95 1.9 s · 12 of 20 turns`.
+`last`, `p50` and `p95` are submit-to-first-audio; `pause` is end of the
+learner's speech to first audio. The production app never shows it. The
+step-by-step owner checklist is [ANDROID_DEVICE_SIGNOFF.md](ANDROID_DEVICE_SIGNOFF.md).
+
+## Android local timing (optional, with a computer)
+
+Install the **staging APK from the same GitHub Actions commit being assessed** (staging builds now log these numbers too), then connect Android Debug Bridge (ADB). Check the APK's backend is staging before testing.
 
 ```bash
 adb logcat -c

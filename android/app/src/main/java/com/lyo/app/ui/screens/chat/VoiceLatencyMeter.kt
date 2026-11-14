@@ -94,3 +94,16 @@ internal class VoiceLatencyMeter(
         return ordered[index]
     }
 }
+
+/**
+ * A plain-language readout for test builds, so acceptance on a real phone
+ * needs no computer or developer tools. Never shown in the production app.
+ * "Pause" is what the learner feels: end of their speech to Lyo's first sound.
+ */
+internal fun voiceLatencyReadout(sample: VoiceLatencyObservation): String {
+    fun seconds(ms: Long) = "%.1f s".format(java.util.Locale.US, ms / 1000.0)
+    val pause = sample.endOfSpeechToFirstAudioMs?.let { " · pause ${seconds(it)}" } ?: ""
+    return "Test build timing · last ${seconds(sample.submitToFirstAudioMs)}$pause" +
+        " · p50 ${seconds(sample.p50FirstAudioMs)} · p95 ${seconds(sample.p95FirstAudioMs)}" +
+        " · ${sample.completedAudioTurns} of 20 turns"
+}
