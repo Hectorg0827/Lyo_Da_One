@@ -43,7 +43,7 @@ fun A2uiRenderScope.BulletsBlockRenderer() {
                 visible = visible,
                 enter = fadeIn(tween(300)) + slideInHorizontally(tween(300), initialOffsetX = { -it / 4 }),
             ) {
-                Text(
+                ClassroomMathRichText(
                     text = "•  $item",
                     color = TextPrimary,
                     modifier = Modifier.padding(vertical = 2.dp),
