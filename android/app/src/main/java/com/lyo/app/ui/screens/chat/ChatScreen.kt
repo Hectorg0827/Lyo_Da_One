@@ -503,10 +503,12 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
         if (voiceConversation && textToSpeechReady) {
             val engine = textToSpeech
             val requestedLocale = Locale.forLanguageTag(voiceLanguageTag)
-            val requestedLanguage = requestedLocale.language
-            val currentLanguage = engine?.voice?.locale?.language
+            val requestedLanguage = VoiceProfilePolicy.languageKey(voiceLanguageTag)
+            val currentLanguage = VoiceProfilePolicy.languageKey(
+                engine?.voice?.locale?.toLanguageTag().orEmpty()
+            )
             val lockedVoice = liveVoiceProfiles[requestedLanguage]
-            if (requestedLanguage.isNotBlank() && currentLanguage != requestedLanguage) {
+            if (VoiceProfilePolicy.shouldChangeLanguage(currentLanguage, requestedLanguage)) {
                 val availability = engine?.isLanguageAvailable(requestedLocale)
                 if (availability != TextToSpeech.LANG_MISSING_DATA &&
                     availability != TextToSpeech.LANG_NOT_SUPPORTED) {
