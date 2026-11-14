@@ -803,16 +803,16 @@ export default function ConversationalVoiceLayer() {
           });
         } catch (error) {
           if (!current()) return;
-          // Track the exact transition responsible for audible voice changes.
-          // Do not include speech text or other conversation content in telemetry.
-          reportVoiceQuality(qualityContext(), 'tts_fallback_transition', {
-            from_transport: 'server_tts',
-            to_transport: 'device_tts',
-            playback_progress: Math.round(progress * 100),
-            failure_type: error instanceof Error ? error.name : 'unknown',
-          });
           const remainder = unspokenRemainder(spoken, progress);
           if (remainder) {
+            // Only report an actual audible fallback, not a completed segment.
+            // These fields contain no spoken text or learner-authored content.
+            reportVoiceQuality(qualityContext(), 'tts_fallback_transition', {
+              from_transport: 'server_tts',
+              to_transport: 'device_tts',
+              playback_progress: Math.round(progress * 100),
+              failure_type: error instanceof Error ? error.name : 'unknown',
+            });
             if (voiceTurnOutcomeRef.current !== 'incomplete') voiceTurnOutcomeRef.current = 'fallback';
             await browserSpeechFallback(remainder, owner.signal);
           }
