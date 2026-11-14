@@ -1,9 +1,36 @@
 import java.util.Properties
+import org.gradle.api.file.RelativePath
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// Offline KaTeX is shipped INSIDE the APK. Never require a CDN for Classroom math.
+// The WebJar provides the canonical versioned distribution with fonts alongside
+// katex.min.css, so WebView's fraction/radical glyphs work without internet.
+val katexWebJar = configurations.create("katexWebJar") { isTransitive = false }
+dependencies.add(katexWebJar.name, "org.webjars.npm:katex:0.16.22")
+val prepareKatexAssets = tasks.register<Copy>("prepareKatexAssets") {
+    from({ zipTree(katexWebJar.singleFile) }) {
+        include("META-INF/resources/webjars/katex/0.16.22/dist/katex.min.js")
+        include("META-INF/resources/webjars/katex/0.16.22/dist/katex.min.css")
+        include("META-INF/resources/webjars/katex/0.16.22/dist/fonts/*.woff2")
+        eachFile {
+            relativePath = RelativePath(true, *relativePath.segments.drop(6).toTypedArray())
+        }
+        includeEmptyDirs = false
+    }
+    into(layout.buildDirectory.dir("generated/katexAssets/katex"))
+    doLast {
+        val bundled = destinationDir
+        check(bundled.resolve("katex.min.js").isFile &&
+              bundled.resolve("katex.min.css").isFile &&
+              bundled.resolve("fonts").listFiles()?.any { it.extension == "woff2" } == true) {
+            "Bundled KaTeX JavaScript, CSS and fonts are required for offline Classroom equations."
+        }
+    }
 }
 
 // Keep development builds usable until this app has a Firebase configuration.
@@ -127,6 +154,7 @@ android {
         buildConfig = true
     }
     sourceSets.getByName("test").resources.srcDir("../../Sources/Tests/Fixtures")
+    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/katexAssets"))
 }
 
 // A Play Store build without the upload key would be rejected; stop early
@@ -163,6 +191,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     implementation("androidx.activity:activity-compose:1.9.2")
 
+    implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
@@ -192,3 +221,8 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.6.2")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
+
+// Android Gradle plugin merges these generated assets into every app variant.
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }
+    .configureEach { dependsOn(prepareKatexAssets) }
+
