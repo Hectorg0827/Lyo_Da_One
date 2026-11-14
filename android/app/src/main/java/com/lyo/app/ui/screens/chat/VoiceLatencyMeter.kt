@@ -95,6 +95,18 @@ internal class VoiceLatencyMeter(
     }
 }
 
+/** First-audio speed is evaluated only after twenty ACTUALLY AUDIBLE turns.
+ * This is not a release signoff: missed audio, interruptions and physical
+ * device experience require separate independent QA.
+ */
+internal enum class VoiceSpeedGate { COLLECTING, PASS, FAIL }
+
+internal fun voiceSpeedGate(sample: VoiceLatencyObservation): VoiceSpeedGate = when {
+    sample.completedAudioTurns < 20 -> VoiceSpeedGate.COLLECTING
+    sample.p50FirstAudioMs <= 1100 && sample.p95FirstAudioMs <= 2000 -> VoiceSpeedGate.PASS
+    else -> VoiceSpeedGate.FAIL
+}
+
 /**
  * A plain-language readout for test builds, so acceptance on a real phone
  * needs no computer or developer tools. Never shown in the production app.
@@ -103,7 +115,12 @@ internal class VoiceLatencyMeter(
 internal fun voiceLatencyReadout(sample: VoiceLatencyObservation): String {
     fun seconds(ms: Long) = "%.1f s".format(java.util.Locale.US, ms / 1000.0)
     val pause = sample.endOfSpeechToFirstAudioMs?.let { " · pause ${seconds(it)}" } ?: ""
+    val speedStatus = when (voiceSpeedGate(sample)) {
+        VoiceSpeedGate.COLLECTING -> ""
+        VoiceSpeedGate.PASS -> " · speed-only PASS (human QA still required)"
+        VoiceSpeedGate.FAIL -> " · speed-only FAIL (target p50 1.1 s / p95 2.0 s)"
+    }
     return "Test build timing · last ${seconds(sample.submitToFirstAudioMs)}$pause" +
         " · p50 ${seconds(sample.p50FirstAudioMs)} · p95 ${seconds(sample.p95FirstAudioMs)}" +
-        " · ${sample.completedAudioTurns} of 20 turns"
+        " · ${sample.completedAudioTurns} of 20 turns" + speedStatus
 }
