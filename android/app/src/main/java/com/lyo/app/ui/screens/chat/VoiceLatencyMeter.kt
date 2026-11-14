@@ -35,6 +35,17 @@ internal class VoiceLatencyMeter(
     private var firstAudioAt: Long? = null
     private val firstAudioSamples = ArrayDeque<Long>()
 
+    /** Start a new conversation with an empty measured sample window. */
+    fun reset() {
+        speechEndedAt = null
+        recognizedAt = null
+        submittedAt = null
+        firstTextAt = null
+        firstVoicePayloadAt = null
+        firstAudioAt = null
+        firstAudioSamples.clear()
+    }
+
     fun speechBegan() {
         speechEndedAt = null
         recognizedAt = null
