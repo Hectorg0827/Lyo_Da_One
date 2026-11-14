@@ -4,7 +4,7 @@ Updated 14 November 2026 (UTC). CI results verified against GitHub Actions on 13
 
 ## The short version
 
-The earlier 30-minute Classroom transport test and Chromium browser test passed on older, partial **staging** code. The joined release candidates are now **deployed successfully to staging** and new QA tests are running. The previous passes are not evidence that the combined app is accepted. Production (`lyoai.app`, `api.lyoai.app`) is unchanged.
+The earlier 30-minute Classroom transport test and Chromium browser test passed on older, partial **staging** code. The joined release candidates are now **deployed successfully to staging** and the joined release-candidate Chromium and automated 30-minute transport tests have both passed. The previous passes are not evidence that the combined app is accepted. Production (`lyoai.app`, `api.lyoai.app`) is unchanged.
 
 So before this work there was nothing that could be released, even if every
 test were green: the fixes lived in about 60 separate draft pull requests, on
@@ -60,7 +60,7 @@ That is now fixed. There is **one release candidate** per repository:
 | Server: full regression suite | **PASS** — LYO backend release candidate run #3 on `56daff0`: **2,118 passed, 73 skipped, 247 warnings**, 6 subtests passed; 0 failures | — |
 | Release candidate deployed to staging | **DONE** — Railway backend deployment `dc04c560` at commit `56daff0` and web deployment `29fd32da` at commit `70836eb` both **SUCCESS** and online (1/1 replicas, 0 issues) | — |
 | Chromium browser Classroom smoke on joined staging | **PASS** — [release-candidate staging acceptance](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43543251711), exact persisted scene rejoined after forced disconnect, disposable learner deleted; screenshot artifact #14093285332 | — |
-| Automated 30-minute Classroom transport on joined staging | **IN PROGRESS** — the [same run](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43543251711) still has an active 30-minute transport/heartbeat job; duration and synthetic learner cleanup NOT yet verified | QA | 
+| Automated 30-minute Classroom transport on joined staging | **PASS** — [same run](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43543251711), actual job log: 60 seconds/4 heartbeats before forced disconnect, then 1,740 seconds/116 heartbeats after reconnect, 120 total across 1,800 seconds; saved scene resumed in 148 ms; synthetic learner permanently deleted | QA | 
 | Human 30-minute interactive/audible Classroom acceptance | **NOT VERIFIED** — a 30-minute WebSocket heartbeat test alone does not cover audible speech, grading feedback, UI interaction, or the human checkpoints in the acceptance guide | Human tester |
 | Teacher grading accuracy | **NOT RUN** — the grading job was marked successful but explicitly skipped the actual grading test because `OPENAI_API_KEY` and `GEMINI_API_KEY` were unavailable to the workflow | You (add the needed secrets), then re-run and inspect the actual grading report |
 | Android Live Voice p50 / p95 | **NOT MEASURED** — needs a real phone | You, `docs/qa/ANDROID_DEVICE_SIGNOFF.md` Part B |
@@ -68,7 +68,7 @@ That is now fixed. There is **one release candidate** per repository:
 | iPhone XP decision (finding 6) | **OPEN** | You |
 | Merge to `main` (this is the production release) | **NOT DONE** — only after everything above | You approve, Claude does |
 
-**Overall: NO-GO today.** Both release candidates are successfully deployed to staging and their CI has passed. The new live staging Chromium browser acceptance **passed**, including exact-scene resume and disposable-learner cleanup; the separate 30-minute transport run remains in progress. The human 30-minute interactive Classroom pass, live grading accuracy, real-device voice/UX acceptance, and iPhone XP decision remain open.
+**Overall: NO-GO today.** Both release candidates are successfully deployed to staging and their CI has passed. The new live staging Chromium browser acceptance **passed**, including exact-scene resume and disposable-learner cleanup; the automated 30-minute transport run passed; it does not replace the human-audible interactive acceptance. The human 30-minute interactive Classroom pass, live grading accuracy, real-device voice/UX acceptance, and iPhone XP decision remain open.
 
 ## Verified CI run links
 
@@ -79,7 +79,7 @@ That is now fixed. There is **one release candidate** per repository:
 
 ## Your steps, in order
 
-1. **Staging deployment approved and completed.** The combined backend and website are now pinned to their approved commit SHAs in Railway staging. The new Chromium browser test passed; the 30-minute transport test remains in progress. Review its completed job log and perform the separate human-audible 30-minute Classroom interaction test before considering this gate passed.
+1. **Staging deployment approved and completed.** The combined backend and website are now pinned to their approved commit SHAs in Railway staging. The new Chromium browser test passed; the automated 30-minute transport test passed with 120 heartbeats over 30 minutes. Review its completed job log and perform the separate human-audible 30-minute Classroom interaction test before considering this gate passed.
 2. **Add the AI keys so grading can be measured** (once):
    GitHub → `LyoBackendJune` → Settings → Secrets and variables → Actions →
    **New repository secret**. Add `OPENAI_API_KEY` and `GEMINI_API_KEY` with
@@ -110,3 +110,10 @@ When the live grading test actually runs (it was skipped in the green CI run), a
 About 60 draft pull requests are now contained in the release candidates.
 Once the release is live they should be closed so the next change starts
 from one place. Going forward: one `staging` branch, one `main` branch.
+
+## 14 November 2026 UTC — independent staging acceptance sign-off
+
+- **PASS — Chromium browser:** GitHub Actions [run 43543251711](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43543251711), job `132288425190`, checked out web SHA `70836eb41ceef13a52606f19597261a9a4cb3db6`. Actual logs show live Classroom scene reached Chromium, exact identical server scene rejoined with `resume=1`, and disposable synthetic learner deleted. Two PNG screenshots uploaded as [artifact 14093285332](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43543251711/artifacts/14093285332); screenshot existence verified, visual contents not independently inspected.
+- **PASS — automated WebSocket transport:** same run, job `132288425343`, checked out same web SHA. Actual logs show first AI Classroom scene in 23,107 ms, saved-scene resume in 148 ms, 60 s/4 heartbeats before forced disconnect, then 1,740 s/116 heartbeats after reconnect, **1,800 seconds / 120 heartbeats total**. Synthetic learner permanently deleted. This is transport/heartbeat automation, **not** witnessed human-audible 30-minute browser acceptance.
+- **PASS — exact staging revisions:** Railway project `LyoOne-Journey-Staging`, environment `staging`: backend `LyoJourneyStagingBackend` deployment `dc04c560-b0cb-4ce6-9b7d-bf631de377f2` SUCCESS, source pinned to `56daff0d4f9d4a05187e3303e72f1418cc2cb963`; web `LyoOneStagingWeb` deployment `29fd32da-8378-4f53-ac1b-2a1c9ccc5aa3` SUCCESS, source pinned to `70836eb41ceef13a52606f19597261a9a4cb3db6`. Both services live, no staged patches.
+- **BLOCKED / UNVERIFIED:** human-audible 30-minute interactive browser acceptance, real AI grading accuracy (CI skipped without required API keys), Android real-device Live Voice p50/p95 and UX, and iPhone XP release decision. Overall production release remains **NO-GO**. No production deployment or merge authorized.
