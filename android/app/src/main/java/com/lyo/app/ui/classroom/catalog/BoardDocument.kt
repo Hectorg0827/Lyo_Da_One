@@ -33,18 +33,18 @@ fun BoardDocumentView(document: ClassroomBoardDocument) {
                         Text(block.text, fontFamily = FontFamily.Monospace, color = TextPrimary, modifier = Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp))
                     }
                     "table" -> Column(Modifier.horizontalScroll(rememberScrollState()).background(Background, RoundedCornerShape(12.dp)).padding(12.dp)) {
-                        Row { block.headers.forEach { Text(it, color = LyoVioletLight, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(140.dp).padding(8.dp)) } }
-                        block.rows.forEach { row -> Row { row.forEach { Text(it, color = TextPrimary, modifier = Modifier.width(140.dp).padding(8.dp)) } } }
+                        Row { block.headers.forEach { ClassroomMathRichText(it, color = LyoVioletLight, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(140.dp).padding(8.dp)) } }
+                        block.rows.forEach { row -> Row { row.forEach { ClassroomMathRichText(it, color = TextPrimary, modifier = Modifier.width(140.dp).padding(8.dp)) } } }
                     }
                     "steps", "bullets" -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         block.items.forEachIndexed { i, item ->
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text(if (block.kind == "steps") "${i + 1}." else "•", color = LyoVioletLight)
-                                Text(readableClassroomMath(item), color = TextPrimary, modifier = Modifier.weight(1f))
+                                ClassroomMathRichText(item, color = TextPrimary, modifier = Modifier.weight(1f))
                             }
                         }
                     }
-                    else -> Text(readableClassroomMath(block.text), color = TextSecondary)
+                    else -> ClassroomMathRichText(block.text, color = TextSecondary)
                 }
             }
         }
