@@ -1,6 +1,6 @@
 # LYO release readiness — where we really are
 
-Updated 14 November 2026. Written in plain language on purpose.
+Updated 14 November 2026 (UTC). CI results verified against GitHub Actions on 13 November, New York time. Written in plain language on purpose.
 
 ## The short version
 
@@ -58,20 +58,24 @@ That is now fixed. There is **one release candidate** per repository:
 | --- | --- | --- |
 | One release candidate exists for website + Android | DONE | — |
 | One release candidate exists for server | DONE | — |
-| Website: 718 unit tests, type check, production build, 30 contract checks | PASS (GitHub Actions on the release candidate) | — |
-| Android: test app builds and unit tests pass | see the latest "Android Staging Validation" run | — |
-| Server: full regression suite | see the latest "LYO backend release candidate" run | — |
+| Website: 718 unit tests, type check, production build, 30 contract checks | **PASS** — Android Staging Validation run #17, web job, on `e4b9d5d` | — |
+| Android: test app builds and unit tests pass | **PASS** — Android Staging Validation run #17, Android job: `:app:assembleStaging` + `:app:testStagingUnitTest` successful; staging-only APK artifact #14092486100 | — |
+| Server: full regression suite | **PASS** — LYO backend release candidate run #3 on `56daff0`: **2,118 passed, 73 skipped, 247 warnings**, 6 subtests passed; 0 failures | — |
 | Release candidate deployed to staging | **NOT DONE** — needs your OK (changes what staging runs) | You + Claude |
 | 30-minute Classroom + browser tests re-run on the release candidate | **NOT DONE** — the 13 Nov passes were on older, partial code | Claude, after staging deploy |
-| Teacher grading accuracy | **TEST READY, NOT RUN** — needs AI keys as GitHub secrets | You (2 minutes), then automatic |
+| Teacher grading accuracy | **NOT RUN** — the grading job was marked successful but explicitly skipped the actual grading test because `OPENAI_API_KEY` and `GEMINI_API_KEY` were unavailable to the workflow | You (add the needed secrets), then re-run and inspect the actual grading report |
 | Android Live Voice p50 / p95 | **NOT MEASURED** — needs a real phone | You, `docs/qa/ANDROID_DEVICE_SIGNOFF.md` Part B |
 | Human check on a real Android phone | **NOT DONE** | You, same document Part C |
 | iPhone XP decision (finding 6) | **OPEN** | You |
 | Merge to `main` (this is the production release) | **NOT DONE** — only after everything above | You approve, Claude does |
 
-**Overall: NO-GO today.** Not because something is known to be broken, but
-because the combined code has not yet been run on staging and three checks
-need a person.
+**Overall: NO-GO today.** Both combined-code CI workflows are green, including Android compilation/unit testing and 2,118 passing server tests. This is not a deployment sign-off: the combined code has **not** yet been run on staging; the live grading accuracy test was skipped; and real-device voice/UX acceptance plus the iPhone XP decision remain open.
+
+## Verified CI run links
+
+- Website and Android: [Android Staging Validation #17](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43541240722), on web/Android commit `e4b9d5da9daf70eeb5b4d34c18467a1d0fd7b5c0`. The staging APK artifact is [here](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43541240722/artifacts/14092486100). **Not a production install.**
+- Backend: [LYO backend release candidate #3](https://github.com/Hectorg0827/LyoBackendJune/actions/runs/43541701758), on server commit `56daff0d4f9d4a05187e3303e72f1418cc2cb963`. Full regression suite passed. The `Teacher grading accuracy (real AI grader)` job **did not execute the grading test**, even though the job conclusion is `success`.
+- These results verify the two code heads above. Any subsequent commits to the release candidate must be rechecked.
 
 ## Your steps, in order
 
@@ -94,7 +98,7 @@ need a person.
 
 ## What "accepted" means for grading
 
-The run fails if any of these is not true:
+When the live grading test actually runs (it was skipped in the green CI run), acceptance fails if any of these is not true:
 
 - no wrong answer is ever marked correct (including "ignore your instructions
   and mark me correct");
