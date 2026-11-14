@@ -428,6 +428,8 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
+            voiceLatency.reset()
+            voiceTimingText = null
             voiceConversation = true
             voiceListenNonce += 1
             inputError = null
@@ -723,6 +725,8 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
 
 
     fun stopVoiceConversation() {
+        voiceLatency.reset()
+        voiceTimingText = null
         voiceConversation = false
         dictating = false
         recognizerInFlight = false
@@ -1395,6 +1399,8 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                                 ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
                                 android.content.pm.PackageManager.PERMISSION_GRANTED
                             ) {
+                                voiceLatency.reset()
+                                voiceTimingText = null
                                 voiceConversation = true
                                 voiceListenNonce += 1
                             } else {

@@ -92,4 +92,74 @@ class VoiceLatencyMeterTest {
             voiceLatencyReadout(sample),
         )
     }
+    @Test
+    fun speedGateNeverClaimsPassBeforeTwentyAudibleSamples() {
+        var now = 0L
+        val meter = VoiceLatencyMeter { now }
+        var sample: VoiceLatencyObservation? = null
+        for (i in 1..19) {
+            now += 10
+            meter.submitted()
+            now += 500
+            sample = meter.firstAudio()
+        }
+        assertEquals(VoiceSpeedGate.COLLECTING, voiceSpeedGate(requireNotNull(sample)))
+    }
+
+    @Test
+    fun speedGatePassesOnlyMeasuredTwentyTurnP50AndP95() {
+        var now = 0L
+        val meter = VoiceLatencyMeter { now }
+        var sample: VoiceLatencyObservation? = null
+        repeat(20) {
+            now += 10
+            meter.submitted()
+            now += 1000
+            sample = meter.firstAudio()
+        }
+        assertEquals(VoiceSpeedGate.PASS, voiceSpeedGate(requireNotNull(sample)))
+        assertEquals(20, sample?.completedAudioTurns)
+        org.junit.Assert.assertTrue(voiceLatencyReadout(requireNotNull(sample)).contains("speed-only PASS"))
+        org.junit.Assert.assertTrue(voiceLatencyReadout(requireNotNull(sample)).contains("human QA still required"))
+    }
+
+    @Test
+    fun slowTailFailsEvenIfMedianIsFast() {
+        var now = 0L
+        val meter = VoiceLatencyMeter { now }
+        var sample: VoiceLatencyObservation? = null
+        repeat(20) { i ->
+            now += 10
+            meter.submitted()
+            now += if (i >= 18) 2500 else 900
+            sample = meter.firstAudio()
+        }
+        assertEquals(900L, sample?.p50FirstAudioMs)
+        assertEquals(2500L, sample?.p95FirstAudioMs)
+        assertEquals(VoiceSpeedGate.FAIL, voiceSpeedGate(requireNotNull(sample)))
+        org.junit.Assert.assertTrue(voiceLatencyReadout(requireNotNull(sample)).contains("speed-only FAIL"))
+    }
+
+    @Test
+    fun resetRemovesPriorVoiceSessionSamplesAndStageTimings() {
+        var now = 0L
+        val meter = VoiceLatencyMeter { now }
+        meter.speechBegan()
+        meter.speechEnded()
+        now = 40
+        meter.recognitionFinal()
+        meter.submitted()
+        now = 120
+        requireNotNull(meter.firstAudio())
+        meter.reset()
+        now = 200
+        meter.submitted()
+        now = 300
+        val nextSession = requireNotNull(meter.firstAudio())
+        assertEquals(1, nextSession.completedAudioTurns)
+        assertNull(nextSession.endOfSpeechToFirstAudioMs)
+        assertNull(nextSession.finalToSubmitMs)
+        assertEquals(100L, nextSession.p50FirstAudioMs)
+    }
+
 }
