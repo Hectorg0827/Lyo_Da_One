@@ -59,7 +59,8 @@ That is now fixed. There is **one release candidate** per repository:
 | Android: test app builds and unit tests pass | **PASS** — Android Staging Validation run #17, Android job: `:app:assembleStaging` + `:app:testStagingUnitTest` successful; staging-only APK artifact #14092486100 | — |
 | Server: full regression suite | **PASS** — LYO backend release candidate run #3 on `56daff0`: **2,118 passed, 73 skipped, 247 warnings**, 6 subtests passed; 0 failures | — |
 | Release candidate deployed to staging | **DONE** — Railway backend deployment `dc04c560` at commit `56daff0` and web deployment `29fd32da` at commit `70836eb` both **SUCCESS** and online (1/1 replicas, 0 issues) | — |
-| Automated 30-minute Classroom transport + Chromium browser smoke on joined staging | **RUNNING** — [release-candidate staging acceptance run](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43543251711); do not mark passed until both job logs and synthetic-account cleanup are verified | QA | 
+| Chromium browser Classroom smoke on joined staging | **PASS** — [release-candidate staging acceptance](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43543251711), exact persisted scene rejoined after forced disconnect, disposable learner deleted; screenshot artifact #14093285332 | — |
+| Automated 30-minute Classroom transport on joined staging | **IN PROGRESS** — the [same run](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43543251711) still has an active 30-minute transport/heartbeat job; duration and synthetic learner cleanup NOT yet verified | QA | 
 | Human 30-minute interactive/audible Classroom acceptance | **NOT VERIFIED** — a 30-minute WebSocket heartbeat test alone does not cover audible speech, grading feedback, UI interaction, or the human checkpoints in the acceptance guide | Human tester |
 | Teacher grading accuracy | **NOT RUN** — the grading job was marked successful but explicitly skipped the actual grading test because `OPENAI_API_KEY` and `GEMINI_API_KEY` were unavailable to the workflow | You (add the needed secrets), then re-run and inspect the actual grading report |
 | Android Live Voice p50 / p95 | **NOT MEASURED** — needs a real phone | You, `docs/qa/ANDROID_DEVICE_SIGNOFF.md` Part B |
@@ -67,7 +68,7 @@ That is now fixed. There is **one release candidate** per repository:
 | iPhone XP decision (finding 6) | **OPEN** | You |
 | Merge to `main` (this is the production release) | **NOT DONE** — only after everything above | You approve, Claude does |
 
-**Overall: NO-GO today.** Both release candidates are successfully deployed to staging and their CI has passed. The new live staging browser and transport acceptance is in progress. The human 30-minute interactive Classroom pass, live grading accuracy, real-device voice/UX acceptance, and iPhone XP decision remain open.
+**Overall: NO-GO today.** Both release candidates are successfully deployed to staging and their CI has passed. The new live staging Chromium browser acceptance **passed**, including exact-scene resume and disposable-learner cleanup; the separate 30-minute transport run remains in progress. The human 30-minute interactive Classroom pass, live grading accuracy, real-device voice/UX acceptance, and iPhone XP decision remain open.
 
 ## Verified CI run links
 
@@ -78,7 +79,7 @@ That is now fixed. There is **one release candidate** per repository:
 
 ## Your steps, in order
 
-1. **Staging deployment approved and completed.** The combined backend and website are now pinned to their approved commit SHAs in Railway staging. New automated browser and 30-minute transport tests are running. Review both completed job logs and perform the separate human-audible 30-minute Classroom interaction test before considering this gate passed.
+1. **Staging deployment approved and completed.** The combined backend and website are now pinned to their approved commit SHAs in Railway staging. The new Chromium browser test passed; the 30-minute transport test remains in progress. Review its completed job log and perform the separate human-audible 30-minute Classroom interaction test before considering this gate passed.
 2. **Add the AI keys so grading can be measured** (once):
    GitHub → `LyoBackendJune` → Settings → Secrets and variables → Actions →
    **New repository secret**. Add `OPENAI_API_KEY` and `GEMINI_API_KEY` with
