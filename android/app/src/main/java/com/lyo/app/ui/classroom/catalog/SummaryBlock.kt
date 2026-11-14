@@ -59,15 +59,15 @@ fun A2uiRenderScope.SummaryBlockRenderer() {
             .padding(18.dp),
     ) {
         Text(text = label, color = accent, style = MaterialTheme.typography.labelSmall)
-        Text(text = readableClassroomMath(title), color = TextPrimary, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
+        ClassroomMathRichText(title, color = TextPrimary, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
         if (role == "details") TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "Hide details" else "Read details") }
         if (expanded && document != null) {
             BoardDocumentView(document)
         } else if (expanded && content != null) {
-            Text(text = readableClassroomMath(content), color = TextPrimary, modifier = Modifier.padding(top = 4.dp))
+            ClassroomMathRichText(content, color = TextPrimary, modifier = Modifier.padding(top = 4.dp))
         }
         if (expanded) items.forEach { item ->
-            Text(text = "•  ${readableClassroomMath(item)}", color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
+            ClassroomMathRichText("•  $item", color = TextSecondary, modifier = Modifier.padding(top = 2.dp))
         }
         if (retrievalScheduled) {
             Text(
