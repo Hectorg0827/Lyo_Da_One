@@ -80,7 +80,7 @@ fun A2uiRenderScope.QuizCardRenderer() {
         .border(1.dp, com.lyo.app.ui.theme.LyoVioletLight.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
         .padding(18.dp)) {
         Text("YOUR TURN", color = com.lyo.app.ui.theme.LyoVioletLight, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-        Text(text = readableClassroomMath(question), color = TextPrimary)
+        ClassroomMathRichText(question, color = TextPrimary)
         ClassroomChipRow(
             options = options.map { it.label },
             stateFor = { index, _ ->
