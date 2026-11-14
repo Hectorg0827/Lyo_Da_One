@@ -84,6 +84,11 @@ export function classroomCourseKey(connection) {
   return key || 'general';
 }
 
+/** A hard refresh recovers the current class; normal navigation starts fresh. */
+export function classroomResumeOnEntry(explicitResume, navigationType) {
+  return explicitResume === true || navigationType === 'reload';
+}
+
 /** Where a surface remembers the last live session for a course. */
 export function classroomSessionStorageKey(courseKey) {
   return `lyo_classroom_session:${courseKey}`;
@@ -145,10 +150,12 @@ export function classroomSessionStart(courseKey, saved, { resume = false, now = 
  * moments at which they stop pretending.
  *
  * NOTICE: say out loud that this is taking longer than it should.
- * RECOVERY: the step is not coming — resend it once, then hand the learner
- * controls that can actually get the class moving again.
+ * RECOVERY: offer a safe reconnect to replay the server-owned scene. Never
+ * re-submit the original answer while its grading may still be in progress.
  */
 export const CLASSROOM_STALL_NOTICE_MS = 12000;
+// Show recovery controls after 30s, without automatically sending another
+// action. The backend may still be generating a valid turn at this point.
 export const CLASSROOM_STALL_RECOVERY_MS = 30000;
 
 export const CLASSROOM_STALL_NOTICE =

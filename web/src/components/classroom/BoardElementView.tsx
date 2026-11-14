@@ -15,6 +15,7 @@ import {
 } from '@/lib/browser-speech';
 import { createTranscriptAccumulator, tidyTranscript } from '@/lib/speech-transcript.mjs';
 import { quizOptionIsSelected } from '@/lib/classroom-quiz-selection.mjs';
+import { isUncertainAnswerLabel } from '@/lib/classroom-answer-options.mjs';
 import type { ClassroomOpening } from '@/lib/classroom-contract.mjs';
 import type { BoardElement, QuizOption } from '@/stores/classroom-store';
 import { Explorable } from './Explorable';
@@ -307,7 +308,7 @@ function QuizView({
       </p>
       <p className="whitespace-pre-line text-base font-medium leading-relaxed text-white">{quiz.question}</p>
       <div className="grid gap-2 sm:grid-cols-2">
-        {(quiz.options ?? []).map((opt) => {
+        {(quiz.options ?? []).filter((opt) => !isUncertainAnswerLabel(opt.label)).map((opt) => {
           const chosen = quizOptionIsSelected(opt, quiz.options ?? [], el.answered, el.answeredOptionId);
           return (
             <button
@@ -543,6 +544,14 @@ function TransferView({
         placeholder={el.input.placeholder || (isSpanish ? 'Explica tu razonamiento…' : 'Explain your reasoning…')}
         className="w-full min-h-[5.5rem] max-h-72 resize-none overflow-y-auto rounded-xl border border-white/15 bg-black/25 px-3 py-2 text-sm leading-relaxed text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-lyo-400/60 disabled:opacity-60"
       />
+      {el.submitted && el.feedback && (
+        <p role="status" className={cn('rounded-lg border px-3 py-2 text-sm',
+          el.wasCorrect === false
+            ? 'border-amber-400/30 bg-amber-500/10 text-amber-100'
+            : 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100')}>
+          {el.feedback}
+        </p>
+      )}
       {el.skipped ? (
         <div className="flex items-center gap-3">
           <p className="text-sm text-white/40 italic">{isSpanish ? 'Omitida.' : 'Skipped.'}</p>

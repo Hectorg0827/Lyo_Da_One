@@ -1,6 +1,4 @@
-import { ApiError, api, clearTokens, getAccessToken } from '@/lib/api';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
+import { ApiError, api, getAccessToken, request } from '@/lib/api';
 
 // Web's own production origin — the domain a stack item's share link
 // points to. Not recorded anywhere in either repo (no NEXT_PUBLIC_SITE_URL,
@@ -60,27 +58,10 @@ async function stackRequest<T>(endpoint: string, init?: RequestInit): Promise<T>
     throw new ApiError('Sign in to save this to your Stacks.', 401);
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      ...(init?.headers ?? {}),
-    },
-  });
-
-  if (response.status === 401) {
-    clearTokens();
-    throw new ApiError('Your session expired. Sign in again to sync your Stacks.', 401);
-  }
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: 'Unable to reach your Stacks.' }));
-    throw new ApiError(body.detail || body.message || 'Unable to reach your Stacks.', response.status);
-  }
-
-  if (response.status === 204) return undefined as T;
-  return response.json() as Promise<T>;
+  // Stack sync is supplementary to the classroom. Use the shared one-time
+  // token refresh; an expired access token must not clear an otherwise valid
+  // session or evict the learner from their saved course cards.
+  return request<T>(endpoint, { ...init, optionalAuth: true });
 }
 
 /** The backend has no upsert-by-course semantics (`POST /items` always
@@ -100,7 +81,18 @@ async function findCourseStackItem(courseId: string): Promise<StackItem | null> 
  *  first visit; returns the existing one unchanged on a repeat visit — a
  *  resumed course must not spawn a duplicate stack card. Never throws —
  *  a failed sync must not block learning. */
-export async function upsertCourseOnStart(courseId: string, title: string): Promise<StackItem | null> {
+export async function upsertCourseOnStart(
+  courseId: string,
+  title: string,
+  classroom?: {
+    objective?: string;
+    recordScope?: string;
+    difficulty?: string;
+    durationMinutes?: number;
+    language?: string;
+    mode?: string;
+  },
+): Promise<StackItem | null> {
   if (!courseId.trim()) return null;
   try {
     const existing = await findCourseStackItem(courseId);
@@ -112,6 +104,7 @@ export async function upsertCourseOnStart(courseId: string, title: string): Prom
         item_type: ITEM_TYPE_COURSE,
         content_id: courseId,
         content_type: ITEM_TYPE_COURSE,
+        ...(classroom ? { extra_data: { classroom: { topic: title, ...classroom } } } : {}),
       }),
     });
   } catch {
@@ -119,10 +112,34 @@ export async function upsertCourseOnStart(courseId: string, title: string): Prom
   }
 }
 
-/** `progress` is a 0.0–1.0 fraction. `status` is auto-derived server-side
- *  from `progress` (see the backend's PUT /items/{id} handler) — this
- *  never needs to send status itself. No-ops if the course has no stack
- *  entry yet rather than creating one, matching Android's behavior. */
+/** A submitted classroom checkpoint is real participation, even when the
+ *  course's skill-completion progress is still 0%. The backend only derives
+ *  `in_progress` automatically when progress > 0, so update its independent
+ *  status field after a successful submission. Merely saving/opening a course
+ *  must not call this: it has not established any participation yet.
+ *
+ *  This never creates a missing card and never regresses paused/completed
+ *  work. The classroom uses it on a best-effort basis, so a Stacks outage
+ *  cannot block answering a question. */
+export async function markCourseInProgress(courseId: string): Promise<StackItem | null> {
+  if (!courseId.trim()) return null;
+  try {
+    const existing = await findCourseStackItem(courseId);
+    if (!existing) return null;
+    if (existing.status !== 'not_started' || existing.progress >= 1) return existing;
+    return await stackRequest<StackItem>(`/api/v1/stack/items/${existing.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: 'in_progress' }),
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** `progress` is a 0.0–1.0 fraction. Nonzero progress automatically derives
+ *  the status server-side, but a zero-progress course can independently be
+ *  `in_progress` when the learner has submitted a checkpoint (see above).
+ *  No-ops if the course has no stack entry yet. */
 export async function updateCourseProgress(courseId: string, progress: number): Promise<StackItem | null> {
   if (!courseId.trim()) return null;
   try {

@@ -130,7 +130,7 @@ export function errorMessageFrom(body: unknown, status: number): string {
  * call that merely *decorates* Home must never be able to evict them from it.
  * The front door is supposed to work for guests.
  */
-async function request<T>(
+export async function request<T>(
   endpoint: string,
   options: RequestInit & { skipAuth?: boolean; optionalAuth?: boolean } = {}
 ): Promise<T> {
@@ -207,7 +207,9 @@ async function request<T>(
   return res.json();
 }
 
-async function tryRefreshToken(): Promise<boolean> {
+let tokenRefreshInFlight: Promise<boolean> | null = null;
+
+async function performTokenRefresh(): Promise<boolean> {
   const refresh = getRefreshToken();
   if (!refresh) return false;
   try {
@@ -223,6 +225,16 @@ async function tryRefreshToken(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Share one refresh operation across simultaneous home, stack and voice
+ * requests. Rotating the same refresh token in parallel can invalidate an
+ * otherwise healthy signed-in lesson. */
+export function tryRefreshToken(): Promise<boolean> {
+  if (!tokenRefreshInFlight) {
+    tokenRefreshInFlight = performTokenRefresh().finally(() => { tokenRefreshInFlight = null; });
+  }
+  return tokenRefreshInFlight;
 }
 
 /**

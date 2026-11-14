@@ -11,6 +11,8 @@ export interface ClassroomContractConnection {
   mode?: ClassroomMode;
   durationMinutes?: number;
   reducedMotion?: boolean;
+  /** Ask the backend to restore its persisted scene (resume=1). */
+  resume?: boolean;
   language?: string;
 }
 
@@ -54,6 +56,7 @@ export function classroomCourseKey(connection: {
   courseId?: string;
   topic?: string;
 } | null | undefined): string;
+export function classroomResumeOnEntry(explicitResume: boolean, navigationType?: string): boolean;
 export function classroomSessionStorageKey(courseKey: string): string;
 export const CLASSROOM_RESUME_WINDOW_MS: number;
 export function canResumeClassroom(

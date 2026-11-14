@@ -8,6 +8,7 @@ import {
   buildClassroomWsUrl,
   canResumeClassroom,
   classroomCourseKey,
+  classroomResumeOnEntry,
   classroomOpening,
   classroomSceneStart,
   classroomSessionStart,
@@ -16,6 +17,12 @@ import {
   isTransferReady,
   normalizeClassroomMode,
 } from './classroom-contract.mjs';
+
+test('a hard refresh resumes its saved lesson, while a normal entry starts fresh', () => {
+  assert.equal(classroomResumeOnEntry(false, 'reload'), true);
+  assert.equal(classroomResumeOnEntry(false, 'navigate'), false);
+  assert.equal(classroomResumeOnEntry(true, 'navigate'), true);
+});
 
 test('classroom URL preserves learner controls and course context', () => {
   const url = new URL(buildClassroomWsUrl('https://api.lyoapp.com/', {
@@ -176,6 +183,7 @@ test('the opening falls back to the objective the entry contract would send', ()
 test('the stall thresholds give the first one time to be slow before it is broken', () => {
   assert.ok(CLASSROOM_STALL_NOTICE_MS > 0);
   assert.ok(CLASSROOM_STALL_RECOVERY_MS > CLASSROOM_STALL_NOTICE_MS);
+  assert.equal(CLASSROOM_STALL_RECOVERY_MS, 30_000);
   assert.match(CLASSROOM_STALL_RECOVERY, /not a wrong answer/);
 });
 

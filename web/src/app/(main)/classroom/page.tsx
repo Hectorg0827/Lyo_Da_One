@@ -26,17 +26,20 @@ import {
 } from '@/stores/classroom-store';
 import { ClassroomWorkspace } from '@/components/classroom/ClassroomWorkspace';
 import { classroomIsPaused, workspaceScrollAnchor } from '@/lib/board-presentation.mjs';
+import { alignTeachingVisualsOnBoard } from '@/lib/align-teaching-visual.mjs';
 import { upsertCourseOnStart } from '@/lib/stack';
+import { classroomExitHref } from '@/lib/course-destination.mjs';
 import { SESSION_LENGTHS, normalizeSessionMinutes } from '@/lib/entry-contract.mjs';
 import {
-  CLASSROOM_STALL_NOTICE,
   CLASSROOM_STALL_RECOVERY,
+  classroomResumeOnEntry,
 } from '@/lib/classroom-contract.mjs';
 import { conceptsShownInClass } from '@/lib/learner-model.mjs';
 import EvidenceRecord from '@/components/classroom/EvidenceRecord';
 import SurfaceLoading from '@/components/ui/SurfaceLoading';
-import { classroomSpeaker, speakingClassmates, teacherForTopic } from '@/lib/classroom-cast.mjs';
-import { classroomNextAction } from '@/lib/classroom-navigation.mjs';
+import { classroomSpeaker, teacherForTopic } from '@/lib/classroom-cast.mjs';
+import { classroomCompletionExitReady, classroomNextAction } from '@/lib/classroom-navigation.mjs';
+import { WAITING_COMPANION_BEATS, teacherPresenceMs } from '@/lib/classroom-presence.mjs';
 
 const LYO_STATE_IMG: Record<string, string> = {
   reading: '/mascot/mascot_reading_1.png',
@@ -89,8 +92,12 @@ function ClassroomStage() {
   // with nothing on screen saying so, which is a lesson quietly shorter than
   // the one the learner asked for.
   const initialDuration = normalizeSessionMinutes(params.get('duration')) ?? 10;
+  // The selectors are drafts. Changing a learning target halfway through a
+  // class must never silently replace its server-owned session or progress.
   const [mode, setMode] = useState<ClassroomMode>(initialMode);
   const [durationMinutes, setDurationMinutes] = useState(initialDuration);
+  const [activeMode, setActiveMode] = useState<ClassroomMode>(initialMode);
+  const [activeDurationMinutes, setActiveDurationMinutes] = useState(initialDuration);
   const [reduceMotion, setReduceMotion] = useState(false);
   const systemReducedMotion = useReducedMotion();
   const animationsOff = reduceMotion || systemReducedMotion === true;
@@ -110,8 +117,8 @@ function ClassroomStage() {
     objective,
     recordScope,
     difficulty,
-    mode,
-    durationMinutes,
+    mode: activeMode,
+    durationMinutes: activeDurationMinutes,
     reducedMotion: animationsOff,
     language,
     resume,
@@ -120,7 +127,7 @@ function ClassroomStage() {
   const {
     status, board, boardHistory, recordConcepts, viewingBoard, caption, activeSpeaker, prompt,
     transcript, lyoState, waitingForScene, isNarrating, canContinue, continueLabel,
-    progressCurrent, progressTotal, error, notice, stallPhase, resumable, soundOn, voiceOn,
+    progressCurrent, progressTotal, progressStage, error, notice, stallPhase, resumable, soundOn, voiceOn,
     speechRate, languageCode,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
     askQuestion, signal, takeFloor, requestHint, continueLesson, skipTurn, toggleSound, toggleVoice,
@@ -129,7 +136,6 @@ function ClassroomStage() {
   } = useClassroomStore();
   const instructor = teacherForTopic(topic);
   const currentCharacter = classroomSpeaker(activeSpeaker || 'Teacher', topic) || instructor;
-  const visibleClassmates = speakingClassmates(transcript, mode);
   const lessonConcepts = useMemo(
     () => conceptsShownInClass(board, boardHistory),
     [board, boardHistory],
@@ -142,6 +148,14 @@ function ClassroomStage() {
   const [notebookTab, setNotebookTab] = useState<'notes' | 'record'>('notes');
   const [handRaised, setHandRaised] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Captions are always available in the notebook. Learners who need to read
+  // every spoken line can pin this compact strip; everyone else sees it only
+  // around a meaningful speaker entrance. The teaching board remains primary.
+  const [captionsPinned, setCaptionsPinned] = useState(false);
+  const [captionMoment, setCaptionMoment] = useState(false);
+  const [lyoMoment, setLyoMoment] = useState(false);
+  const [waitingCompanionMoment, setWaitingCompanionMoment] = useState(false);
+  const [waitingCue, setWaitingCue] = useState(WAITING_COMPANION_BEATS[0].cue);
   const [hintMenuOpen, setHintMenuOpen] = useState(false);
   const [listeningTarget, setListeningTarget] = useState<'question' | 'prompt' | null>(null);
   const [promptResponse, setPromptResponse] = useState('');
@@ -155,10 +169,75 @@ function ClassroomStage() {
   const dictatingRef = useRef(false);
 
   useEffect(() => {
-    connect(connection);
+    try {
+      setCaptionsPinned(window.localStorage.getItem('lyo:classroom:persistent-captions') === 'true');
+    } catch { /* Device privacy settings must never block a lesson. */ }
+  }, []);
+
+  const updateCaptionsPinned = (next: boolean) => {
+    setCaptionsPinned(next);
+    try {
+      window.localStorage.setItem('lyo:classroom:persistent-captions', String(next));
+    } catch { /* Reading remains possible without local preference storage. */ }
+  };
+
+  // Keep the teacher present while speaking, then allow a brief beat for the
+  // learner to absorb feedback before making room for the board. A question
+  // prompt intentionally gives the learner a few seconds to see the speaker;
+  // the avatar never occupies the page for the entire response period.
+  useEffect(() => {
+    if (!caption || caption.speaker === 'You' || status === 'error' || status === 'ended') {
+      setCaptionMoment(false);
+      return;
+    }
+    setCaptionMoment(true);
+    // Speech synthesis can take tens of seconds. Presence must not become a
+    // permanent portrait merely because the audio clock is still waiting.
+    const timeout = window.setTimeout(
+      () => setCaptionMoment(false),
+      teacherPresenceMs({ narrating: isNarrating && Boolean(activeSpeaker), prompt: Boolean(prompt) }),
+    );
+    return () => window.clearTimeout(timeout);
+  }, [caption, activeSpeaker, isNarrating, prompt, status]);
+
+  // Lyo's presence is a brief teaching intervention, not a permanent badge.
+  // The two characters are deliberately mutually exclusive on screen.
+  useEffect(() => {
+    if (!['celebrating', 'surprised', 'curious', 'confused', 'shy'].includes(lyoState)) {
+      setLyoMoment(false);
+      return;
+    }
+    setLyoMoment(true);
+    const timeout = window.setTimeout(() => setLyoMoment(false), 3200);
+    return () => window.clearTimeout(timeout);
+  }, [lyoState]);
+
+  useEffect(() => {
+    setWaitingCompanionMoment(false);
+    if (!waitingForScene || status !== 'live' || isNarrating) return;
+    const timeouts: number[] = [];
+    for (const beat of WAITING_COMPANION_BEATS) {
+      timeouts.push(window.setTimeout(() => {
+        setWaitingCue(beat.cue);
+        setWaitingCompanionMoment(true);
+      }, beat.showAtMs));
+      timeouts.push(window.setTimeout(() => setWaitingCompanionMoment(false), beat.hideAtMs));
+    }
+    return () => timeouts.forEach((timeout) => window.clearTimeout(timeout));
+  }, [waitingForScene, status, isNarrating]);
+
+  useEffect(() => {
+    // Refresh must reattach before a fresh generation overwrites the saved
+    // session ID. Navigating normally to the course still starts anew.
+    const navigationEntry = window.performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+    const navigationType = navigationEntry?.type;
+    connect({ ...connection, resume: classroomResumeOnEntry(resume, navigationType) });
     return () => disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topic, courseId, lessonId, reviewConceptId, objective, recordScope, difficulty, mode, durationMinutes, animationsOff, language, resume]);
+    // Reduced motion changes the local animation behavior immediately. It
+    // must not disconnect a lesson merely to update a visual preference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic, courseId, lessonId, reviewConceptId, objective, recordScope, difficulty, activeMode, activeDurationMinutes, language, resume]);
 
   useEffect(() => {
     setSpeechSupported(createBrowserSpeechRecognition() !== null);
@@ -189,16 +268,24 @@ function ClassroomStage() {
   // mirroring Android's LyoNavHost Routes.CLASSROOM wiring. No-ops silently
   // if the visitor isn't signed in or the sync fails — never blocks class.
   useEffect(() => {
-    void upsertCourseOnStart(courseId, topic);
+    void upsertCourseOnStart(courseId, topic, {
+      objective, recordScope, difficulty, durationMinutes: initialDuration, language,
+      mode: initialMode,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [courseId, topic]);
+  }, [courseId, topic, objective, recordScope, difficulty, initialDuration, language, initialMode]);
 
   // Nothing has been taught yet: the board still holds only the cover page.
   // The offer of an unfinished class belongs to that moment alone — taking it
   // mid-lesson would discard the lesson the learner is already being taught,
   // which is what leaving the banner up for the whole session invited.
   const openingOnly = board.every((el) => el.kind === 'opening');
-  const shownBoard = viewingBoard === -1 ? board : boardHistory[viewingBoard] ?? board;
+  // Replayed lessons may contain visuals saved before the incoming-event fix.
+  // Normalize only the display, leaving saved counts and pizza models intact.
+  const shownBoard = useMemo(
+    () => alignTeachingVisualsOnBoard(viewingBoard === -1 ? board : boardHistory[viewingBoard] ?? board),
+    [board, boardHistory, viewingBoard],
+  );
   const totalBoards = boardHistory.length;
   const lessonPaused = classroomIsPaused(board);
   const activeCheckpoint = viewingBoard === -1
@@ -236,6 +323,15 @@ function ClassroomStage() {
   const readyToContinue = status === 'live' && viewingBoard === -1
     && !waitingForScene && (!isNarrating || lessonPaused) && !prompt && !pendingCheckpoint
     && (canContinue || board.length > 0);
+  const sessionSettingsChanged = mode !== activeMode || durationMinutes !== activeDurationMinutes;
+  const applySessionSettings = () => {
+    if (!sessionSettingsChanged) return;
+    // A new scope is a new lesson, not an in-place change to a graded
+    // question. Keep the active session intact if the learner cancels.
+    if (status === 'live' && !window.confirm('Start a new classroom session with these settings? This will leave your current session and begin a new one.')) return;
+    setActiveMode(mode);
+    setActiveDurationMinutes(durationMinutes);
+  };
   const primaryContinue = languageCode.toLowerCase().startsWith('es') ? 'Continuar' : 'Continue';
   const normalizedContinueLabel = continueLabel.trim();
   // The store uses the literal English "Continue" when a CTA omits its label.
@@ -282,12 +378,34 @@ function ClassroomStage() {
   // Every desk control needs an open socket, so gate them on the session
   // actually being live rather than letting the click vanish.
   const live = status === 'live';
+  const hasTeacherCaption = Boolean(caption?.text?.trim() && caption.speaker !== 'You');
+  const teacherPresent = live && hasTeacherCaption && captionMoment;
+  const captionNeedsReadingSpace = hasTeacherCaption && (captionsPinned || !voiceOn || isNarrating);
+  const lyoPresent = live && !teacherPresent && (lyoMoment || waitingCompanionMoment);
+  // Silent reading and accessibility preferences keep subtitles available
+  // without forcing a persistent teacher portrait beside the board.
+  const captionOnly = !teacherPresent && !lyoPresent && captionNeedsReadingSpace;
+  const characterDockVisible = teacherPresent || lyoPresent || captionOnly;
+  const lyoCue = waitingCompanionMoment
+    ? waitingCue
+    : lyoState === 'celebrating' ? 'Nice progress! Keep going.'
+      : lyoState === 'curious' ? 'Have a question? I’m here to help.'
+        : lyoState === 'confused' ? 'Need a hint? Try Help below.'
+          : 'Keep exploring — you’ve got this.';
   const nextAction = classroomNextAction({
     viewingHistory: viewingBoard !== -1,
     readyToContinue,
+    continueLabel: displayedContinueLabel,
     narrating: isNarrating,
     stalled: stallPhase === 'stalled',
     live,
+    waiting: waitingForScene,
+    hasCheckpoint: pendingCheckpoint,
+    hasPrompt: Boolean(prompt),
+  });
+  const canFinishLesson = classroomCompletionExitReady({
+    progressCurrent, progressTotal, board: shownBoard,
+    viewingHistory: viewingBoard !== -1,
     waiting: waitingForScene,
     hasCheckpoint: pendingCheckpoint,
     hasPrompt: Boolean(prompt),
@@ -417,7 +535,7 @@ function ClassroomStage() {
       {/* ── Top bar ── */}
       <div className="flex items-start gap-3 border-b border-lyo-400/10 bg-gradient-to-r from-lyo-500/10 via-transparent to-accent-purple/5 px-3 py-2.5 sm:px-4">
         <button
-          onClick={() => router.back()}
+          onClick={() => router.push(classroomExitHref(courseId))}
           aria-label="Leave classroom"
           className="flex min-h-11 min-w-11 items-center justify-center rounded-xl text-white/70 transition-colors hover:bg-white/10 hover:text-white"
           title="Leave classroom"
@@ -439,19 +557,37 @@ function ClassroomStage() {
               : status === 'connecting' ? <span className="text-white/60">Connecting…</span> : <span className="text-white/60">{status}</span>}
           </p>
           {progressTotal > 0 && (
-            <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-white/10" aria-label={`${progressCurrent} of ${progressTotal} skills practised`}>
-              <div className="h-full rounded-full bg-gradient-to-r from-lyo-500 to-accent-purple transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, progressCurrent / progressTotal * 100))}%` }} />
+            <div className="mt-1.5">
+              <div className="h-1 w-full overflow-hidden rounded-full bg-white/10" aria-label={`${progressCurrent} of ${progressTotal} skills completed`}>
+                <div className="h-full rounded-full bg-gradient-to-r from-lyo-500 to-accent-purple transition-[width] duration-500" style={{ width: `${Math.min(100, Math.max(0, progressCurrent / progressTotal * 100))}%` }} />
+              </div>
+              {progressStage && <p className="mt-1 truncate text-[10px] font-medium text-lyo-200/85" aria-live="polite">{progressStage}</p>}
             </div>
           )}
         </div>
         <div className="ml-auto flex items-center gap-1">
           <button
             onClick={toggleVoice}
+            aria-label={voiceOn ? 'Turn teacher voice off' : 'Turn teacher voice on'}
+            aria-pressed={voiceOn}
             title={voiceOn ? 'Mute voices' : 'Hear the class speak'}
             className={cn('p-2 rounded-lg transition-colors',
               voiceOn ? 'text-lyo-300 bg-lyo-500/15' : 'text-white/40 hover:text-white hover:bg-white/5')}
           >
             <AudioLines className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => updateCaptionsPinned(!captionsPinned)}
+            aria-label={captionsPinned ? 'Hide persistent captions' : 'Keep teacher captions visible'}
+            aria-pressed={captionsPinned}
+            title={captionsPinned ? 'Captions stay visible (tap for brief captions)' : 'Keep captions visible'}
+            className={cn(
+              'min-h-9 min-w-9 rounded-lg border px-1 text-[10px] font-black tracking-[0.08em] transition-colors',
+              captionsPinned ? 'border-lyo-400/50 bg-lyo-500/20 text-lyo-100' : 'border-white/10 text-white/65 hover:bg-white/10 hover:text-white',
+            )}
+          >
+            CC
           </button>
           <button
             onClick={toggleSound}
@@ -463,9 +599,10 @@ function ClassroomStage() {
             {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
           <button
-            onClick={() => setNotebookOpen(true)}
+            onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }}
             title="Your notebook (transcript)"
-            className="hidden rounded-lg p-2 text-white/40 transition-colors hover:bg-white/5 hover:text-white sm:inline-flex"
+            aria-label="Open full lesson transcript"
+            className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg p-2 text-white/50 transition-colors hover:bg-white/5 hover:text-white"
           >
             <NotebookPen className="w-4 h-4" />
           </button>
@@ -528,6 +665,21 @@ function ClassroomStage() {
               ))}
             </select>
           </label>
+          {sessionSettingsChanged && (
+            <div className="space-y-2 rounded-lg border border-amber-400/25 bg-amber-400/10 p-2 text-amber-100 sm:col-span-3" role="status">
+              <p>Changes to lesson mode or session length start a new class. Your current lesson will stay open until you choose to restart.</p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={applySessionSettings}
+                  className="min-h-10 rounded-lg bg-lyo-500 px-3 font-semibold text-white hover:bg-lyo-400">
+                  Start new class with changes
+                </button>
+                <button type="button" onClick={() => { setMode(activeMode); setDurationMinutes(activeDurationMinutes); }}
+                  className="min-h-10 rounded-lg border border-white/20 px-3 text-white/80 hover:bg-white/10">
+                  Keep current class
+                </button>
+              </div>
+            </div>
+          )}
           <div className="space-y-2">
             <span className="flex items-center gap-1.5 font-semibold text-white">
               <Accessibility className="h-3.5 w-3.5" /> Accessibility
@@ -538,6 +690,14 @@ function ClassroomStage() {
                 type="checkbox"
                 checked={reduceMotion}
                 onChange={(event) => setReduceMotion(event.target.checked)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              Keep teacher captions visible
+              <input
+                type="checkbox"
+                checked={captionsPinned}
+                onChange={(event) => updateCaptionsPinned(event.target.checked)}
               />
             </label>
             <label className="flex items-center justify-between gap-2">
@@ -556,61 +716,97 @@ function ClassroomStage() {
         </div>
       )}
 
-      {/* A real teacher character, not Lyo. ClassroomCaptionSync owns
-          the visual text; this component owns the semantic live region. */}
-      <div className={cn(
-        'mx-3 mb-3 flex min-h-[92px] shrink-0 items-center gap-3 rounded-2xl border bg-[var(--surface-2)] px-3 py-2 shadow-[0_12px_32px_rgba(2,6,23,0.28)] backdrop-blur-xl sm:mx-4 sm:px-4',
-        'border-lyo-400/30',
-      )}>
-        <motion.img
-          key={currentCharacter.id}
-          src={currentCharacter.image}
-          alt={`${currentCharacter.name} — ${currentCharacter.id.startsWith('student_') ? 'AI classmate' : 'AI teacher'}`}
-          className="h-14 w-14 shrink-0 rounded-xl border border-white/10 bg-white/95 object-contain shadow-[0_6px_16px_rgba(0,0,0,0.30)]"
-          initial={animationsOff ? false : { scale: 0.7 }}
-          animate={{ scale: 1, rotate: 0, y: 0 }}
-          transition={{ duration: animationsOff ? 0 : 0.3 }}
-        />
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-lyo-300">
-              {currentCharacter.id.startsWith('student_') ? `${currentCharacter.name} · AI classmate` : `${instructor.name} · AI teacher`}
-            </p>
-            {caption && <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }} className="min-h-11 text-[11px] text-[var(--text-secondary)] underline underline-offset-2">Full transcript</button>}
-          </div>
-          <div data-classroom-caption-target className={cn('relative overflow-hidden', voiceOn ? 'h-10 sm:h-[44px]' : 'h-[72px] sm:h-[84px]')}>
-          <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
-            {caption ? `${caption.speaker}: ${caption.text}` : ''}
-          </span>
-          {!caption && (
-            <p className="flex h-full items-center text-sm font-medium text-white/75">
-              {stallPhase === 'slow' && status === 'live'
-                ? CLASSROOM_STALL_NOTICE
-                : waitingForScene || status === 'connecting'
-                ? board.some((el) => (el.kind === 'quiz' && el.answered) || (el.kind === 'transfer' && el.submitted))
-                  ? 'Your teacher is checking your answer…' : 'Your teacher is preparing the next step…'
-                : pendingCheckpoint || prompt ? 'Your turn — respond to your teacher' : 'Your teacher is ready'}
-            </p>
-          )}
-          </div>
-        </div>
-      </div>
+      {/* The permanent transcript is in the notebook. It must not vanish
+          from assistive technology when a character leaves the stage. */}
+      <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {hasTeacherCaption ? `${caption?.speaker}: ${caption?.text}` : ''}
+      </span>
 
-      {/* Lyo is the learner's companion. Never use this image as the teacher. */}
-      <div className="mx-3 mb-2 flex shrink-0 items-center gap-2 rounded-xl border border-lyo-400/15 bg-lyo-500/5 px-3 py-1.5 sm:mx-4">
-        <img src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
-          alt="Lyo, your study companion" className="h-8 w-8 object-contain" />
-        <span className="min-w-0 flex-1 truncate text-[11px] text-white/65"><strong className="text-lyo-200">Lyo</strong> · Your study companion</span>
-        {visibleClassmates.length > 0 && <div className="flex items-center gap-1.5" aria-label="AI classmates who have spoken">
-          {visibleClassmates.map((peer) => <img key={peer.id} src={peer.image} alt={`${peer.name}, AI classmate`}
-            title={peer.name} className="h-8 w-8 rounded-full border border-white/15 bg-white object-cover" />)}
-        </div>}
-      </div>
+      {/* Characters enter only when they have a job to do. This compact dock
+          expands while someone speaks or Lyo offers help, then yields its
+          space to the board. Teacher and companion are never always-on rails. */}
+      <AnimatePresence initial={false} mode="wait">
+        {characterDockVisible && (
+          <motion.section
+            key={teacherPresent ? `teacher-${currentCharacter.id}` : lyoPresent ? 'lyo-companion' : 'captions-only'}
+            initial={animationsOff ? false : { opacity: 0, y: -8, height: 0 }}
+            animate={{ opacity: 1, y: 0, height: 'auto' }}
+            exit={animationsOff ? { opacity: 0, height: 0 } : { opacity: 0, y: -6, height: 0 }}
+            transition={{ duration: animationsOff ? 0 : 0.22, ease: 'easeOut' }}
+            className={cn(
+              'mx-3 mb-2 shrink-0 overflow-hidden rounded-2xl border shadow-[0_10px_24px_rgba(2,6,23,0.20)] sm:mx-4',
+              teacherPresent ? 'border-lyo-400/30 bg-[var(--surface-2)]'
+                : lyoPresent ? 'border-accent-purple/25 bg-accent-purple/10'
+                  : 'border-white/15 bg-[var(--surface-2)]',
+            )}
+            aria-label={teacherPresent ? 'Teacher speaking' : lyoPresent ? 'Lyo companion' : 'Teacher captions'}
+          >
+            {teacherPresent && (
+              <div className="flex items-center gap-3 px-3 py-2 sm:px-4">
+                <motion.img
+                  src={currentCharacter.image}
+                  alt={`${currentCharacter.name}, ${currentCharacter.id.startsWith('student_') ? 'AI classmate' : 'AI teacher'}`}
+                  className="h-12 w-12 shrink-0 rounded-xl border border-white/15 bg-white/95 object-contain"
+                  initial={animationsOff ? false : { scale: 0.84 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: animationsOff ? 0 : 0.22 }}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-lyo-300">
+                      {currentCharacter.id.startsWith('student_') ? `${currentCharacter.name} · AI classmate` : `${instructor.name} · AI teacher`}
+                    </p>
+                    <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }}
+                      className="shrink-0 text-[11px] font-medium text-white/65 underline underline-offset-2 hover:text-white">
+                      Transcript
+                    </button>
+                  </div>
+                  <div data-classroom-caption-target className={cn(
+                    'relative overflow-hidden', voiceOn ? 'h-10 sm:h-[44px]' : 'h-[72px] sm:h-[84px]',
+                  )} />
+                </div>
+              </div>
+            )}
+            {lyoPresent && (
+              <div>
+                <div className="flex items-center gap-2.5 px-3 py-2 sm:px-4">
+                  <motion.img
+                    src={LYO_STATE_IMG[lyoState] ?? LYO_STATE_IMG.reading}
+                    alt="Lyo, your study companion"
+                    className="h-10 w-10 shrink-0 object-contain"
+                    initial={animationsOff ? false : { x: -8, rotate: -6 }}
+                    animate={{ x: 0, rotate: 0 }}
+                    transition={{ duration: animationsOff ? 0 : 0.23 }}
+                  />
+                  <p className="min-w-0 text-xs leading-relaxed text-white/85">
+                    <strong className="mr-1 text-lyo-200">Lyo:</strong> {lyoCue}
+                  </p>
+                </div>
+                {captionNeedsReadingSpace && (
+                  <div className="border-t border-white/10 px-3 py-1 sm:px-4">
+                    <div data-classroom-caption-target className="relative h-10 overflow-hidden sm:h-11" />
+                  </div>
+                )}
+              </div>
+            )}
+            {captionOnly && !lyoPresent && (
+              <div className="flex min-h-12 items-center gap-2 px-3 py-1 sm:px-4">
+                <button type="button" onClick={() => { setNotebookTab('notes'); setNotebookOpen(true); }}
+                  title="Expand full teacher transcript"
+                  className="shrink-0 text-[10px] font-bold uppercase tracking-[0.08em] text-lyo-200 underline underline-offset-2 hover:text-white">
+                  Captions
+                </button>
+                <div data-classroom-caption-target className="relative h-10 min-w-0 flex-1 overflow-hidden sm:h-11" />
+              </div>
+            )}
+          </motion.section>
+        )}
+      </AnimatePresence>
 
-      {/* The board grows with the lesson. Only this area scrolls when a scene
-          is longer than the available phone height; the teacher stays visible. */}
+      {/* The board grows with the lesson. Only the learning canvas scrolls;
+          characters yield their space when they are no longer useful. */}
       {(shownBoard.length > 0 || !prompt || error) && (
-      <div ref={boardScrollRef} className="mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-2 sm:mx-4">
+      <div ref={boardScrollRef} className="mx-3 min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-pb-16 pb-16 sm:mx-4 sm:pb-20">
         <div className={cn(
           'flex min-h-[180px] flex-col rounded-[22px] border border-white/10 overflow-hidden',
           'bg-[var(--surface)]',
@@ -754,7 +950,7 @@ function ClassroomStage() {
                   </p>
                   <p className="mx-auto max-w-xs text-xs leading-relaxed text-white/70">
                     {topic} · {difficulty ? `${difficulty} level · ` : ''}
-                    {durationMinutes} minute session
+                    {activeDurationMinutes} minute session
                   </p>
                 </div>
                 <div className="flex gap-1.5" aria-hidden>
@@ -858,6 +1054,15 @@ function ClassroomStage() {
           <p className="text-[11px] text-white/45 text-center">
             {deskDisabledReason}
           </p>
+        )}
+        {canFinishLesson && (
+          <button
+            type="button"
+            onClick={() => router.push(classroomExitHref(courseId))}
+            className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-emerald-400/45 bg-emerald-500/15 px-3 py-2 text-sm font-bold text-emerald-100 transition-colors hover:bg-emerald-500/25 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-300"
+          >
+            <BookOpenCheck className="h-4 w-4" /> Finish &amp; return to courses
+          </button>
         )}
         {/* Permanent, thumb-reachable transport. A learner can always see
             where the lesson stands; waiting never looks like a dead end. */}
