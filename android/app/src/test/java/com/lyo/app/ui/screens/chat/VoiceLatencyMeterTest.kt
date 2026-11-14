@@ -131,7 +131,7 @@ class VoiceLatencyMeterTest {
         repeat(20) { i ->
             now += 10
             meter.submitted()
-            now += if (i == 19) 2500 else 900
+            now += if (i >= 18) 2500 else 900
             sample = meter.firstAudio()
         }
         assertEquals(900L, sample?.p50FirstAudioMs)
