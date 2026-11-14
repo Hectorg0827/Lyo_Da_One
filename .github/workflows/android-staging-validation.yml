@@ -5,7 +5,7 @@ name: Android Staging Validation
 on:
   workflow_dispatch:
   push:
-    branches: [feat/classroom-retention-20261105]
+    branches: [feat/classroom-retention-20261105, ccr-3bc562fc-kn237t]
   pull_request:
     branches: [feat/classroom-retention-20261105]
 
@@ -17,6 +17,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  web-release-candidate:
+    name: Web tests, typecheck and production build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Cross-platform contract checks
+        run: |
+          set -euo pipefail
+          for script in scripts/verify-*.mjs; do
+            # The deploy check needs a live release commit and runs on main only.
+            [ "$script" = scripts/verify-production-deploy.mjs ] && continue
+            echo "== $script"
+            node "$script"
+          done
+          node --test scripts/lib/*.test.mjs
+      - name: Web unit tests, typecheck and build
+        working-directory: web
+        run: |
+          set -euo pipefail
+          npm ci
+          npm test
+          npx tsc --noEmit
+          npx next build
+
   android-staging:
     name: Compile and unit-test staging APK
     runs-on: ubuntu-latest
