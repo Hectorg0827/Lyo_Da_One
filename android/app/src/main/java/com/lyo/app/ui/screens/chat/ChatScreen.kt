@@ -276,6 +276,9 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
     var inputError by remember { mutableStateOf<String?>(null) }
     var textToSpeech by remember { mutableStateOf<TextToSpeech?>(null) }
     var textToSpeechReady by remember { mutableStateOf(false) }
+    // Preserve the engine-selected voice for each language across Live turns.
+    // A new country tag from speech recognition must not reselect another voice.
+    val liveVoiceProfiles = remember { mutableMapOf<String, android.speech.tts.Voice>() }
     var speakingMessageId by remember { mutableStateOf<String?>(null) }
     var voiceConversation by remember { mutableStateOf(false) }
     var voiceInterruptedPreviousTurn by remember { mutableStateOf(false) }
@@ -308,6 +311,13 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                 val languageResult = engine.setLanguage(Locale.getDefault())
                 textToSpeechReady = languageResult != TextToSpeech.LANG_MISSING_DATA &&
                     languageResult != TextToSpeech.LANG_NOT_SUPPORTED
+                if (textToSpeechReady) {
+                    engine.setSpeechRate(0.95f)
+                    engine.setPitch(1.0f)
+                    engine.voice?.let { selected ->
+                        liveVoiceProfiles[selected.locale.language] = selected
+                    }
+                }
             } else {
                 textToSpeechReady = false
             }
@@ -319,6 +329,13 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
                         // Only actual response speech counts. The UI's optional
                         // progress text is never a substitute for first audio.
                         if (spokenRanges.containsKey(utteranceId)) {
+                            if (BuildConfig.DEBUG || BuildConfig.API_ENVIRONMENT != "production") {
+                                val selected = engine.voice
+                                Log.d("LYO_VOICE_PROFILE", "transport=android_tts " +
+                                    "voice=${selected?.name ?: "unknown"} " +
+                                    "locale=${selected?.locale?.language ?: "unknown"} " +
+                                    "rate=0.95 pitch=1.0")
+                            }
                             voiceLatency.firstAudio()?.let { sample ->
                                 val testBuild = BuildConfig.DEBUG || BuildConfig.API_ENVIRONMENT != "production"
                                 if (testBuild) voiceTimingText = voiceLatencyReadout(sample)
@@ -394,6 +411,7 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
         onDispose {
             engine.stop()
             engine.shutdown()
+            liveVoiceProfiles.clear()
             textToSpeech = null
             textToSpeechReady = false
             speakingMessageId = null
@@ -483,12 +501,23 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
 
         val content = buildChatContent(trimmed, attachments)
         if (voiceConversation && textToSpeechReady) {
+            val engine = textToSpeech
             val requestedLocale = Locale.forLanguageTag(voiceLanguageTag)
-            val availability = textToSpeech?.isLanguageAvailable(requestedLocale)
-            if (availability != TextToSpeech.LANG_MISSING_DATA &&
-                availability != TextToSpeech.LANG_NOT_SUPPORTED
-            ) {
-                textToSpeech?.language = requestedLocale
+            val requestedLanguage = requestedLocale.language
+            val currentLanguage = engine?.voice?.locale?.language
+            val lockedVoice = liveVoiceProfiles[requestedLanguage]
+            if (requestedLanguage.isNotBlank() && currentLanguage != requestedLanguage) {
+                val availability = engine?.isLanguageAvailable(requestedLocale)
+                if (availability != TextToSpeech.LANG_MISSING_DATA &&
+                    availability != TextToSpeech.LANG_NOT_SUPPORTED) {
+                    if (lockedVoice != null) engine?.setVoice(lockedVoice)
+                    else engine?.setLanguage(requestedLocale)
+                    engine?.voice?.let { selected ->
+                        liveVoiceProfiles.putIfAbsent(requestedLanguage, selected)
+                    }
+                }
+            } else if (lockedVoice != null && engine?.voice?.name != lockedVoice.name) {
+                engine?.setVoice(lockedVoice)
             }
         }
         val clientMessageId = UUID.randomUUID().toString()
