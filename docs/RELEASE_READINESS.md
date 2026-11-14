@@ -38,9 +38,7 @@ That is now fixed. There is **one release candidate** per repository:
    `POST /gamification/xp/award`. The fix (PR #141, with #142 so learners still
    earn XP from graded work) sat unmerged since 15 October. Both are in the
    backend release candidate. The website and Android app never call that
-   endpoint. **The iPhone app does** (`GamificationService.awardXP`), so those
-   calls will be refused after release until the iPhone app relies on
-   server-awarded XP — decide this before releasing the server.
+   endpoint. **Some iPhone repository flows still attempt client-initiated server XP grants**: `LyoRepository.awardXP` posts to `/gamification/xp/award`, and `DefaultGamificationRepository.addXP` uses the same endpoint. `ChallengesViewModel` calls the former for challenge completion. Those remote calls will receive HTTP 403 for ordinary learners after the security fix. By contrast, `GamificationService.awardXP(amount:reason:)` manages local `UserDefaults` progress and is **not** itself the network call. Decide how to handle existing iPhone clients before releasing the server; do not restore arbitrary client-controlled XP grants.
 7. **Grading uses a different AI model on production than on staging.**
    Production has an OpenAI key, so answers are graded by `gpt-4o-mini` first;
    staging has only a Gemini key. Grading results from staging therefore do
