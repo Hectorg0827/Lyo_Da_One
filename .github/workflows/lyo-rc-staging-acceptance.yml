@@ -1,0 +1,56 @@
+name: LYO release-candidate staging acceptance
+
+# Test the exact approved staging revision, without touching production.
+on:
+  push:
+    branches: [ccr-3bc562fc-kn237t]
+    paths:
+      - '.github/workflows/lyo-rc-staging-acceptance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lyo-rc-staging-acceptance
+  cancel-in-progress: false
+
+jobs:
+  chromium-classroom:
+    name: Chromium Classroom scene and reconnect
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.56.0-noble
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 70836eb41ceef13a52606f19597261a9a4cb3db6
+      - name: Install browser test dependencies
+        run: python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+      - name: Test live staging Chromium Classroom and exact-scene reconnect
+        run: python -u scripts/qa/browser_classroom_staging.py
+      - name: Preserve only synthetic-learner screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-rc-staging-chromium-screenshots
+          path: artifacts/browser-classroom-staging/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+  classroom-30m:
+    name: 30 minute Classroom transport and resume
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 70836eb41ceef13a52606f19597261a9a4cb3db6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install WebSocket test dependency
+        run: python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Verify same-scene resume, forced disconnect and 30-minute heartbeats on staging
+        run: python -u scripts/qa/long_classroom_session.py
