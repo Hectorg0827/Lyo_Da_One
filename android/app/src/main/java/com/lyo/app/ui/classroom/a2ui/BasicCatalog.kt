@@ -85,7 +85,7 @@ private fun A2uiRenderScope.TextRenderer() {
         "caption" -> MaterialTheme.typography.labelSmall
         else -> MaterialTheme.typography.bodyMedium
     }
-    Text(text = com.lyo.app.ui.classroom.catalog.readableClassroomMath(text), style = style, color = TextPrimary, modifier = leafMargin)
+    com.lyo.app.ui.classroom.catalog.ClassroomMathRichText(text = text, style = style, color = TextPrimary, modifier = leafMargin)
 }
 
 @Composable
