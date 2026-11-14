@@ -103,6 +103,15 @@ data class FollowRequest(
 
 // The clips backend serializes camelCase (Clip.to_dict); keep the snake_case
 // alternates so older payload shapes still decode.
+data class DiscoverClipFiltersResponse(
+    val subjects: List<DiscoverSubjectDto> = emptyList(),
+)
+
+data class DiscoverSubjectDto(
+    val name: String = "",
+    val count: Int = 0,
+)
+
 data class ClipDto(
     val id: Any? = null,
     val title: String? = null,

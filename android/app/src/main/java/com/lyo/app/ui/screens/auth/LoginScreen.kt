@@ -1,6 +1,7 @@
 package com.lyo.app.ui.screens.auth
 
 import android.util.Patterns
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,6 +46,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.lyo.app.R
+import com.lyo.app.BuildConfig
 import com.lyo.app.data.Session
 import com.lyo.app.ui.components.LyoBrandGradient
 import com.lyo.app.ui.navigation.Routes
@@ -62,7 +66,7 @@ fun LoginScreen(nav: NavHostController) {
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf(Session.takeLoginMessage()) }
+    var error by remember { mutableStateOf<String?>(Session.takeLoginMessage()) }
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -105,12 +109,19 @@ fun LoginScreen(nav: NavHostController) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 32.dp),
     ) {
-        Text(
-            text = "LYO",
-            fontSize = 52.sp,
-            fontWeight = FontWeight.Black,
-            color = LyoPurple,
+        Image(
+            painter = painterResource(R.drawable.lyo_logo),
+            contentDescription = "Lyo",
+            modifier = Modifier.size(120.dp),
         )
+        if (BuildConfig.DEBUG) {
+            Text(
+                text = "${BuildConfig.API_ENVIRONMENT} · ${BuildConfig.VERSION_NAME}",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextSecondary,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
         Text(
             text = "Welcome back",
             style = MaterialTheme.typography.headlineMedium,

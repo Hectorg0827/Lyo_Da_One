@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.navigation.NavHostController
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.ui.classroom.ClassroomScreen as A2UIClassroomScreen
+import com.lyo.app.ui.classroom.ClassroomLessonDuration
 import com.lyo.app.ui.components.LoadingBox
 
 /**
@@ -28,6 +29,7 @@ fun ClassroomScreen(
     courseId: String,
     topicOverride: String? = null,
     teachingMode: String = "solo",
+    durationMinutes: Int = ClassroomLessonDuration.default,
     reviewConceptId: String? = null,
 ) {
     var topic by remember(courseId, topicOverride) { mutableStateOf(topicOverride) }
@@ -56,6 +58,7 @@ fun ClassroomScreen(
         topic = topic ?: "AI Classroom",
         courseId = courseId,
         teachingMode = teachingMode,
+        initialDurationMinutes = durationMinutes,
         courseBacked = topicOverride == null,
         reviewConceptId = reviewConceptId,
     )

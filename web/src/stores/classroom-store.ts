@@ -2,6 +2,8 @@
 
 import { create } from 'zustand';
 import { SpeechPreparationCache, playSpeechResponse, speakBrowserFallback, boardTransitionDelay, splitSpeechForStreaming } from '@/lib/classroom-audio.mjs';
+import { getAccessToken, refreshRealtimeAccessToken } from '@/lib/api';
+import { classroomRejoinConnection, nextClassroomReconnectDelay } from '@/lib/classroom-websocket-recovery.mjs';
 import { playSound, type AmbientSound } from '@/lib/classroom-sounds';
 import {
   CLASSROOM_STALL_NOTICE_MS,
@@ -130,7 +132,7 @@ export type BoardElement = (
   | { id: string; kind: 'bullets'; items: string[] }
   | { id: string; kind: 'chart'; chartType: 'bar' | 'line'; labels: string[]; values: number[] }
   | { id: string; kind: 'explorable'; expression: string; params: { name: string; min: number; max: number; initial: number; step?: number }[]; xMin?: number; xMax?: number; prompt?: string }
-  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; wasCorrect?: boolean; feedback?: string; skipped?: boolean }
+  | { id: string; kind: 'quiz'; quiz: ClassroomComponent; answered?: string; answeredOptionId?: string; wasCorrect?: boolean; feedback?: string; skipped?: boolean }
   | { id: string; kind: 'transfer'; input: ClassroomComponent; response?: string; submitted?: boolean; skipped?: boolean }
   | { id: string; kind: 'summary'; title: string; content?: string; items: string[]; retrievalScheduled?: boolean }
   | { id: string; kind: 'source'; labels: string[] }
@@ -292,6 +294,10 @@ interface ClassroomStore {
 // ─── Internals ───────────────────────────────────────────────────────────────
 
 let ws: WebSocket | null = null;
+// Any explicit navigation/logout invalidates a scheduled rejoin, even if
+// the old socket has already closed and ws is null.
+let socketEpoch = 0;
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let turnQueue: DirectorTurn[] = [];
 let playing = false;
 let playTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1148,7 +1154,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
     connect: (connection: ClassroomConnection) => {
       get().disconnect();
-      const token = typeof window !== 'undefined' ? localStorage.getItem('lyo_token') : null;
+      const epoch = socketEpoch;
+      const token = getAccessToken();
       if (!token) {
         set({
           status: 'error',
@@ -1214,22 +1221,97 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       });
       startStallWatch();
 
-      const socket = new WebSocket(wsUrl({ ...connection, sessionId }, token));
-      ws = socket;
-      socket.onopen = () => { if (ws === socket) set({ status: 'live' }); };
-      socket.onmessage = (e) => { if (ws === socket) handleMessage(String(e.data)); };
-      socket.onerror = () => {
-        if (ws === socket) set({ status: 'error', error: 'Connection to the classroom failed.' });
-      };
-      socket.onclose = () => {
-        if (ws === socket) {
-          set((s) => ({ status: s.transcript.length > 0 ? 'ended' : s.status === 'error' ? 'error' : 'ended' }));
-          ws = null;
+      // A dropped WebSocket is not the same as a completed lesson.
+      // Rejoin the SAME server session without clearing the board, transcript,
+      // progress or learner's unfinished question. Never replay a prior answer:
+      // the backend has its own grading and action idempotency semantics.
+      let reconnectAttempts = 0;
+      let openedAt = 0;
+      const scheduleReconnect = () => {
+        if (socketEpoch !== epoch || get().status === 'ended') return;
+        stopStallWatch();
+        const delay = nextClassroomReconnectDelay(reconnectAttempts);
+        if (delay == null) {
+          set({
+            status: 'error',
+            error: 'The classroom connection was lost. Reopen this lesson to resume.',
+            waitingForScene: false,
+            stallPhase: 'none',
+          });
+          return;
         }
+        reconnectAttempts += 1;
+        set({
+          status: 'connecting',
+          error: 'Connection interrupted. Reconnecting to this lesson…',
+          waitingForScene: false,
+          stallPhase: 'none',
+        });
+        reconnectTimer = setTimeout(async () => {
+          reconnectTimer = null;
+          if (socketEpoch !== epoch) return;
+          // The usual HTTP 401 refresh cannot run during a WS handshake.
+          // A single refresh attempt also handles expired access tokens.
+          if (reconnectAttempts === 1) await refreshRealtimeAccessToken();
+          if (socketEpoch !== epoch) return;
+          const freshToken = getAccessToken();
+          if (!freshToken) {
+            set({status: 'error', error: 'Sign in again to resume this lesson.'});
+            return;
+          }
+          authToken = freshToken;
+          openSocket(freshToken);
+        }, delay);
       };
+
+      const openSocket = (accessToken: string) => {
+        if (socketEpoch !== epoch) return;
+        openedAt = 0;
+        let socket: WebSocket;
+        try {
+          socket = new WebSocket(wsUrl(classroomRejoinConnection(connection, sessionId), accessToken));
+        } catch {
+          scheduleReconnect();
+          return;
+        }
+        ws = socket;
+        socket.onopen = () => {
+          if (ws !== socket || socketEpoch !== epoch) return;
+          openedAt = Date.now();
+          startStallWatch();
+          set({status: 'live', error: null});
+        };
+        socket.onmessage = (event) => {
+          if (ws !== socket || socketEpoch !== epoch) return;
+          reconnectAttempts = 0;
+          handleMessage(String(event.data));
+        };
+        socket.onerror = () => {
+          // Errors may be transient; onclose is the only retry scheduler.
+          if (ws === socket && socketEpoch === epoch) {
+            set({status: 'connecting', error: 'Classroom connection interrupted.'});
+          }
+        };
+        socket.onclose = () => {
+          if (ws !== socket || socketEpoch !== epoch) return;
+          ws = null;
+          if (get().status === 'ended') {
+            stopStallWatch();
+            return;
+          }
+          // A socket that held for a while is a healthy new connection,
+          // not another rapid handshake failure in the same retry burst.
+          if (openedAt && Date.now() - openedAt >= 15_000) reconnectAttempts = 0;
+          scheduleReconnect();
+        };
+      };
+      openSocket(token);
     },
 
     disconnect: () => {
+      socketEpoch += 1;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = null;
       flushActivities();
       stopPlayer();
       stopStallWatch();
@@ -1271,7 +1353,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       set((state) => ({
         board: state.board.map((item) =>
           item.id === elementId && item.kind === 'quiz'
-            ? { ...item, answered: option.label }
+            ? { ...item, answered: option.label, answeredOptionId: option.id }
             : item),
         lyoState: 'thinking',
         waitingForScene: true,

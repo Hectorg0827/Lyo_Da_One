@@ -13,10 +13,14 @@ import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -27,9 +31,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -37,6 +41,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.VolumeOff
@@ -53,7 +59,6 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,16 +80,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
@@ -94,6 +102,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil.compose.AsyncImage
+import com.lyo.app.R
 import com.lyo.app.data.Session
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.ClipCommentDto
@@ -125,6 +134,25 @@ import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
 
+private enum class DiscoverFeed(val label: String, val sort: String) {
+    FOR_YOU("For You", "for_you"),
+    LATEST("Latest", "latest"),
+    POPULAR("Popular", "popular"),
+    SAVED("Saved", "saved"),
+}
+
+private suspend fun discoverPage(
+    page: Int,
+    feed: DiscoverFeed,
+    subject: String?,
+    query: String?,
+): List<ClipDto> =
+    if (feed == DiscoverFeed.SAVED) {
+        ApiClient.api.savedClips(page, 20, subject, query).clips.orEmpty()
+    } else {
+        ApiClient.api.discoverClips(page, 20, subject, feed.sort, query).clips.orEmpty()
+    }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClipsScreen(nav: NavHostController) {
@@ -153,6 +181,12 @@ fun ClipsScreen(nav: NavHostController) {
         clip.idStr in reportedIds || clip.ownerIdStr?.let { it in blockedOwnerIds } == true
     var pendingVideoUri by remember { mutableStateOf<Uri?>(null) }
     var refreshKey by remember { mutableIntStateOf(0) }
+    var feedMode by remember { mutableStateOf(DiscoverFeed.FOR_YOU) }
+    var selectedSubject by remember { mutableStateOf<String?>(null) }
+    var availableSubjects by remember { mutableStateOf<List<String>>(emptyList()) }
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchDraft by remember { mutableStateOf("") }
+    var submittedQuery by remember { mutableStateOf("") }
     var nextPage by remember { mutableIntStateOf(2) }
     var hasMore by remember { mutableStateOf(true) }
     var loadingMore by remember { mutableStateOf(false) }
@@ -200,15 +234,33 @@ fun ClipsScreen(nav: NavHostController) {
         if (uri != null) pendingVideoUri = uri
     }
 
-    LaunchedEffect(refreshKey) {
+    LaunchedEffect(Unit) {
+        runCatching { ApiClient.api.discoverClipFilters() }
+            .onSuccess { response ->
+                availableSubjects = response.subjects.map { it.name.trim() }
+                    .filter { it.isNotEmpty() }.distinct()
+            }
+    }
+
+    LaunchedEffect(refreshKey, feedMode, selectedSubject, submittedQuery) {
         val generation = ++feedGeneration
+        val requestedFeed = feedMode
+        val requestedSubject = selectedSubject
+        val requestedQuery = submittedQuery.trim().takeIf { it.isNotEmpty() }
         loading = true
+        loaded = false
+        clips = emptyList()
         loadingMore = false
         pendingAdvanceId = null
         loadError = null
 
-        val discovery = runCatching { ApiClient.api.discoverClips(1, 20).clips.orEmpty() }
-        val fallback = if (discovery.getOrNull().isNullOrEmpty()) {
+        val discovery = runCatching { discoverPage(1, requestedFeed, requestedSubject, requestedQuery) }
+        // An unfiltered For You feed can fall back to the public library if
+        // Discover has no clips; a filtered search must never show unrelated videos.
+        val fallback = if (requestedFeed == DiscoverFeed.FOR_YOU &&
+            requestedSubject == null && requestedQuery == null &&
+            discovery.getOrNull().isNullOrEmpty()
+        ) {
             runCatching { ApiClient.api.clips(1, 20).clips.orEmpty() }
         } else {
             null
@@ -311,6 +363,10 @@ fun ClipsScreen(nav: NavHostController) {
         }
     }
 
+    val subjectChoices = (
+        availableSubjects + clips.mapNotNull { it.subject?.trim() } + listOfNotNull(selectedSubject)
+    ).filter { it.isNotBlank() }.distinct()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -322,17 +378,19 @@ fun ClipsScreen(nav: NavHostController) {
                 message = loadError.orEmpty(),
                 onRetry = { refreshKey++ },
             )
-            loaded && clips.isEmpty() -> Column(modifier = Modifier.statusBarsPadding()) {
-                ClipsHeader()
-                EmptyState(
-                    title = "No clips yet",
-                    subtitle = "Educational clips will appear here",
-                )
-            }
+            loaded && clips.isEmpty() -> EmptyState(
+                title = if (feedMode == DiscoverFeed.SAVED) "No saved videos" else "No clips found",
+                subtitle = if (submittedQuery.isNotBlank() || selectedSubject != null)
+                    "No videos match this search or topic. Try another filter."
+                else if (feedMode == DiscoverFeed.SAVED)
+                    "Save a clip to find it here."
+                else
+                    "Educational clips will appear here",
+            )
             clips.isNotEmpty() -> {
                 val pagerState = rememberPagerState(pageCount = { clips.size })
                 val currentClipId = clips.getOrNull(pagerState.currentPage)?.idStr
-                val playbackAllowed = foreground && commentsClipId == null && pendingVideoUri == null && reportingClip == null
+                val playbackAllowed = foreground && !searchOpen && commentsClipId == null && pendingVideoUri == null && reportingClip == null
 
                 // Keep only the visible reel and its immediate neighbours in
                 // memory. Preparing the next clip ahead of the swipe removes
@@ -377,7 +435,7 @@ fun ClipsScreen(nav: NavHostController) {
                             val fetched = mutableListOf<ClipDto>()
                             var lastBatch = emptyList<ClipDto>()
                             for (number in DiscoverSafety.pagesToFetch(page, removedSinceLoad, 20)) {
-                                lastBatch = ApiClient.api.discoverClips(number, 20).clips.orEmpty()
+                                lastBatch = discoverPage(number, feedMode, selectedSubject, submittedQuery.trim().takeIf { it.isNotEmpty() })
                                 fetched += lastBatch
                             }
                             if (generation != feedGeneration) return@launch
@@ -496,13 +554,35 @@ fun ClipsScreen(nav: NavHostController) {
                     )
                 }
 
-                ClipsHeader(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .statusBarsPadding(),
-                )
             }
         }
+
+        ClipsHeader(
+            feed = feedMode,
+            selectedSubject = selectedSubject,
+            subjects = subjectChoices,
+            searchOpen = searchOpen,
+            searchDraft = searchDraft,
+            onFeedSelected = { mode ->
+                selectedSubject = null
+                feedMode = mode
+            },
+            onSubjectSelected = { subject ->
+                selectedSubject = subject
+                feedMode = DiscoverFeed.FOR_YOU
+            },
+            onToggleSearch = {
+                searchDraft = submittedQuery
+                searchOpen = !searchOpen
+            },
+            onSearchDraftChange = { searchDraft = it },
+            onSearchSubmit = {
+                submittedQuery = searchDraft.trim()
+                searchOpen = false
+            },
+            modifier = Modifier
+                .align(Alignment.TopCenter),
+        )
 
         val visibleError = interactionError ?: loadError?.takeIf { clips.isNotEmpty() }
         visibleError?.let { message ->
@@ -514,21 +594,19 @@ fun ClipsScreen(nav: NavHostController) {
                 },
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .statusBarsPadding()
-                    .padding(top = 64.dp, start = 16.dp, end = 16.dp),
+                    .padding(top = 132.dp, start = 16.dp, end = 16.dp),
             )
         }
 
-        FloatingActionButton(
-            onClick = { videoPicker.launch("video/*") },
-            containerColor = LyoPurple,
-            contentColor = Color.White,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .navigationBarsPadding()
-                .padding(end = 16.dp, bottom = 96.dp),
-        ) {
-            Icon(Icons.Filled.Add, contentDescription = "Create clip")
+        if (!searchOpen) {
+            CreateVideoPill(
+                onClick = { videoPicker.launch("video/*") },
+                // Keep creation on the left of the reel, outside the right-side
+                // Like/Comment/Share/Save rail even on narrow Android phones.
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(top = 78.dp, start = 12.dp),
+            )
         }
     }
 
@@ -910,19 +988,153 @@ private fun ClipCommentsSheet(
     }
 }
 
+/**
+ * TikTok-style Discover chrome: the real LYO brand mark and search control are
+ * anchored, while the server-backed feed and subject filters scroll between.
+ * A compact gradient leaves the video visible under the controls.
+ */
 @Composable
-private fun ClipsHeader(modifier: Modifier = Modifier) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+private fun ClipsHeader(
+    feed: DiscoverFeed,
+    selectedSubject: String?,
+    subjects: List<String>,
+    searchOpen: Boolean,
+    searchDraft: String,
+    onFeedSelected: (DiscoverFeed) -> Unit,
+    onSubjectSelected: (String) -> Unit,
+    onToggleSearch: () -> Unit,
+    onSearchDraftChange: (String) -> Unit,
+    onSearchSubmit: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xE6000000), Color(0x99000000), Color.Transparent),
+                ),
+            )
+            .padding(bottom = 14.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .padding(horizontal = 10.dp),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.lyo_discover_logo),
+                contentDescription = "LYO",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.size(44.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(horizontal = 2.dp),
+            ) {
+                items(DiscoverFeed.entries.toList()) { choice ->
+                    DiscoverFilterTab(
+                        label = choice.label,
+                        selected = selectedSubject == null && feed == choice,
+                        onClick = { onFeedSelected(choice) },
+                    )
+                }
+                items(subjects) { subject ->
+                    DiscoverFilterTab(
+                        label = subject,
+                        selected = selectedSubject == subject,
+                        onClick = { onSubjectSelected(subject) },
+                    )
+                }
+            }
+            Spacer(Modifier.width(4.dp))
+            IconButton(
+                onClick = onToggleSearch,
+                modifier = Modifier.size(44.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Search,
+                    contentDescription = "Search Discover videos",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp),
+                )
+            }
+        }
+
+        if (searchOpen) {
+            OutlinedTextField(
+                value = searchDraft,
+                onValueChange = onSearchDraftChange,
+                placeholder = { Text("Search videos or subjects…", color = Color.White.copy(alpha = 0.6f)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearchSubmit() }),
+                trailingIcon = {
+                    IconButton(onClick = onSearchSubmit) {
+                        Icon(Icons.Filled.Search, contentDescription = "Apply search", tint = Color.White)
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DiscoverFilterTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
     ) {
         Text(
-            "Discover",
-            style = MaterialTheme.typography.headlineMedium,
-            color = Color.White,
+            text = label,
+            color = Color.White.copy(alpha = if (selected) 1f else 0.65f),
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
         )
+        Spacer(Modifier.height(6.dp))
+        Box(
+            modifier = Modifier
+                .width(26.dp)
+                .height(3.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(
+                    if (selected) Brush.horizontalGradient(
+                        listOf(Color(0xFF5F7BFF), Color(0xFFAC67FF)),
+                    ) else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent)),
+                ),
+        )
+    }
+}
+
+@Composable
+private fun CreateVideoPill(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(50.dp))
+            .background(Brush.horizontalGradient(listOf(Color(0xFF2563EB), Color(0xFF9333EA))))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Icon(Icons.Filled.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+        Text("Create video", color = Color.White, fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.labelMedium)
     }
 }
 
@@ -1093,7 +1305,6 @@ private fun ClipPage(
                 color = Color.White,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .statusBarsPadding()
                     .padding(top = 68.dp)
                     .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(20.dp))
                     .clickable(onClick = onRetryView)
@@ -1171,17 +1382,17 @@ private fun ClipPage(
 
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .padding(end = 10.dp, bottom = 104.dp),
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onLike, enabled = !likePending) {
+                IconButton(onClick = onLike, enabled = !likePending, modifier = Modifier.size(44.dp)) {
                     if (likePending) {
                         CircularProgressIndicator(
                             color = Color.White,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(22.dp),
                             strokeWidth = 2.dp,
                         )
                     } else {
@@ -1189,44 +1400,44 @@ private fun ClipPage(
                             if (liked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                             contentDescription = if (liked) "Unlike" else "Like",
                             tint = if (liked) LyoPink else Color.White,
-                            modifier = Modifier.size(30.dp),
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                 }
-                Text(likeCount.toString(), style = MaterialTheme.typography.labelMedium, color = Color.White)
+                Text(likeCount.toString(), style = MaterialTheme.typography.labelSmall, color = Color.White)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onComments) {
+                IconButton(onClick = onComments, modifier = Modifier.size(44.dp)) {
                     Icon(
                         Icons.Outlined.ChatBubbleOutline,
                         contentDescription = "Comments",
                         tint = Color.White,
-                        modifier = Modifier.size(28.dp),
+                        modifier = Modifier.size(24.dp),
                     )
                 }
                 Text(
                     (clip.commentCount ?: 0).toString(),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                 )
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onShare) {
+                IconButton(onClick = onShare, modifier = Modifier.size(44.dp)) {
                     Icon(
                         Icons.Filled.Share,
                         contentDescription = "Share",
                         tint = Color.White,
-                        modifier = Modifier.size(26.dp),
+                        modifier = Modifier.size(23.dp),
                     )
                 }
-                Text("Share", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                Text("Share", style = MaterialTheme.typography.labelSmall, color = Color.White)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                IconButton(onClick = onSave, enabled = !savePending) {
+                IconButton(onClick = onSave, enabled = !savePending, modifier = Modifier.size(44.dp)) {
                     if (savePending) {
                         CircularProgressIndicator(
                             color = Color.White,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(22.dp),
                             strokeWidth = 2.dp,
                         )
                     } else {
@@ -1234,28 +1445,28 @@ private fun ClipPage(
                             if (saved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
                             contentDescription = if (saved) "Remove saved clip" else "Save",
                             tint = Color.White,
-                            modifier = Modifier.size(28.dp),
+                            modifier = Modifier.size(24.dp),
                         )
                     }
                 }
                 Text(
                     if (saved) "Saved" else "Save",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                 )
             }
             // Report (and Block, inside the sheet); not on the learner's own video.
             onReport?.let { report ->
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    IconButton(onClick = report) {
+                    IconButton(onClick = report, modifier = Modifier.size(44.dp)) {
                         Icon(
                             Icons.Outlined.Flag,
                             contentDescription = "Report video",
                             tint = Color.White,
-                            modifier = Modifier.size(26.dp),
+                            modifier = Modifier.size(23.dp),
                         )
                     }
-                    Text("Report", style = MaterialTheme.typography.labelMedium, color = Color.White)
+                    Text("Report", style = MaterialTheme.typography.labelSmall, color = Color.White)
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1263,12 +1474,12 @@ private fun ClipPage(
                     Icons.Outlined.Visibility,
                     contentDescription = "Views",
                     tint = Color.White,
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(23.dp),
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(2.dp))
                 Text(
                     (clip.viewCount ?: 0).toString(),
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = Color.White,
                 )
             }

@@ -40,11 +40,11 @@ fun BoardDocumentView(document: ClassroomBoardDocument) {
                         block.items.forEachIndexed { i, item ->
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text(if (block.kind == "steps") "${i + 1}." else "•", color = LyoVioletLight)
-                                Text(item, color = TextPrimary, modifier = Modifier.weight(1f))
+                                Text(readableClassroomMath(item), color = TextPrimary, modifier = Modifier.weight(1f))
                             }
                         }
                     }
-                    else -> Text(block.text, color = TextSecondary)
+                    else -> Text(readableClassroomMath(block.text), color = TextSecondary)
                 }
             }
         }

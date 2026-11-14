@@ -143,6 +143,12 @@ const contracts = [
       'engine.speak',
       'ChatStreamEvent.VoiceSegment',
       'pendingVoiceUtterances',
+      'voiceLatency.speechEnded()',
+      'voiceLatency.recognitionFinal()',
+      'voiceLatency.firstText()',
+      'voiceLatency.firstVoicePayload()',
+      'voiceLatency.firstAudio()',
+      'LYO_VOICE_LATENCY',
     ],
     forbidden: ['/voice/chat', '/realtime/voice'],
   },
@@ -163,6 +169,16 @@ const contracts = [
     ],
   },
 ];
+
+// The response nudge is a visual status, not synthesized audio. Audible
+// filler competes with actual voice segments and distorts first-audio QA.
+const androidVoice = 'android/app/src/main/java/com/lyo/app/ui/screens/chat/ChatScreen.kt';
+if (fs.existsSync(androidVoice)) {
+  const source = fs.readFileSync(androidVoice, 'utf8');
+  if (source.includes('"voice-thinking-nudge"')) {
+    failures.push('Android voice: do not speak a canned thinking nudge before the actual response');
+  }
+}
 
 for (const contract of contracts) {
   if (!fs.existsSync(contract.path)) {

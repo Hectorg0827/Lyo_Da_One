@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.data.api.CourseDto
-import com.lyo.app.data.api.GenerateCourseRequest
 import com.lyo.app.ui.components.CardGradients
 import com.lyo.app.ui.components.EmptyState
 import com.lyo.app.ui.components.GlassCard
@@ -75,14 +74,14 @@ fun CoursesScreen(nav: NavHostController) {
     var loading by remember { mutableStateOf(true) }
     var topic by remember { mutableStateOf("") }
     var difficulty by remember { mutableStateOf("beginner") }
-    var generating by remember { mutableStateOf(false) }
-    var status by remember { mutableStateOf<String?>(null) }
+    var loadError by remember { mutableStateOf<String?>(null) }
     var subjectFilter by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
         runCatching { ApiClient.api.courses(0, 30) }
             .onSuccess { courses = it }
+            .onFailure { loadError = "Could not load your courses. Reopen this screen to try again." }
         loading = false
     }
 
@@ -94,20 +93,12 @@ fun CoursesScreen(nav: NavHostController) {
         else courses.filter { it.subject == subjectFilter }
 
     fun generate() {
-        if (generating || topic.isBlank()) return
-        generating = true
-        status = null
-        scope.launch {
-            runCatching {
-                ApiClient.api.generateCourse(GenerateCourseRequest(topic.trim(), difficulty))
-            }.onSuccess {
-                status = "Course generation started… check back soon!"
-                topic = ""
-            }.onFailure {
-                status = "Could not start generation. Please try again."
-            }
-            generating = false
-        }
+        if (topic.isBlank()) return
+        nav.currentBackStackEntry?.savedStateHandle?.set(
+            "lyo_chat_seed_prompt",
+            "Create a ${difficulty} course on ${topic.trim()}",
+        )
+        nav.navigate(Routes.CHAT) { launchSingleTop = true }
     }
 
     Scaffold(
@@ -142,9 +133,14 @@ fun CoursesScreen(nav: NavHostController) {
             GlassCard(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
-                        "✨ Generate with AI",
+                        "Build a course with Lyo",
                         style = MaterialTheme.typography.titleLarge,
                         color = TextPrimary,
+                    )
+                    Text(
+                        "Choose a topic and Lyo will build the course with you in chat.",
+                        color = TextSecondary,
+                        style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(
@@ -181,27 +177,19 @@ fun CoursesScreen(nav: NavHostController) {
                             .height(46.dp)
                             .clip(RoundedCornerShape(14.dp))
                             .background(LyoBrandGradient)
-                            .clickable(enabled = !generating) { generate() },
+                            .clickable(enabled = topic.isNotBlank()) { generate() },
                     ) {
-                        if (generating) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        } else {
-                            Text(
-                                "Generate",
-                                color = Color.White,
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                        }
+                        Text(
+                            "Continue with Lyo",
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
                     }
-                    status?.let {
+                    loadError?.let {
                         Text(
                             it,
                             style = MaterialTheme.typography.bodySmall,
-                            color = LyoGreen,
+                            color = LyoRed,
                             modifier = Modifier.padding(top = 10.dp),
                         )
                     }

@@ -11,8 +11,9 @@ import * as visuals from './teaching-activity.mjs';
 import * as boardPresentation from './board-presentation.mjs';
 import * as commonsImage from './commons-image.mjs';
 import * as classroomCast from './classroom-cast.mjs';
+import * as recovery from './classroom-websocket-recovery.mjs';
 
-function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' } } = {}) {
+function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId: 'lesson' }, onRefreshToken = null } = {}) {
   const sockets = [], timers = [], canceled = [], intervals = [];
   let clockMs = Date.now();
   let state;
@@ -25,10 +26,11 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     static OPEN = 1;
     readyState = 1;
     sent = [];
-    constructor() { sockets.push(this); }
+    constructor(url) { this.url = url; sockets.push(this); }
     send(message) { this.sent.push(JSON.parse(message)); }
     close() {}
     receive(message) { this.onmessage({ data: JSON.stringify(message) }); }
+    drop(code = 1006) { this.readyState = 3; this.onclose?.({ code }); }
   }
   const deps = {
     zustand: { create }, '@/lib/classroom-audio.mjs': audio,
@@ -40,6 +42,11 @@ function classroom({ storage = {}, connection = { topic: 'Fractions', sessionId:
     // would hide the day one does.
     '@/lib/commons-image.mjs': commonsImage,
     '@/lib/classroom-cast.mjs': classroomCast,
+    '@/lib/classroom-websocket-recovery.mjs': recovery,
+    '@/lib/api': {
+      getAccessToken: () => localStorage.getItem('lyo_token'),
+      refreshRealtimeAccessToken: async () => onRefreshToken ? onRefreshToken(localStorage) : null,
+    },
   };
   // A real key/value store, not a stub that answers every key with a token:
   // the classroom now reads the session it last started out of the same
@@ -449,5 +456,70 @@ test('durably completed guided scenes stop being offered back without a director
   assert.equal(saved.finished, true);
   assert.equal(canResumeClassroom(saved), false);
   assert.equal(store.getState().resumable, null);
+  store.getState().disconnect();
+});
+
+
+test('unexpected disconnect reconnects the exact same lesson without clearing its board', async () => {
+  const { store, sockets, timers } = classroom();
+  const old = sockets[0];
+  old.receive(component('TeacherMessage', { text: JSON.stringify([{ type: 'board', content: 'The fraction 2/3 is two parts out of three.' }]) }));
+  const priorBoard = taught(store);
+  assert.ok(priorBoard.length > 0);
+
+  old.drop(1006);
+  assert.equal(store.getState().status, 'connecting');
+  assert.equal(taught(store).length, priorBoard.length);
+  const retry = timers.find(t => t.delay === 400 && !t.canceled);
+  assert.ok(retry, 'first reconnect should be scheduled, not mark lesson ended');
+  await retry.fn();
+
+  assert.equal(sockets.length, 2);
+  assert.equal(new URL(sockets[1].url).searchParams.get('session_id'), 'lesson');
+  assert.equal(sockets[1].sent.length, 0, 'never replay previously submitted answers');
+  assert.equal(taught(store).length, priorBoard.length);
+  sockets[1].onopen();
+  assert.equal(store.getState().status, 'live');
+  store.getState().disconnect();
+});
+
+test('leaving a lesson cancels pending reconnect and rejects stale timer callbacks', async () => {
+  const { store, sockets, timers } = classroom();
+  sockets[0].drop();
+  const retry = timers.find(t => t.delay === 400 && !t.canceled);
+  assert.ok(retry);
+  store.getState().disconnect();
+  assert.ok(retry.canceled);
+  await retry.fn(); // even a timer racing cancellation must not reopen
+  assert.equal(sockets.length, 1);
+  assert.equal(store.getState().status, 'idle');
+});
+
+test('first reconnect can refresh the expired WebSocket access token', async () => {
+  const { store, sockets, timers } = classroom({
+    onRefreshToken: async (storage) => {
+      storage.setItem('lyo_token', 'renewed-staging-token');
+      return 'renewed-staging-token';
+    },
+  });
+  sockets[0].drop();
+  await timers.find(t => t.delay === 400 && !t.canceled).fn();
+  assert.equal(new URL(sockets[1].url).searchParams.get('token'), 'renewed-staging-token');
+  assert.equal(new URL(sockets[1].url).searchParams.get('session_id'), 'lesson');
+  store.getState().disconnect();
+});
+
+test('repeated handshake failures exhaust bounded retries instead of looping forever', async () => {
+  const { store, sockets, timers } = classroom();
+  for (const delay of [400, 1000, 2200, 4400]) {
+    sockets.at(-1).drop();
+    const retry = timers.find(t => t.delay === delay && !t.canceled);
+    assert.ok(retry, 'expected bounded retry ' + delay);
+    await retry.fn();
+  }
+  sockets.at(-1).drop();
+  assert.equal(store.getState().status, 'error');
+  assert.match(store.getState().error, /connection was lost/i);
+  assert.equal(sockets.length, 5);
   store.getState().disconnect();
 });

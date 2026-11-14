@@ -9,10 +9,11 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.WebSocket
@@ -40,6 +41,8 @@ import kotlin.math.min
  * socket, matching the web contract exactly (see
  * web/src/lib/classroom-contract.mjs `buildClassroomWsUrl`).
  */
+enum class ClassroomConnectionState { IDLE, CONNECTING, CONNECTED, RECONNECTING, AUTH_REQUIRED }
+
 object ClassroomSocketClient {
 
     private const val RECONNECT_BASE_MS = 2_000L
@@ -58,6 +61,8 @@ object ClassroomSocketClient {
 
     private val _events = MutableSharedFlow<ClassroomServerEvent>(extraBufferCapacity = 64)
     val events: SharedFlow<ClassroomServerEvent> = _events
+    private val _connectionState = MutableStateFlow(ClassroomConnectionState.IDLE)
+    val connectionState: StateFlow<ClassroomConnectionState> = _connectionState
 
     private data class ConnectionParams(
         val sessionId: String,
@@ -101,6 +106,7 @@ object ClassroomSocketClient {
         shouldRun = true
         reconnectAttempt = 0
         teardownSocketOnly()
+        _connectionState.value = ClassroomConnectionState.CONNECTING
         open()
     }
 
@@ -108,6 +114,7 @@ object ClassroomSocketClient {
         shouldRun = false
         pendingConnection = null
         teardown()
+        _connectionState.value = ClassroomConnectionState.IDLE
     }
 
     fun send(envelope: UserActionEnvelope): Boolean =
@@ -119,6 +126,7 @@ object ClassroomSocketClient {
         val params = pendingConnection ?: return
         val token = TokenManager.accessToken
         if (token == null) {
+            _connectionState.value = ClassroomConnectionState.AUTH_REQUIRED
             _events.tryEmit(
                 ClassroomServerEvent.ErrorEvent(
                     "Sign in to start a secure AI classroom.",
@@ -128,12 +136,9 @@ object ClassroomSocketClient {
             return
         }
 
-        val wsBase = BuildConfig.API_BASE_URL
-            .replaceFirst("https://", "wss://")
-            .replaceFirst("http://", "ws://")
-            .trimEnd('/')
-
-        val urlBuilder = "$wsBase/api/v1/classroom/ws/connect".toHttpUrl().newBuilder()
+        // OkHttp upgrades this HTTP request to a WebSocket itself. HttpUrl
+        // rejects ws/wss schemes before a network request can be made.
+        val urlBuilder = classroomConnectionUrl(BuildConfig.API_BASE_URL).newBuilder()
             .addQueryParameter("session_id", params.sessionId)
             .addQueryParameter("client_contract_version", "2")
             .addQueryParameter("topic", params.topic)
@@ -158,37 +163,57 @@ object ClassroomSocketClient {
             request,
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
-                    reconnectAttempt = 0
+                    synchronized(this@ClassroomSocketClient) {
+                        if (socket !== webSocket || !shouldRun) return
+                        reconnectAttempt = 0
+                        _connectionState.value = ClassroomConnectionState.CONNECTED
+                    }
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
+                    if (socket !== webSocket || !shouldRun) return
                     val event = parseServerEvent(text) ?: return
                     _events.tryEmit(event)
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: okhttp3.Response?) {
-                    onSocketClosed()
+                    onSocketClosed(webSocket)
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                    onSocketClosed()
+                    onSocketClosed(webSocket)
                 }
             },
         )
     }
 
     @Synchronized
-    private fun onSocketClosed() {
+    private fun onSocketClosed(closedSocket: WebSocket) {
+        // A former session's close callback may arrive after a new lesson
+        // starts. It must never erase the replacement socket or reconnect
+        // the wrong learner seat.
+        if (socket !== closedSocket) return
         socket = null
         if (shouldRun && reconnectJob == null) {
-            val delayMs = min(RECONNECT_BASE_MS shl reconnectAttempt, RECONNECT_MAX_MS)
-            reconnectAttempt += 1
+            _connectionState.value = ClassroomConnectionState.RECONNECTING
+            val delayMs = min(RECONNECT_BASE_MS shl reconnectAttempt.coerceAtMost(5), RECONNECT_MAX_MS)
+            reconnectAttempt = (reconnectAttempt + 1).coerceAtMost(6)
             reconnectJob = scope.launch {
                 delay(delayMs)
                 synchronized(this@ClassroomSocketClient) { reconnectJob = null }
                 open()
             }
         }
+    }
+
+    /** Reopen the same server seat, never automatically resubmit an answer. */
+    @Synchronized
+    fun reconnectNow() {
+        if (!shouldRun || socket != null) return
+        reconnectJob?.cancel()
+        reconnectJob = null
+        _connectionState.value = ClassroomConnectionState.RECONNECTING
+        open()
     }
 
     /** Closes the live socket without touching reconnect state — used when
