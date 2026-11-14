@@ -13,11 +13,15 @@ the test app **replaces** the Play Store LYO app on that phone while installed.
 
 ## Part A — Install the test app (5 minutes)
 
-1. On your computer open
-   `https://github.com/Hectorg0827/Lyo_Da_One/actions/workflows/android-staging-validation.yml`
-2. Click the newest run with a green tick on the branch `ccr-3bc562fc-kn237t`.
-3. Scroll to **Artifacts** and download **lyo-android-STAGING-only-apk**.
-   Unzip it. Inside is a file ending in `.apk`.
+1. Use the **QA-patched staging APK built from commit `a7fb722ed02cad429de3ef69c7e922dbb323e372`**:
+   [verified Android Actions run 43549058224](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43549058224).
+   That run passed Android staging compilation and unit tests, Web tests and **4/4 emulator UI checks**.
+   Do **not** substitute the older release-candidate APK if you are measuring this specific QA patch.
+2. Under **Artifacts**, download
+   [lyo-android-STAGING-only-apk, artifact 14095174044](https://github.com/Hectorg0827/Lyo_Da_One/actions/runs/43549058224/artifacts/14095174044).
+   GitHub login/repository access may be required. GitHub artifacts expire; if it is no longer available,
+   request a new **staging** build from the same reviewed QA commit and verify its hash.
+3. Unzip the downloaded artifact. Inside is an `.apk`.
 4. Send that `.apk` file to your phone (email it to yourself, Google Drive, or
    a USB cable) and tap it on the phone. Android will ask to allow installing
    from that app — allow it, then **Install**.
@@ -39,7 +43,11 @@ Use normal home Wi-Fi, phone volume at a normal level, in a quiet room.
 
    `Test build timing · last 1.2 s · pause 1.5 s · p50 1.1 s · p95 1.9 s · 12 of 20 turns`
 
-4. Keep going until it says **20 of 20 turns**. Take a screenshot.
+4. Keep going until it says **20 of 20 turns**. Take a screenshot with the displayed
+   p50, p95, speed-only PASS/FAIL and turn count. This is **submit-to-first-audio**,
+   not an end-to-end measure of perceived pause; note the separate **pause** field.
+   Start a new Live Voice session for each new 20-turn trial: samples reset on exit/re-entry.
+   If speech is missing, note each affected turn separately. Never count silence as a successful sample.
 
 **What the numbers mean**
 
@@ -60,8 +68,10 @@ Tick each line. Write a short note for anything that looks or feels wrong.
 
 **Voice behaviour**
 
-- [ ] Interrupt Lyo 5 times while it is speaking (tap **Interrupt**, then ask
-      something else). The old answer never comes back.
+- [ ] Interrupt Lyo 5 times while it is speaking (use the available
+      interruption control or speak, depending on the build). The old answer never comes back.
+- [ ] Interrupt or redirect Lyo 5 times while it is **thinking/streaming**.
+      No old response arrives later and no duplicate assistant turn appears.
 - [ ] Pause for two seconds in the middle of a sentence. Lyo waits for you.
 - [ ] No beeps, no filler speech, no answer repeated twice.
 - [ ] Turn on airplane mode during an answer, then turn it off. The app shows
@@ -94,13 +104,17 @@ Write these down (a note on your phone is fine) and send them back:
 
 | Item | Your result |
 | --- | --- |
+| Tested app commit and GitHub artifact | a7fb722e / 14095174044 |
 | Phone model and Android version | |
 | Wi-Fi or mobile data | |
-| p50 | |
-| p95 | |
+| p50, submit-to-first-audio (20 audible turns) | |
+| p95, submit-to-first-audio (20 audible turns) | |
+| End-of-speech pause, if shown | |
 | Answers never spoken (count) | |
+| Playback interruptions (5) | PASS / FAIL |
+| Streaming interruptions (5) | PASS / FAIL |
 | Part C lines that failed (if any) | |
-| Your decision | PASS / FAIL |
+| Your physical-device decision | PASS / FAIL |
 
 When finished, uninstall the test app and reinstall LYO from the Play Store
 if you want the normal app back on that phone.
