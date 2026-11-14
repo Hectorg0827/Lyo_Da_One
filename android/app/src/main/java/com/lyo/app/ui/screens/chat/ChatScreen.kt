@@ -523,6 +523,10 @@ fun ChatScreen(nav: NavHostController, chatState: ChatSessionViewModel) {
             } else if (lockedVoice != null && engine?.voice?.name != lockedVoice.name) {
                 engine?.setVoice(lockedVoice)
             }
+            // Some TTS engines reset prosody after a locale/voice update.
+            // Reapply the calm profile once per turn, before queueing any audio.
+            engine?.setSpeechRate(0.95f)
+            engine?.setPitch(1.0f)
         }
         val clientMessageId = UUID.randomUUID().toString()
         if (voiceConversation) voiceLatency.submitted()
