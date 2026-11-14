@@ -190,6 +190,8 @@ test('tap during delayed synthesis rejects old audio, stream events and recogniz
   await flush(() => h.requests[1].resolve(new Blob()));
   assert.equal(h.audios.length, 1);
   assert.equal(h.utterances.length, 0, 'cancellation cannot trigger device fallback');
+  assert.equal(h.telemetry.filter((event) => event.event === 'tts_fallback_transition').length, 0,
+    'interruption must not be misreported as a voice switch');
   assert.equal(h.submissions[1].options.voiceInterruptedPreviousTurn, true);
 });
 
@@ -217,6 +219,13 @@ test('failed audio speaks only its remainder and proceeds to the next segment', 
     h.audios[0].onerror();
   });
   assert.equal(h.utterances[0].text, 'three four.');
+  const transition = h.telemetry.find((event) => event.event === 'tts_fallback_transition');
+  assert.deepEqual(transition?.metrics, {
+    from_transport: 'server_tts',
+    to_transport: 'device_tts',
+    playback_progress: 50,
+    failure_type: 'Error',
+  }, 'a real playback failure identifies the switch without transcript content');
   await flush(() => h.utterances[0].onend());
   assert.equal(h.audios.length, 2);
   await h.ready();
