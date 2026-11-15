@@ -3,7 +3,10 @@ package com.lyo.app.ui.components
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
@@ -35,6 +38,7 @@ sealed class MarkdownBlock {
     data class NumberedItem(val number: Int, val text: String) : MarkdownBlock()
     data class CodeBlock(val language: String?, val code: String) : MarkdownBlock()
     data class Blockquote(val text: String) : MarkdownBlock()
+    data class Table(val headers: List<String>, val rows: List<List<String>>) : MarkdownBlock()
 }
 
 /**
@@ -42,15 +46,21 @@ sealed class MarkdownBlock {
  * subset chat lessons actually use: headings, paragraphs, bullet/numbered
  * lists, fenced code blocks, and blockquotes.
  *
- * Deliberately does not attempt GFM tables or LaTeX math — web renders both
- * via browser-only libraries (remark-gfm, KaTeX), and iOS doesn't render
- * real LaTeX either (UnifiedBlockRenderer.swift's dataViz "math" case is a
- * plain-text fallback). Matching that same, already-shipped scope here
- * rather than reaching for a WebView-based renderer that has not been
- * verified on a real device (see WebViewBlock.kt's own disclosure).
+ * Supports simple GFM pipe tables as structured, scrollable native cells.
+ * This is not a general LaTeX renderer: mathematical notation still uses
+ * the separate Classroom math adapter until device rendering is verified.
  */
 object MarkdownParser {
     private val numberedItem = Regex("""^(\d+)\.\s+(.*)$""")
+    private val tableDividerCell = Regex("""^:?-{3,}:?$""")
+
+    private fun cells(line: String): List<String> =
+        line.trim().trim('|').split('|').map { it.trim() }
+
+    private fun isTableDivider(line: String): Boolean {
+        val parts = cells(line)
+        return parts.isNotEmpty() && parts.all { tableDividerCell.matches(it) }
+    }
 
     fun parseBlocks(markdown: String): List<MarkdownBlock> {
         val blocks = mutableListOf<MarkdownBlock>()
@@ -84,6 +94,21 @@ object MarkdownParser {
                     }
                     i++ // skip the closing fence (or end of input if unterminated)
                     blocks.add(MarkdownBlock.CodeBlock(language, code.toString()))
+                }
+                trimmed.contains('|') && i + 1 < lines.size &&
+                    isTableDivider(lines[i + 1]) &&
+                    cells(trimmed).size == cells(lines[i + 1]).size -> {
+                    flushParagraph()
+                    val headers = cells(trimmed)
+                    val rows = mutableListOf<List<String>>()
+                    i += 2 // header and delimiter
+                    while (i < lines.size && lines[i].isNotBlank() && lines[i].contains('|')) {
+                        val row = cells(lines[i])
+                        if (row.size != headers.size) break
+                        rows.add(row)
+                        i++
+                    }
+                    blocks.add(MarkdownBlock.Table(headers, rows))
                 }
                 trimmed.startsWith("#") -> {
                     flushParagraph()
@@ -223,6 +248,38 @@ private fun MarkdownBlockView(block: MarkdownBlock, color: Color) {
                 color = color.copy(alpha = 0.8f),
                 fontStyle = FontStyle.Italic,
             )
+        }
+
+        is MarkdownBlock.Table -> Column(
+            modifier = Modifier.fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .background(color.copy(alpha = 0.06f), RoundedCornerShape(10.dp))
+                .padding(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Row {
+                block.headers.forEach { header ->
+                    Text(
+                        text = inlineAnnotatedString(header, color),
+                        modifier = Modifier.width(136.dp).padding(6.dp),
+                        color = color,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            block.rows.forEach { row ->
+                Row {
+                    row.forEach { cell ->
+                        Text(
+                            text = inlineAnnotatedString(cell, color),
+                            modifier = Modifier.width(136.dp).padding(6.dp),
+                            color = color,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
         }
 
         is MarkdownBlock.CodeBlock -> Column(
