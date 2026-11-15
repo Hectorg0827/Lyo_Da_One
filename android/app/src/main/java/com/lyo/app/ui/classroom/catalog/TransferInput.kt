@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.google.gson.JsonPrimitive
 import com.lyo.app.ui.classroom.a2ui.A2uiRenderScope
+import com.lyo.app.ui.components.MarkdownText
 import com.lyo.app.ui.theme.LyoPurple
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
@@ -46,7 +47,7 @@ fun A2uiRenderScope.TransferInputRenderer() {
 
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
         Text("YOUR TURN", color = com.lyo.app.ui.theme.LyoVioletLight, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-        Text(text = question, color = TextPrimary)
+        MarkdownText(markdown = question, color = TextPrimary)
         if (submitted) {
             Text(
                 text = text,
