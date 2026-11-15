@@ -35,8 +35,23 @@ internal data class ClassroomWarmupPrompt(
     val explanation: String,
 )
 
-internal fun warmupFor(topic: String): ClassroomWarmupPrompt {
+internal fun warmupFor(topic: String, spanish: Boolean = false): ClassroomWarmupPrompt {
     val normalized = topic.lowercase(Locale.ROOT)
+    if (spanish) return when {
+        listOf("historia", "history", "civilización", "civilization").any { it in normalized } ->
+            ClassroomWarmupPrompt(
+                question = "¿Qué te ayuda a comprobar una afirmación histórica?",
+                choices = listOf("Quién creó la fuente y cuándo", "Qué tan emocionante es la historia"),
+                correctIndex = 0,
+                explanation = "El origen de una fuente permite evaluar su perspectiva y confiabilidad.",
+            )
+        else -> ClassroomWarmupPrompt(
+            question = "¿Cómo puedes comprobar si entendiste una idea nueva?",
+            choices = listOf("Probar un ejemplo y explicar por qué", "Solo releer la misma definición"),
+            correctIndex = 0,
+            explanation = "Aplicar y explicar una idea ayuda a comprobar lo aprendido.",
+        )
+    }
     return when {
         listOf("science", "biology", "experiment", "plants").any { it in normalized } ->
             ClassroomWarmupPrompt(
@@ -75,9 +90,10 @@ fun ClassroomWarmup(
     onInteraction: () -> Unit = {},
     liveLessonReady: Boolean = false,
     onEnterLive: () -> Unit = {},
+    spanish: Boolean = isSpanishMission(topic, Locale.getDefault().toLanguageTag()),
 ) {
-    val prompt = remember(topic) { warmupFor(topic) }
-    var selected by remember(topic) { mutableIntStateOf(-1) }
+    val prompt = remember(topic, spanish) { warmupFor(topic, spanish) }
+    var selected by remember(topic, spanish) { mutableIntStateOf(-1) }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -87,10 +103,14 @@ fun ClassroomWarmup(
             .padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("QUICK WARM-UP · NOT GRADED", color = LyoVioletLight,
-            style = MaterialTheme.typography.labelSmall)
-        Text("While your teacher gets ready…", color = TextSecondary,
-            style = MaterialTheme.typography.bodySmall)
+        Text(
+            if (spanish) "RETO RÁPIDO · SIN CALIFICACIÓN" else "QUICK WARM-UP · NOT GRADED",
+            color = LyoVioletLight, style = MaterialTheme.typography.labelSmall,
+        )
+        Text(
+            if (spanish) "Mientras tu profesor se prepara…" else "While your teacher gets ready…",
+            color = TextSecondary, style = MaterialTheme.typography.bodySmall,
+        )
         Text(prompt.question, color = TextPrimary,
             style = MaterialTheme.typography.titleMedium)
         prompt.choices.forEachIndexed { index, answer ->
@@ -106,19 +126,25 @@ fun ClassroomWarmup(
         }
         if (selected >= 0) {
             Text(
-                text = if (selected == prompt.correctIndex)
-                    "Good reasoning. ${prompt.explanation}"
-                else "Try a different approach. ${prompt.explanation}",
+                text = if (selected == prompt.correctIndex) {
+                    if (spanish) "¡Buen razonamiento! ${prompt.explanation}"
+                    else "Good reasoning. ${prompt.explanation}"
+                } else {
+                    if (spanish) "Prueba de otra manera. ${prompt.explanation}"
+                    else "Try a different approach. ${prompt.explanation}"
+                },
                 color = TextPrimary,
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
         if (liveLessonReady) {
             Button(onClick = onEnterLive, modifier = Modifier.fillMaxWidth()) {
-                Text("Enter live lesson")
+                Text(if (spanish) "Entrar a la clase" else "Enter live lesson")
             }
         } else {
-            Text("Your live lesson is preparing.", color = TextSecondary,
+            Text(
+                if (spanish) "Tu clase se está preparando." else "Your live lesson is preparing.",
+                color = TextSecondary,
                 style = MaterialTheme.typography.labelSmall)
         }
     }
