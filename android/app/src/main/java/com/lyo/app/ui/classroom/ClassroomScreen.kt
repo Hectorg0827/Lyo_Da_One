@@ -123,8 +123,22 @@ fun ClassroomScreen(
     // taking away the control mid-gesture. Unengaged warm-ups never block it.
     var missionEngaged by remember(engine) { mutableStateOf(false) }
     var missionEntered by remember(engine) { mutableStateOf(false) }
-    val missionVisible = (engine.status == "connecting" || engine.status == "live") &&
-        !missionEntered && (!engine.hasBoardContent || missionEngaged)
+    var pausedForMission by remember(engine) { mutableStateOf(false) }
+    val missionVisible = missionShouldBeVisible(
+        engine.status, engine.hasBoardContent, missionEngaged, missionEntered,
+    )
+
+    LaunchedEffect(engine, engine.hasBoardContent, missionEngaged, missionEntered) {
+        if (missionNeedsNarrationHold(engine.hasBoardContent, missionEngaged, missionEntered)) {
+            if (!engine.isPaused) {
+                engine.togglePause()
+                pausedForMission = true
+            }
+        } else if (missionEntered && pausedForMission) {
+            if (engine.isPaused) engine.togglePause()
+            pausedForMission = false
+        }
+    }
 
     LaunchedEffect(engine, engine.isAwaitingStep) {
         preparingStepUi = false
