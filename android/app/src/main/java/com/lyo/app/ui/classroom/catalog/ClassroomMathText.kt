@@ -4,8 +4,7 @@ package com.lyo.app.ui.classroom.catalog
  * Only delimited math is converted; currency and ordinary prose are preserved.
  * This is a readable fallback, not a full TeX typesetter.
  */
-internal fun readableClassroomMath(text: String): String {
-    private val mathOperators = linkedMapOf(
+private val mathOperators = linkedMapOf(
         "longrightarrow" to "⟶", "rightarrow" to "→", "leftarrow" to "←",
         "Rightarrow" to "⇒", "Leftarrow" to "⇐", "implies" to "⇒",
         "leftrightarrow" to "↔", "to" to "→",
@@ -16,8 +15,9 @@ internal fun readableClassroomMath(text: String): String {
         "alpha" to "α", "beta" to "β", "gamma" to "γ",
         "delta" to "δ", "theta" to "θ", "lambda" to "λ",
         "mu" to "μ", "pi" to "π", "sigma" to "σ", "omega" to "ω",
-    )
+)
 
+internal fun readableClassroomMath(text: String): String {
     val math = Regex("""\$\$([\s\S]+?)\$\$|\$([^$\n]+)\$|\\\(([\s\S]+?)\\\)|\\\[([\s\S]+?)\\\]""")
     val rendered = math.replace(text) { match ->
         var expression = match.groupValues.drop(1).first { it.isNotEmpty() }
