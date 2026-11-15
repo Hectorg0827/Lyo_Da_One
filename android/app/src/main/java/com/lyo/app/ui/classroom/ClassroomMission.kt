@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -26,7 +27,6 @@ import com.lyo.app.ui.theme.LyoVioletLight
 import com.lyo.app.ui.theme.Surface
 import com.lyo.app.ui.theme.TextPrimary
 import com.lyo.app.ui.theme.TextSecondary
-import java.util.Locale
 import kotlin.math.roundToInt
 
 /**
@@ -35,11 +35,19 @@ import kotlin.math.roundToInt
  * learner-record mutation. The real lesson replaces this automatically.
  */
 @Composable
-internal fun ClassroomMission(topic: String, modifier: Modifier = Modifier) {
+internal fun ClassroomMission(
+    topic: String,
+    modifier: Modifier = Modifier,
+    onInteraction: () -> Unit = {},
+    liveLessonReady: Boolean = false,
+    onEnterLive: () -> Unit = {},
+) {
     when (starterMissionFor(topic)) {
-        StarterMissionKind.FAIR_TEST -> FairTestMission(topic, modifier)
-        StarterMissionKind.FRACTIONS -> FractionBarMission(topic, modifier)
-        StarterMissionKind.GENERAL -> ClassroomWarmup(topic, modifier)
+        StarterMissionKind.FAIR_TEST -> FairTestMission(topic, modifier, onInteraction, liveLessonReady, onEnterLive)
+        StarterMissionKind.FRACTIONS -> FractionBarMission(topic, modifier, onInteraction, liveLessonReady, onEnterLive)
+        StarterMissionKind.GENERAL -> ClassroomWarmup(
+            topic, modifier, onInteraction, liveLessonReady, onEnterLive,
+        )
     }
 }
 
@@ -48,6 +56,8 @@ private fun MissionFrame(
     title: String,
     instruction: String,
     modifier: Modifier,
+    liveLessonReady: Boolean,
+    onEnterLive: () -> Unit,
     content: @Composable () -> Unit,
 ) {
     Column(
@@ -65,13 +75,28 @@ private fun MissionFrame(
         Text(title, color = TextPrimary, style = MaterialTheme.typography.titleMedium)
         Text(instruction, color = TextSecondary, style = MaterialTheme.typography.bodyMedium)
         content()
-        Text("Practice only, not graded. Your live lesson opens automatically.",
-            color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+        if (liveLessonReady) {
+            Button(
+                onClick = onEnterLive,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Enter live lesson")
+            }
+        } else {
+            Text("Practice only, not graded. Your lesson is preparing.",
+                color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+        }
     }
 }
 
 @Composable
-private fun FairTestMission(topic: String, modifier: Modifier) {
+private fun FairTestMission(
+    topic: String,
+    modifier: Modifier,
+    onInteraction: () -> Unit,
+    liveLessonReady: Boolean,
+    onEnterLive: () -> Unit,
+) {
     var waterB by remember(topic) { mutableIntStateOf(1) }
     var sunlightB by remember(topic) { mutableIntStateOf(6) }
     val experiment = FairExperiment(waterB = waterB, sunlightB = sunlightB)
@@ -80,6 +105,8 @@ private fun FairTestMission(topic: String, modifier: Modifier) {
         title = "Design a fair experiment",
         instruction = "Can you test water's effect on a plant? Move the controls until only water is different.",
         modifier = modifier,
+        liveLessonReady = liveLessonReady,
+        onEnterLive = onEnterLive,
     ) {
         Text("🌱 Plant A (reference): 1 cup water · 6 hours sunlight",
             color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
@@ -89,7 +116,10 @@ private fun FairTestMission(topic: String, modifier: Modifier) {
             color = TextPrimary)
         Slider(
             value = waterB.toFloat(),
-            onValueChange = { waterB = it.roundToInt().coerceIn(1, 3) },
+            onValueChange = {
+                waterB = it.roundToInt().coerceIn(1, 3)
+                onInteraction()
+            },
             valueRange = 1f..3f,
             steps = 1,
             modifier = Modifier.semantics { contentDescription = "Water for Plant B in cups" },
@@ -97,7 +127,10 @@ private fun FairTestMission(topic: String, modifier: Modifier) {
         Text("Plant B · Sunlight ($sunlightB hours)", color = TextPrimary)
         Slider(
             value = sunlightB.toFloat(),
-            onValueChange = { sunlightB = it.roundToInt().coerceIn(4, 8) },
+            onValueChange = {
+                sunlightB = it.roundToInt().coerceIn(4, 8)
+                onInteraction()
+            },
             valueRange = 4f..8f,
             steps = 3,
             modifier = Modifier.semantics { contentDescription = "Sunlight for Plant B in hours" },
@@ -111,12 +144,20 @@ private fun FairTestMission(topic: String, modifier: Modifier) {
 }
 
 @Composable
-private fun FractionBarMission(topic: String, modifier: Modifier) {
+private fun FractionBarMission(
+    topic: String,
+    modifier: Modifier,
+    onInteraction: () -> Unit,
+    liveLessonReady: Boolean,
+    onEnterLive: () -> Unit,
+) {
     var numerator by remember(topic) { mutableIntStateOf(1) }
     MissionFrame(
         title = "Build three quarters",
         instruction = "Drag the slider to shade exactly 3 out of 4 equal parts. Watch the fraction change.",
         modifier = modifier,
+        liveLessonReady = liveLessonReady,
+        onEnterLive = onEnterLive,
     ) {
         Text("${numerator}/4 of a whole", color = TextPrimary,
             style = MaterialTheme.typography.titleMedium)
@@ -139,7 +180,10 @@ private fun FractionBarMission(topic: String, modifier: Modifier) {
         Text("Shaded parts: $numerator", color = TextPrimary)
         Slider(
             value = numerator.toFloat(),
-            onValueChange = { numerator = it.roundToInt().coerceIn(0, 4) },
+            onValueChange = {
+                numerator = it.roundToInt().coerceIn(0, 4)
+                onInteraction()
+            },
             valueRange = 0f..4f,
             steps = 3,
             modifier = Modifier.semantics { contentDescription = "Number of shaded quarters" },
