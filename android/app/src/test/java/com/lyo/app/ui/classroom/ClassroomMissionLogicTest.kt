@@ -35,6 +35,35 @@ class ClassroomMissionLogicTest {
         assertFalse(missionNeedsNarrationHold(true, true, true))
     }
 
+    @Test fun `science second challenge isolates sunlight without claiming an outcome`() {
+        assertFalse(checkFairExperiment(FairExperiment(), ExperimentVariable.SUNLIGHT).ready)
+        assertFalse(
+            checkFairExperiment(
+                FairExperiment(waterB = 2, sunlightB = 7), ExperimentVariable.SUNLIGHT,
+            ).ready,
+        )
+        val fair = checkFairExperiment(
+            FairExperiment(waterB = 1, sunlightB = 7), ExperimentVariable.SUNLIGHT,
+        )
+        assertTrue(fair.ready)
+        assertTrue(fair.guidance.contains("observations"))
+    }
+
+    @Test fun `second fraction challenge represents one half as two quarters`() {
+        assertFalse(fractionGoalReached(3, targetNumerator = 2))
+        assertTrue(fractionGoalReached(2, targetNumerator = 2))
+        assertFalse(fractionGoalReached(2, denominator = 5, targetNumerator = 2))
+    }
+
+    @Test fun `Spanish topics and device language choose localized missions`() {
+        assertEquals(StarterMissionKind.FAIR_TEST, starterMissionFor("Ciencias naturales"))
+        assertEquals(StarterMissionKind.FRACTIONS, starterMissionFor("Matemáticas y fracciones"))
+        assertEquals(StarterMissionKind.FRACTIONS, starterMissionFor("Fracción de una pizza"))
+        assertTrue(isSpanishMission("Ciencia", "en-US"))
+        assertTrue(isSpanishMission("Fractions", "es-US"))
+        assertFalse(isSpanishMission("Science", "en-US"))
+    }
+
     @Test fun `fraction challenge only succeeds on three equal quarters`() {
         assertFalse(fractionGoalReached(0))
         assertFalse(fractionGoalReached(2))
