@@ -71,7 +71,7 @@ class ClassroomMissionUiTest {
                 setProgress(2f)
             }
         compose.onNodeWithText("Next challenge: sunlight").performClick()
-        compose.onNodeWithText("Change only the sunlight", substring = true).assertExists()
+        compose.onNodeWithText("change only the sunlight", substring = true).assertExists()
         compose.onNodeWithContentDescription("Sunlight for Plant B in hours")
             .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
                 setProgress(8f)
