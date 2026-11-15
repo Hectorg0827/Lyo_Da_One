@@ -175,7 +175,14 @@ class ClassroomVoicePlayer(context: Context) {
                 call.cancel()
                 throw CancellationException()
             }
-            call.timeout().timeout(8, TimeUnit.SECONDS)
+            // The live staging TTS endpoint has produced valid MP3s after
+            // 8 seconds; cancelling at 8 caused avoidable device TTS fallback.
+            // Longer wait is limited to staging and remains observable via
+            // LyoClassroomVoiceQA timing markers. Production keeps 8 seconds.
+            call.timeout().timeout(
+                ClassroomVoiceTimeoutPolicy.fullMp3TimeoutSeconds(BuildConfig.API_ENVIRONMENT),
+                TimeUnit.SECONDS,
+            )
             call.execute().use { response ->
                 if (!response.isSuccessful) {
                     error("Shared voice returned ${response.code}")
