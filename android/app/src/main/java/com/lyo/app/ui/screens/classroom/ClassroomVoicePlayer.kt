@@ -44,8 +44,7 @@ class ClassroomVoicePlayer(context: Context) {
     // A lesson must never alternate between a generated teacher and the
     // handset's markedly different synthetic narrator on successive turns.
     // Select the route once per lesson; keep it until close().
-    private enum class VoiceRoute { UNDECIDED, SHARED, DEVICE }
-    private var voiceRoute = VoiceRoute.UNDECIDED
+    private val voicePolicy = ClassroomVoiceRoutePolicy()
     private var deviceLanguageTag: String? = null
     private val deviceTts = TextToSpeech(appContext) { }
 
@@ -84,7 +83,7 @@ class ClassroomVoicePlayer(context: Context) {
         val requestedGeneration = generation
         playbackJob = scope.launch {
             try {
-                if (voiceRoute == VoiceRoute.DEVICE) {
+                if (voicePolicy.useDevice) {
                     playLocalizedDeviceFallback(text, language)
                     return@launch
                 }
@@ -98,16 +97,13 @@ class ClassroomVoicePlayer(context: Context) {
                 // A learner action or new scene owns the floor now.
             } catch (_: Exception) {
                 if (requestedGeneration == generation && enabled) {
-                    if (voiceRoute == VoiceRoute.SHARED) {
-                        // After the teacher's voice has been heard, keep
-                        // captions moving rather than abruptly switch voices.
-                        // A later turn may recover normal generated speech.
-                        finishTurn(requestedGeneration)
-                    } else {
-                        // If the very first synthesis fails, pin one
-                        // device narrator for this lesson (not per turn).
-                        voiceRoute = VoiceRoute.DEVICE
+                    if (voicePolicy.sharedSpeechFailed()) {
+                        // First failure: pin device narration for this lesson.
                         playLocalizedDeviceFallback(text, language)
+                    } else {
+                        // A teacher has already spoken: never swap voices.
+                        // Let the captioned turn finish; next one retries.
+                        finishTurn(requestedGeneration)
                     }
                 }
             }
@@ -192,7 +188,7 @@ class ClassroomVoicePlayer(context: Context) {
             }
             setOnPreparedListener {
                 if (requestedGeneration == generation && enabled) {
-                    voiceRoute = VoiceRoute.SHARED
+                    voicePolicy.sharedPlaybackBegan()
                     start()
                 }
             }
