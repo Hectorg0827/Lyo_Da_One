@@ -8,9 +8,11 @@ internal enum class StarterMissionKind { FAIR_TEST, FRACTIONS, GENERAL }
 internal fun starterMissionFor(topic: String): StarterMissionKind {
     val normalized = topic.trim().lowercase(Locale.ROOT)
     return when {
-        listOf("science", "biology", "experiment", "plant").any { it in normalized } ->
+        listOf("science", "biology", "experiment", "plant", "ciencia",
+            "biologia", "biología", "experimento", "planta").any { it in normalized } ->
             StarterMissionKind.FAIR_TEST
-        listOf("math", "fraction").any { it in normalized } ->
+        listOf("math", "fraction", "matemática", "matematica", "fracción",
+            "fraccion", "fracciones").any { it in normalized } ->
             StarterMissionKind.FRACTIONS
         else -> StarterMissionKind.GENERAL
     }
@@ -25,24 +27,53 @@ internal data class FairExperiment(
 
 internal data class FairExperimentCheck(val ready: Boolean, val guidance: String)
 
+internal enum class ExperimentVariable { WATER, SUNLIGHT }
+
 /**
- * Compare one controlled variable; this establishes only that the experiment
- * is designed fairly. It does NOT claim a simulated result proves plant growth.
+ * Two linked challenges: isolate the effect of water, then isolate sunlight.
+ * This checks experimental DESIGN only. It never simulates or asserts
+ * plant growth or changes the server's learner evidence.
  */
-internal fun checkFairExperiment(experiment: FairExperiment): FairExperimentCheck =
-    when {
-        experiment.waterA == experiment.waterB ->
-            FairExperimentCheck(false, "Change the water amount for Plant B to test water's effect.")
-        experiment.sunlightA != experiment.sunlightB ->
-            FairExperimentCheck(false, "Keep sunlight the same for both plants so only water changes.")
-        else -> FairExperimentCheck(
-            true,
-            "Fair setup! Only water changes. The real experiment would still need observations.",
-        )
+internal fun checkFairExperiment(
+    experiment: FairExperiment,
+    variable: ExperimentVariable = ExperimentVariable.WATER,
+): FairExperimentCheck =
+    when (variable) {
+        ExperimentVariable.WATER -> when {
+            experiment.waterA == experiment.waterB ->
+                FairExperimentCheck(false, "Change the water amount for Plant B to test water's effect.")
+            experiment.sunlightA != experiment.sunlightB ->
+                FairExperimentCheck(false, "Keep sunlight the same for both plants so only water changes.")
+            else -> FairExperimentCheck(
+                true, "Fair setup! Only water changes. A real test still needs observations.",
+            )
+        }
+        ExperimentVariable.SUNLIGHT -> when {
+            experiment.sunlightA == experiment.sunlightB ->
+                FairExperimentCheck(false, "Change the sunlight for Plant B to test light's effect.")
+            experiment.waterA != experiment.waterB ->
+                FairExperimentCheck(false, "Keep water the same for both plants so only sunlight changes.")
+            else -> FairExperimentCheck(
+                true, "Fair setup! Only sunlight changes. A real test still needs observations.",
+            )
+        }
     }
 
-internal fun fractionGoalReached(numerator: Int, denominator: Int = 4): Boolean =
-    denominator == 4 && numerator == 3
+internal fun fractionGoalReached(
+    numerator: Int,
+    denominator: Int = 4,
+    targetNumerator: Int = 3,
+): Boolean = denominator == 4 && targetNumerator in 0..denominator && numerator == targetNumerator
+
+/** Prefer the lesson's explicitly Spanish topic, or the Android device locale. */
+internal fun isSpanishMission(topic: String, languageTag: String): Boolean {
+    val normalized = topic.trim().lowercase(Locale.ROOT)
+    val spanishTopic = listOf(
+        "ciencia", "biologia", "biología", "experimento", "matemática",
+        "matematica", "fracción", "fraccion", "fracciones", "historia",
+    ).any { it in normalized }
+    return spanishTopic || languageTag.lowercase(Locale.ROOT).startsWith("es")
+}
 
 /**
  * A learner who started manipulating a local mission may finish it, but the
