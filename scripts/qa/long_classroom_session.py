@@ -128,6 +128,19 @@ async def main():
         if created and token:
             try:
                 code, result = http("DELETE", "/auth/me", token=token)
+                if code == 401:
+                    # This 30-minute acceptance may outlive the access token.
+                    # Reauthenticate the same disposable learner, verify the
+                    # original identity, and retry only that account's deletion.
+                    login_code, fresh = http("POST", "/api/v1/auth/login",
+                                             {"email": user["email"], "password": password})
+                    if login_code != 200 or not fresh.get("access_token"):
+                        raise RuntimeError("QA cleanup reauthentication failed")
+                    fresh_token = fresh["access_token"]
+                    identity_code, identity = http("GET", "/api/v1/auth/me", token=fresh_token)
+                    if identity_code != 200 or str(identity.get("id")) != str(profile.get("id")):
+                        raise RuntimeError("QA cleanup identity mismatch")
+                    code, result = http("DELETE", "/auth/me", token=fresh_token)
                 if code == 200 and result.get("deleted") is True:
                     print("QA cleanup: synthetic learner permanently deleted")
                 else:
