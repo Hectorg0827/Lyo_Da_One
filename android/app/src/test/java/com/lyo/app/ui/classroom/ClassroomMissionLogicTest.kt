@@ -31,8 +31,11 @@ class ClassroomMissionLogicTest {
         assertFalse(missionShouldBeVisible("live", true, true, true))
         assertFalse(missionShouldBeVisible("error", false, false, false))
         assertTrue(missionNeedsNarrationHold(true, true, false))
-        assertFalse(missionNeedsNarrationHold(false, true, false))
+        // Hold BEFORE the first board arrives: otherwise speech can start
+        // invisibly while a learner is already using the warm-up.
+        assertTrue(missionNeedsNarrationHold(false, true, false))
         assertFalse(missionNeedsNarrationHold(true, true, true))
+        assertFalse(missionNeedsNarrationHold(false, false, false))
     }
 
     @Test fun `science second challenge isolates sunlight without claiming an outcome`() {
