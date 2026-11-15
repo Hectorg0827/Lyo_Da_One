@@ -41,6 +41,9 @@ internal class ClassroomProgressiveTtsStream(
     private val onAudioStarted: () -> Unit,
     private val onFinished: () -> Unit,
     private val onFailure: (audioHadStarted: Boolean) -> Unit,
+    // Enables a local loopback-only fixture on debuggable emulator builds.
+    // Production and staged real-service audio must still use HTTPS.
+    allowDebugLoopbackHttp: Boolean = false,
 ) {
     private var started = false
     private var finished = false
@@ -49,7 +52,12 @@ internal class ClassroomProgressiveTtsStream(
 
     init {
         require(token.isNotBlank()) { "Authenticated Classroom voice required" }
-        require(url.startsWith("https://")) { "Classroom voice must use HTTPS" }
+        val uri = Uri.parse(url)
+        val debugLoopback = allowDebugLoopbackHttp && com.lyo.app.BuildConfig.DEBUG &&
+            uri.scheme == "http" && uri.host in setOf("localhost", "127.0.0.1")
+        require(uri.scheme == "https" || debugLoopback) {
+            "Classroom voice must use HTTPS"
+        }
         val headers = mapOf(
             "Authorization" to "Bearer $token",
             "Content-Type" to "application/json",
