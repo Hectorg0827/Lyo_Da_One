@@ -96,3 +96,9 @@ internal fun missionNeedsNarrationHold(
 // Audio must pause on the FIRST interaction, even when the server has not
 // published its board yet. Waiting for the first board risks speech starting
 // underneath the learner's currently active practice.
+
+/** Preserve first-scene timeout recovery during an engaged local warm-up. */
+internal fun shouldSuspendStallWatchForPause(
+    isPaused: Boolean,
+    hasBoardContent: Boolean,
+): Boolean = isPaused && hasBoardContent
