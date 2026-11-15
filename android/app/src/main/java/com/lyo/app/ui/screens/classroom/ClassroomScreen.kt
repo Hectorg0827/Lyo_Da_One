@@ -14,7 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.ui.classroom.ClassroomScreen as A2UIClassroomScreen
-import com.lyo.app.ui.classroom.ClassroomWarmup
+import com.lyo.app.ui.classroom.ClassroomMission
 import com.lyo.app.ui.classroom.ClassroomLessonDuration
 import com.lyo.app.ui.theme.Background
 
@@ -58,7 +58,7 @@ fun ClassroomScreen(
         // Fetching course details must not leave the learner staring at a
         // spinner; show a real, ungraded tap activity immediately.
         Box(modifier = Modifier.fillMaxSize().background(Background)) {
-            ClassroomWarmup(
+            ClassroomMission(
                 topic = topicOverride ?: "a new topic",
                 modifier = Modifier.align(Alignment.Center),
             )
