@@ -62,6 +62,63 @@ class ClassroomMissionUiTest {
     }
 
     @Test
+    fun scienceMissionProvidesSecondChallengeWhileTeacherPrepares() {
+        compose.setContent {
+            ClassroomMission(topic = "Science", liveLessonReady = false)
+        }
+        compose.onNodeWithContentDescription("Water for Plant B in cups")
+            .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                setProgress(2f)
+            }
+        compose.onNodeWithText("Next challenge: sunlight").performClick()
+        compose.onNodeWithText("Change only the sunlight", substring = true).assertExists()
+        compose.onNodeWithContentDescription("Sunlight for Plant B in hours")
+            .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                setProgress(8f)
+            }
+        compose.onNodeWithText("Both practice challenges complete!").assertExists()
+        compose.onNodeWithText("Enter live lesson").assertDoesNotExist()
+    }
+
+    @Test
+    fun fractionMissionCanBuildOneHalfAfterThreeQuarters() {
+        compose.setContent {
+            ClassroomMission(topic = "Math", liveLessonReady = false)
+        }
+        compose.onNodeWithContentDescription("Number of shaded quarters")
+            .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                setProgress(3f)
+            }
+        compose.onNodeWithText("Next challenge: one half").performClick()
+        compose.onNodeWithContentDescription("Number of shaded quarters")
+            .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                setProgress(2f)
+            }
+        compose.onNodeWithText("You built 1/2", substring = true).assertExists()
+        compose.onNodeWithText("Both practice challenges complete!").assertExists()
+    }
+
+    @Test
+    fun SpanishScienceMissionUsesSpanishCopyAndHandoff() {
+        var entered = false
+        compose.setContent {
+            ClassroomMission(
+                topic = "Ciencia",
+                liveLessonReady = true,
+                onEnterLive = { entered = true },
+            )
+        }
+        compose.onNodeWithText("Diseña un experimento justo").assertExists()
+        compose.onNodeWithContentDescription("Agua para la planta B en tazas")
+            .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                setProgress(3f)
+            }
+        compose.onNodeWithText("Siguiente reto: la luz").assertExists()
+        compose.onNodeWithText("Entrar a la clase").performClick()
+        compose.runOnIdle { assertTrue(entered) }
+    }
+
+    @Test
     fun genericStarterIsActionableAndCanHandoffWhenReady() {
         var interacted = false
         var entered = false
