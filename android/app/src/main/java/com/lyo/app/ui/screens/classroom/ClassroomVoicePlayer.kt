@@ -40,6 +40,13 @@ class ClassroomVoicePlayer(context: Context) {
     @Volatile private var generation = 0
     private var enabled = true
     private var completion: (() -> Unit)? = null
+
+    // A lesson must never alternate between a generated teacher and the
+    // handset's markedly different synthetic narrator on successive turns.
+    // Select the route once per lesson; keep it until close().
+    private enum class VoiceRoute { UNDECIDED, SHARED, DEVICE }
+    private var voiceRoute = VoiceRoute.UNDECIDED
+    private var deviceLanguageTag: String? = null
     private val deviceTts = TextToSpeech(appContext) { }
 
     fun setEnabled(value: Boolean) {
@@ -77,6 +84,10 @@ class ClassroomVoicePlayer(context: Context) {
         val requestedGeneration = generation
         playbackJob = scope.launch {
             try {
+                if (voiceRoute == VoiceRoute.DEVICE) {
+                    playLocalizedDeviceFallback(text, language)
+                    return@launch
+                }
                 val file = fetchSharedVoice(text, language, speakerId, requestedGeneration)
                 if (requestedGeneration != generation || !enabled) {
                     file.delete()
@@ -87,7 +98,17 @@ class ClassroomVoicePlayer(context: Context) {
                 // A learner action or new scene owns the floor now.
             } catch (_: Exception) {
                 if (requestedGeneration == generation && enabled) {
-                    playLocalizedDeviceFallback(text, language)
+                    if (voiceRoute == VoiceRoute.SHARED) {
+                        // After the teacher's voice has been heard, keep
+                        // captions moving rather than abruptly switch voices.
+                        // A later turn may recover normal generated speech.
+                        finishTurn(requestedGeneration)
+                    } else {
+                        // If the very first synthesis fails, pin one
+                        // device narrator for this lesson (not per turn).
+                        voiceRoute = VoiceRoute.DEVICE
+                        playLocalizedDeviceFallback(text, language)
+                    }
                 }
             }
         }
@@ -170,7 +191,10 @@ class ClassroomVoicePlayer(context: Context) {
                 true
             }
             setOnPreparedListener {
-                if (requestedGeneration == generation && enabled) start()
+                if (requestedGeneration == generation && enabled) {
+                    voiceRoute = VoiceRoute.SHARED
+                    start()
+                }
             }
             prepareAsync()
         }
@@ -185,7 +209,7 @@ class ClassroomVoicePlayer(context: Context) {
     }
 
     private fun playLocalizedDeviceFallback(text: String, language: String) {
-        val tag = if (language.equals("auto", ignoreCase = true)) {
+        val tag = deviceLanguageTag ?: if (language.equals("auto", ignoreCase = true)) {
             when {
                 Regex("[¿¡ñáéíóúü]", RegexOption.IGNORE_CASE).containsMatchIn(text) -> "es-US"
                 else -> Locale.getDefault().toLanguageTag()
@@ -193,6 +217,7 @@ class ClassroomVoicePlayer(context: Context) {
         } else {
             language
         }
+        deviceLanguageTag = tag
         deviceTts.language = Locale.forLanguageTag(tag)
         deviceTts.setSpeechRate(0.98f)
         val result = deviceTts.speak(
