@@ -1,5 +1,6 @@
 package com.lyo.app.ui.classroom
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -115,6 +116,33 @@ class ClassroomMissionUiTest {
             }
         compose.onNodeWithText("Siguiente reto: la luz").assertExists()
         compose.onNodeWithText("Entrar a la clase").performClick()
+        compose.runOnIdle { assertTrue(entered) }
+    }
+
+    @Test
+    fun engagedMissionRemainsInteractiveUntilLiveSceneIsReady() {
+        val ready = mutableStateOf(false)
+        var touched = false
+        var entered = false
+        compose.setContent {
+            ClassroomMission(
+                topic = "Science",
+                liveLessonReady = ready.value,
+                onInteraction = { touched = true },
+                onEnterLive = { entered = true },
+            )
+        }
+        compose.onNodeWithText("Enter live lesson").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Water for Plant B in cups")
+            .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                setProgress(2f)
+            }
+        compose.runOnIdle {
+            assertTrue(touched)
+            ready.value = true
+        }
+        compose.onNodeWithText("Fair setup!", substring = true).assertExists()
+        compose.onNodeWithText("Enter live lesson").performClick()
         compose.runOnIdle { assertTrue(entered) }
     }
 
