@@ -299,7 +299,9 @@ fun ClassroomScreen(
                             .align(Alignment.TopCenter)
                             .padding(8.dp),
                     )
-                } else if (engine.status == "connecting") {
+                } else if (engine.status == "connecting" ||
+                    (engine.status == "live" && !engine.hasBoardContent)
+                ) {
                     // The learner can reason and tap immediately while the
                     // authenticated Classroom socket prepares its first scene.
                     // This warm-up is explicitly ungraded and never fabricates
