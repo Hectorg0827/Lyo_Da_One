@@ -45,6 +45,7 @@ class ClassroomVoicePlayer(context: Context) {
     // handset's markedly different synthetic narrator on successive turns.
     // Select the route once per lesson; keep it until close().
     private val voicePolicy = ClassroomVoiceRoutePolicy()
+    private val teacherVoicePolicy = ClassroomTeacherVoicePolicy()
     private var deviceLanguageTag: String? = null
     private val deviceTts = TextToSpeech(appContext) { }
 
@@ -137,11 +138,12 @@ class ClassroomVoicePlayer(context: Context) {
         withContext(Dispatchers.IO) {
             val character = (ClassroomCast.teachers + ClassroomCast.classmates + ClassroomCast.companion)
                 .firstOrNull { it.id == speakerId } ?: ClassroomCast.teachers.first()
+            val identity = teacherVoicePolicy.resolve(character.id, character.voice)
             val body = ApiClient.gson.toJson(
                 mapOf(
                     "text" to text,
-                    "voice" to character.voice,
-                    "speaker_id" to character.id,
+                    "voice" to identity.voice,
+                    "speaker_id" to identity.speakerId,
                     "format" to "mp3",
                     "speed" to 0.98,
                     "content_type" to "explanation",
