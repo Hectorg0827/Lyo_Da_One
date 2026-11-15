@@ -89,7 +89,10 @@ internal fun missionShouldBeVisible(
     !enteredLive && (!hasBoardContent || engaged)
 
 internal fun missionNeedsNarrationHold(
-    hasBoardContent: Boolean,
+    @Suppress("UNUSED_PARAMETER") hasBoardContent: Boolean,
     engaged: Boolean,
     enteredLive: Boolean,
-): Boolean = hasBoardContent && engaged && !enteredLive
+): Boolean = engaged && !enteredLive
+// Audio must pause on the FIRST interaction, even when the server has not
+// published its board yet. Waiting for the first board risks speech starting
+// underneath the learner's currently active practice.
