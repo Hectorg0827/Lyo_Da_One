@@ -74,11 +74,14 @@ class ClassroomProgressiveTtsPlaybackTest {
                     .setBody(Buffer().write(toneWav()))
                     .throttleBody(512, 15, TimeUnit.MILLISECONDS),
             )
+            // MockWebServer.url() resolves the local server hostname and must
+            // not run on Android's UI thread (StrictMode reverse DNS guard).
+            val localFixtureUrl = server.url("/api/v1/tts/synthesize/stream").toString()
             instrumentation.runOnMainSync {
                 stream.set(
                     ClassroomProgressiveTtsStream(
                         context = context,
-                        url = server.url("/api/v1/tts/synthesize/stream").toString(),
+                        url = localFixtureUrl,
                         requestJson = json,
                         token = "local-only-test-token",
                         onAudioStarted = { started.countDown() },
