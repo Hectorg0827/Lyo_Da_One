@@ -410,7 +410,13 @@ class ClassroomEngine(
         // never produces an opening scene. The learner sat on "Preparing your
         // classroom…" with no recovery controls, for ever. An errored session
         // has its own banner and is the only state with nothing to wait for.
-        if (!awaitingStep || status == "error" || isPaused || hasActiveCheckpoint) {
+        // An engaged warm-up intentionally pauses speech before the first
+        // server scene. Keep watching for startup timeout/recovery even then;
+        // pausing after real board content must still suspend the watchdog.
+        if (!awaitingStep || status == "error" ||
+            shouldSuspendStallWatchForPause(isPaused, hasBoardContent) ||
+            hasActiveCheckpoint
+        ) {
             waitingSince = null
             stallNudged = false
             if (stallPhase != ClassroomStallPhase.NONE) stallPhase = ClassroomStallPhase.NONE
