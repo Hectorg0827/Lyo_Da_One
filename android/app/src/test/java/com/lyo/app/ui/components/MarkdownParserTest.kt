@@ -132,6 +132,31 @@ class MarkdownParserTest {
         assertEquals(emptyList<MarkdownBlock>(), MarkdownParser.parseBlocks("   \n  \n"))
     }
 
+
+    @Test
+    fun `parses a GFM table into structured cells rather than visible pipes`() {
+        val content = "| Variable | Plant A | Plant B |\\n| --- | :---: | ---: |\\n| Water | 1 cup | 2 cups |\\n\\nNow compare the plants."
+            .replace("\\n", "\n")
+        assertEquals(
+            listOf(
+                MarkdownBlock.Table(
+                    headers = listOf("Variable", "Plant A", "Plant B"),
+                    rows = listOf(listOf("Water", "1 cup", "2 cups")),
+                ),
+                MarkdownBlock.Paragraph("Now compare the plants."),
+            ),
+            MarkdownParser.parseBlocks(content),
+        )
+    }
+
+    @Test
+    fun `a sentence with a pipe is not mistaken for a table`() {
+        assertEquals(
+            listOf(MarkdownBlock.Paragraph("Either A | B works.")),
+            MarkdownParser.parseBlocks("Either A | B works."),
+        )
+    }
+
     // ── Inline ───────────────────────────────────────────────────────────
 
     @Test
