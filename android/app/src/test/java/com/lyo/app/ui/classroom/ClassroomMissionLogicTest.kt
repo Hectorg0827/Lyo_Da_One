@@ -23,6 +23,18 @@ class ClassroomMissionLogicTest {
         assertTrue(checkFairExperiment(FairExperiment(waterB = 3)).guidance.contains("observations"))
     }
 
+    @Test fun `engaged local mission is not interrupted by the first live scene`() {
+        assertTrue(missionShouldBeVisible("connecting", false, false, false))
+        assertTrue(missionShouldBeVisible("live", false, false, false))
+        assertFalse(missionShouldBeVisible("live", true, false, false))
+        assertTrue(missionShouldBeVisible("live", true, true, false))
+        assertFalse(missionShouldBeVisible("live", true, true, true))
+        assertFalse(missionShouldBeVisible("error", false, false, false))
+        assertTrue(missionNeedsNarrationHold(true, true, false))
+        assertFalse(missionNeedsNarrationHold(false, true, false))
+        assertFalse(missionNeedsNarrationHold(true, true, true))
+    }
+
     @Test fun `fraction challenge only succeeds on three equal quarters`() {
         assertFalse(fractionGoalReached(0))
         assertFalse(fractionGoalReached(2))
