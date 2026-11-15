@@ -14,6 +14,7 @@ import com.google.gson.JsonPrimitive
 import com.lyo.app.ui.classroom.a2ui.A2uiRenderScope
 import com.lyo.app.ui.classroom.a2ui.ChipState
 import com.lyo.app.ui.classroom.a2ui.ClassroomChipRow
+import com.lyo.app.ui.components.MarkdownText
 import com.lyo.app.ui.theme.ClassroomTokens
 import com.lyo.app.ui.theme.LyoGreen
 import com.lyo.app.ui.theme.LyoRed
@@ -80,7 +81,7 @@ fun A2uiRenderScope.QuizCardRenderer() {
         .border(1.dp, com.lyo.app.ui.theme.LyoVioletLight.copy(alpha = 0.25f), RoundedCornerShape(18.dp))
         .padding(18.dp)) {
         Text("YOUR TURN", color = com.lyo.app.ui.theme.LyoVioletLight, style = androidx.compose.material3.MaterialTheme.typography.labelSmall)
-        Text(text = readableClassroomMath(question), color = TextPrimary)
+        MarkdownText(markdown = readableClassroomMath(question), color = TextPrimary)
         ClassroomChipRow(
             options = options.map { it.label },
             stateFor = { index, _ ->
@@ -108,8 +109,8 @@ fun A2uiRenderScope.QuizCardRenderer() {
             },
         )
         if (feedback != null) {
-            Text(
-                text = readableClassroomMath(feedback),
+            MarkdownText(
+                markdown = readableClassroomMath(feedback),
                 color = if (answered?.isCorrect == true) LyoGreen else LyoRed,
                 modifier = Modifier.padding(top = 4.dp),
             )
