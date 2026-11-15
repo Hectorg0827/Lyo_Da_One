@@ -13,6 +13,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import com.lyo.app.ui.classroom.a2ui.A2uiRenderScope
+import com.lyo.app.ui.components.MarkdownText
 import com.lyo.app.ui.theme.ClassroomTokens
 import com.lyo.app.ui.theme.TextPrimary
 
@@ -28,6 +29,11 @@ import com.lyo.app.ui.theme.TextPrimary
 fun A2uiRenderScope.ChalkboardTextRenderer() {
     val text = readableClassroomMath(resolveString("text") ?: return)
     val highlightedTerm = resolveString("highlightedTerm")
+    if (highlightedTerm.isNullOrBlank() || !text.contains(highlightedTerm, ignoreCase = true)) {
+        // Render authored Markdown as native headings, emphasis, and tables.
+        MarkdownText(markdown = text, color = TextPrimary)
+        return
+    }
 
     val transition = rememberInfiniteTransition(label = "chalk-highlight-pulse")
     val pulseAlpha by transition.animateFloat(
