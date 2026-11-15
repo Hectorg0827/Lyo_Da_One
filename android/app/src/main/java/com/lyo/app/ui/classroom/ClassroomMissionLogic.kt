@@ -43,3 +43,22 @@ internal fun checkFairExperiment(experiment: FairExperiment): FairExperimentChec
 
 internal fun fractionGoalReached(numerator: Int, denominator: Int = 4): Boolean =
     denominator == 4 && numerator == 3
+
+/**
+ * A learner who started manipulating a local mission may finish it, but the
+ * real teaching scene should never play invisibly behind that activity.
+ * Unengaged missions disappear as soon as live content arrives.
+ */
+internal fun missionShouldBeVisible(
+    status: String,
+    hasBoardContent: Boolean,
+    engaged: Boolean,
+    enteredLive: Boolean,
+): Boolean = (status == "connecting" || status == "live") &&
+    !enteredLive && (!hasBoardContent || engaged)
+
+internal fun missionNeedsNarrationHold(
+    hasBoardContent: Boolean,
+    engaged: Boolean,
+    enteredLive: Boolean,
+): Boolean = hasBoardContent && engaged && !enteredLive
