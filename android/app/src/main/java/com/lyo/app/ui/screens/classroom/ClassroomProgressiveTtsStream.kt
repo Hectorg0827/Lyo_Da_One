@@ -48,7 +48,7 @@ internal class ClassroomProgressiveTtsStream(
     private var started = false
     private var finished = false
 
-    private val player = ExoPlayer.Builder(context).build()
+    private val player: ExoPlayer
 
     init {
         require(token.isNotBlank()) { "Authenticated Classroom voice required" }
@@ -76,6 +76,8 @@ internal class ClassroomProgressiveTtsStream(
         val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
             .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
 
+        // Security guards and request-source construction precede allocation.
+        player = ExoPlayer.Builder(context).build()
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying && !started && !finished) {
