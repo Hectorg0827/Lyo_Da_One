@@ -118,6 +118,13 @@ fun ClassroomScreen(
     var reducedMotionUi by remember { mutableStateOf(ClassroomPreferences.reducedMotion) }
     var captionsEnabledUi by remember { mutableStateOf(ClassroomPreferences.captionsEnabled) }
     var preparingStepUi by remember(engine) { mutableStateOf(false) }
+    // If the learner is manipulating a warm-up when the real scene arrives,
+    // let them finish and explicitly enter live teaching instead of abruptly
+    // taking away the control mid-gesture. Unengaged warm-ups never block it.
+    var missionEngaged by remember(engine) { mutableStateOf(false) }
+    var missionEntered by remember(engine) { mutableStateOf(false) }
+    val missionVisible = (engine.status == "connecting" || engine.status == "live") &&
+        !missionEntered && (!engine.hasBoardContent || missionEngaged)
 
     LaunchedEffect(engine, engine.isAwaitingStep) {
         preparingStepUi = false
@@ -295,16 +302,16 @@ fun ClassroomScreen(
                             .align(Alignment.TopCenter)
                             .padding(8.dp),
                     )
-                } else if (engine.status == "connecting" ||
-                    (engine.status == "live" && !engine.hasBoardContent)
-                ) {
-                    // The learner can reason and tap immediately while the
-                    // authenticated Classroom socket prepares its first scene.
-                    // This warm-up is explicitly ungraded and never fabricates
-                    // a server scene or alters the real learning record.
+                } else if (missionVisible) {
                     ClassroomMission(
                         topic = topic,
                         modifier = Modifier.align(Alignment.Center),
+                        onInteraction = { missionEngaged = true },
+                        liveLessonReady = engine.hasBoardContent,
+                        onEnterLive = {
+                            missionEntered = true
+                            chrome.poke()
+                        },
                     )
                 }
             }
@@ -352,7 +359,7 @@ fun ClassroomScreen(
                 }
             }
 
-            AnimatedVisibility(visible = chrome.visible || engine.canContinue) {
+            AnimatedVisibility(visible = (chrome.visible || engine.canContinue) && !missionVisible) {
                 BottomActionDock(
                     canContinue = engine.canContinue,
                     continueLabel = engine.continueLabel,
