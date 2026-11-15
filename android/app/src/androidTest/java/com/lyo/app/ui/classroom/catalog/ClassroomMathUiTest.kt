@@ -2,7 +2,6 @@ package com.lyo.app.ui.classroom.catalog
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.assertExists
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.lyo.app.ui.components.MarkdownText
 import org.junit.Rule
