@@ -300,10 +300,12 @@ fun ClassroomScreen(
                             .padding(8.dp),
                     )
                 } else if (engine.status == "connecting") {
-                    Text(
-                        text = "Preparing your classroom…",
-                        color = TextSecondary,
-                        style = MaterialTheme.typography.bodySmall,
+                    // The learner can reason and tap immediately while the
+                    // authenticated Classroom socket prepares its first scene.
+                    // This warm-up is explicitly ungraded and never fabricates
+                    // a server scene or alters the real learning record.
+                    ClassroomWarmup(
+                        topic = topic,
                         modifier = Modifier.align(Alignment.Center),
                     )
                 }
