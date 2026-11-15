@@ -67,6 +67,13 @@ class ClassroomMissionLogicTest {
         assertFalse(isSpanishMission("Science", "en-US"))
     }
 
+    @Test fun `startup watchdog remains active when mission pauses audio before first board`() {
+        assertFalse(shouldSuspendStallWatchForPause(true, false))
+        assertFalse(shouldSuspendStallWatchForPause(false, false))
+        assertFalse(shouldSuspendStallWatchForPause(false, true))
+        assertTrue(shouldSuspendStallWatchForPause(true, true))
+    }
+
     @Test fun `fraction challenge only succeeds on three equal quarters`() {
         assertFalse(fractionGoalReached(0))
         assertFalse(fractionGoalReached(2))
