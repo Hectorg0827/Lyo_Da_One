@@ -34,6 +34,10 @@ val releaseApiUrl = apiBaseUrl("LYO_API_BASE_URL", setting("LYO_API_BASE_URL") ?
 // Debug and staging builds talk to staging once a staging URL is configured,
 // and fall back to production (as before) until then.
 val stagingApiUrl = setting("LYO_STAGING_API_BASE_URL")?.let { apiBaseUrl("LYO_STAGING_API_BASE_URL", it) }
+val classroomStreamingPilot =
+    stagingApiUrl != null &&
+    setting("LYO_STAGING_CLASSROOM_TTS_STREAMING_PILOT").equals("true", ignoreCase = true)
+// The streaming pilot is disabled in production regardless of caller flags.
 
 // Release signing (Play Store upload key). Read from android/keystore.properties
 // (gitignored) or environment variables; never committed. When absent, debug
@@ -87,6 +91,7 @@ android {
         debug {
             buildConfigField("String", "API_BASE_URL", "\"${stagingApiUrl ?: productionApiUrl}\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (stagingApiUrl != null) "staging" else "production"}\"")
+            buildConfigField("boolean", "CLASSROOM_TTS_STREAMING_PILOT", if (classroomStreamingPilot) "true" else "false")
         }
         create("staging") {
             isMinifyEnabled = true
@@ -99,6 +104,7 @@ android {
             matchingFallbacks += listOf("release")
             buildConfigField("String", "API_BASE_URL", "\"${stagingApiUrl ?: productionApiUrl}\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (stagingApiUrl != null) "staging" else "production"}\"")
+            buildConfigField("boolean", "CLASSROOM_TTS_STREAMING_PILOT", if (classroomStreamingPilot) "true" else "false")
         }
         release {
             isMinifyEnabled = true
@@ -109,6 +115,7 @@ android {
             if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
             buildConfigField("String", "API_BASE_URL", "\"$releaseApiUrl\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (releaseApiUrl == productionApiUrl) "production" else "custom"}\"")
+            buildConfigField("boolean", "CLASSROOM_TTS_STREAMING_PILOT", "false")
         }
     }
     compileOptions {
