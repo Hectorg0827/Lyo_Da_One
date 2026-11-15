@@ -37,6 +37,7 @@ async def run():
         "first_name": "Staging", "last_name": "QA",
     }
     token = None
+    expected_id = None
     created = False
     success = False
     browser = None
@@ -51,20 +52,45 @@ async def run():
                                {"email": person["email"], "password": password})
             if code != 200 or not login.get("access_token"): raise RuntimeError("cleanup token")
             token = login["access_token"]
-        print("PASS: isolated test registration and cleanup token", flush=True)
+        code, profile = http("GET", "/api/v1/auth/me", token=token)
+        if code != 200 or not profile.get("id"):
+            raise RuntimeError("Synthetic learner identity verification failed")
+        expected_id = str(profile["id"])
+        print("PASS: isolated registration and verified synthetic learner", flush=True)
 
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox"])
             context = await browser.new_context(viewport={"width": 412, "height": 915},
                                                 device_scale_factor=1)
             page = await context.new_page()
-            # The visible login form has already passed once in run
-            # #43508877955. Use the verified synthetic API token directly for
-            # subsequent reconnect runs to avoid auth rate-limit interference.
-            stage = "Web auth hydration"
+            # Exercise the same visible form and /auth/login route as learners.
+            # Seeding localStorage bypassed the Zustand login store and could
+            # produce a false negative for Classroom auth hydration.
+            stage = "visible Web sign-in"
+            auth_statuses = []
+            def record_auth(response):
+                pathname = urlsplit(response.url).path
+                if pathname in ("/auth/login", "/auth/me"):
+                    auth_statuses.append((pathname, response.status))
+            page.on("response", record_auth)
             await page.goto(WEB + "/auth/login", wait_until="domcontentloaded", timeout=25000)
-            await page.evaluate("(token) => localStorage.setItem('lyo_token', token)", token)
-            print("PASS: staging browser hydrated with disposable authenticated token", flush=True)
+            await page.get_by_label("Email", exact=True).fill(person["email"])
+            await page.get_by_label("Password", exact=True).fill(password)
+            await page.get_by_role("button", name="Log In", exact=True).click()
+            try:
+                await page.wait_for_function(
+                    "() => Boolean(window.localStorage.getItem('lyo_token'))",
+                    timeout=35000)
+            except Exception:
+                raise RuntimeError("Visible login did not save a session; auth HTTP statuses="
+                                   + str(auth_statuses))
+            browser_token = await page.evaluate(
+                "() => window.localStorage.getItem('lyo_token')")
+            code, web_profile = http("GET", "/auth/me", token=browser_token)
+            if code != 200 or str(web_profile.get("id")) != expected_id:
+                raise RuntimeError("Visible login token failed /auth/me identity verification; "
+                                   "HTTP " + str(code))
+            print("PASS: visible Web sign-in and /auth/me matched synthetic learner", flush=True)
 
             # Install before the next navigation: expose a QA-only handle to
             # forcibly terminate one live WebSocket if Chromium's offline
@@ -216,6 +242,18 @@ async def run():
         if created and token:
             try:
                 code, result = http("DELETE", "/auth/me", token=token)
+                if code == 401 and expected_id:
+                    # Refresh only the disposable learner's expired credentials.
+                    login_code, fresh = http("POST", "/api/v1/auth/login",
+                                             {"email": person["email"], "password": password})
+                    if login_code != 200 or not fresh.get("access_token"):
+                        raise RuntimeError("Synthetic cleanup reauthentication failed")
+                    fresh_token = fresh["access_token"]
+                    identity_code, identity = http(
+                        "GET", "/api/v1/auth/me", token=fresh_token)
+                    if identity_code != 200 or str(identity.get("id")) != expected_id:
+                        raise RuntimeError("Synthetic cleanup identity mismatch")
+                    code, result = http("DELETE", "/auth/me", token=fresh_token)
                 if code == 200 and result.get("deleted") is True:
                     print("BROWSER QA cleanup: synthetic learner deleted")
                 else:
