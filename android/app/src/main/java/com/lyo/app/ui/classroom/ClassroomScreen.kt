@@ -320,10 +320,27 @@ fun ClassroomScreen(
                     ClassroomMission(
                         topic = topic,
                         modifier = Modifier.align(Alignment.Center),
-                        onInteraction = { missionEngaged = true },
+                        onInteraction = {
+                            if (!missionEngaged) {
+                                missionEngaged = true
+                                // Pause on the *first touch*, before the
+                                // first server turn has a chance to speak
+                                // behind an active starter mission.
+                                if (!engine.isPaused) {
+                                    engine.togglePause()
+                                    pausedForMission = true
+                                }
+                            }
+                        },
                         liveLessonReady = engine.hasBoardContent,
                         onEnterLive = {
                             missionEntered = true
+                            // Resume in the tap handler; avoid the extra
+                            // composition/effect frame before the live scene.
+                            if (pausedForMission) {
+                                if (engine.isPaused) engine.togglePause()
+                                pausedForMission = false
+                            }
                             chrome.poke()
                         },
                     )
