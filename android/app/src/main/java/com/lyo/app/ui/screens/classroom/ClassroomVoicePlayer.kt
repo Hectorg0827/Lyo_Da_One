@@ -3,6 +3,8 @@ package com.lyo.app.ui.screens.classroom
 import android.content.Context
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.SystemClock
+import android.util.Log
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.util.Base64
@@ -49,6 +51,13 @@ class ClassroomVoicePlayer(context: Context) {
     private var deviceLanguageTag: String? = null
     private val deviceTts = TextToSpeech(appContext) { }
 
+    /** Fixed-label staging diagnostics. Never log text, voice content or auth. */
+    private fun traceVoice(event: String, startedAtMs: Long) {
+        if (BuildConfig.API_ENVIRONMENT != "staging") return
+        val elapsed = (SystemClock.elapsedRealtime() - startedAtMs).coerceAtLeast(0)
+        Log.i("LyoClassroomVoiceQA", "event=$event elapsed_ms=$elapsed")
+    }
+
     fun setEnabled(value: Boolean) {
         enabled = value
         if (!value) stop()
@@ -82,9 +91,11 @@ class ClassroomVoicePlayer(context: Context) {
         if (!enabled || text.isBlank()) { onComplete?.invoke(); return }
         completion = onComplete
         val requestedGeneration = generation
+        val startedAtMs = SystemClock.elapsedRealtime()
         playbackJob = scope.launch {
             try {
                 if (voicePolicy.useDevice) {
+                    traceVoice("device_voice_pinned", startedAtMs)
                     playLocalizedDeviceFallback(text, language)
                     return@launch
                 }
@@ -93,17 +104,20 @@ class ClassroomVoicePlayer(context: Context) {
                     file.delete()
                     return@launch
                 }
-                playFile(file, requestedGeneration)
+                traceVoice("shared_mp3_ready", startedAtMs)
+                playFile(file, requestedGeneration, startedAtMs)
             } catch (_: CancellationException) {
                 // A learner action or new scene owns the floor now.
             } catch (_: Exception) {
                 if (requestedGeneration == generation && enabled) {
                     if (voicePolicy.sharedSpeechFailed()) {
                         // First failure: pin device narration for this lesson.
+                        traceVoice("device_fallback_first_turn", startedAtMs)
                         playLocalizedDeviceFallback(text, language)
                     } else {
                         // A teacher has already spoken: never swap voices.
                         // Let the captioned turn finish; next one retries.
+                        traceVoice("shared_voice_failed_captions_only", startedAtMs)
                         finishTurn(requestedGeneration)
                     }
                 }
@@ -177,7 +191,7 @@ class ClassroomVoicePlayer(context: Context) {
             }
         }
 
-    private fun playFile(file: File, requestedGeneration: Int) {
+    private fun playFile(file: File, requestedGeneration: Int, startedAtMs: Long) {
         audioFile = file
         val nextPlayer = MediaPlayer().apply {
             setDataSource(appContext, Uri.fromFile(file))
@@ -192,6 +206,7 @@ class ClassroomVoicePlayer(context: Context) {
                 if (requestedGeneration == generation && enabled) {
                     voicePolicy.sharedPlaybackBegan()
                     start()
+                    traceVoice("shared_audio_play_started", startedAtMs)
                 }
             }
             prepareAsync()
