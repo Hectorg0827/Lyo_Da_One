@@ -3,10 +3,13 @@ name: Classroom Mission Android Emulator QA (staging only)
 # QA branch only. No deployment, production, releases or real learner writes.
 on:
   push:
-    branches: [qa/lyo-classroom-retention-phase1-20261115]
+    branches: [qa/lyo-classroom-retention-phase1-20261115, fix/android-classroom-math-qa-20261115]
     paths:
       - 'android/app/src/main/java/com/lyo/app/ui/classroom/**'
       - 'android/app/src/main/java/com/lyo/app/ui/screens/classroom/**'
+      - 'android/app/src/main/java/com/lyo/app/ui/components/MarkdownText.kt'
+      - 'android/app/src/main/java/com/lyo/app/ui/classroom/catalog/ClassroomMathText.kt'
+      - 'android/app/src/androidTest/java/com/lyo/app/ui/classroom/catalog/ClassroomMathUiTest.kt'
       - 'android/app/src/androidTest/java/com/lyo/app/ui/classroom/ClassroomMissionUiTest.kt'
       - '.github/workflows/lyo-classroom-mission-emulator-qa.yml'
   workflow_dispatch:
@@ -21,7 +24,7 @@ concurrency:
 jobs:
   classroom-mission-ui:
     name: Compose mission and handoff interaction checks (emulator, not phone signoff)
-    if: github.ref == 'refs/heads/qa/lyo-classroom-retention-phase1-20261115'
+    if: github.ref == 'refs/heads/qa/lyo-classroom-retention-phase1-20261115' || github.ref == 'refs/heads/fix/android-classroom-math-qa-20261115'
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:
@@ -56,7 +59,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-boot-timeout: 600
-          script: cd android && gradle :app:connectedDebugAndroidTest --no-daemon "-PLYO_STAGING_API_BASE_URL=$LYO_STAGING_API_BASE_URL" -Pandroid.testInstrumentationRunnerArguments.class=com.lyo.app.ui.classroom.ClassroomMissionUiTest
+          script: cd android && gradle :app:connectedDebugAndroidTest --no-daemon "-PLYO_STAGING_API_BASE_URL=$LYO_STAGING_API_BASE_URL" -Pandroid.testInstrumentationRunnerArguments.class=com.lyo.app.ui.classroom.ClassroomMissionUiTest,com.lyo.app.ui.classroom.catalog.ClassroomMathUiTest
       - name: Upload sanitized emulator JUnit evidence
         if: always()
         uses: actions/upload-artifact@v4
