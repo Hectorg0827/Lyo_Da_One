@@ -1,0 +1,90 @@
+name: Classroom Streaming TTS Experiment (staging only)
+
+# Opt-in audio experiment. No production, release, PR or Railway changes.
+on:
+  push:
+    branches: [exp/android-classroom-streaming-tts-staging-20261115]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: classroom-tts-experiment-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  streaming-pilot:
+    if: github.ref == 'refs/heads/exp/android-classroom-streaming-tts-staging-20261115'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      LYO_STAGING_API_BASE_URL: https://lyojourneystagingbackend-staging.up.railway.app
+      LYO_STAGING_CLASSROOM_TTS_STREAMING_PILOT: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Require isolated staging destination and opt-in flag
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$LYO_STAGING_API_BASE_URL" = 'https://lyojourneystagingbackend-staging.up.railway.app'
+          test "$LYO_STAGING_CLASSROOM_TTS_STREAMING_PILOT" = 'true'
+      - name: Compile pilot staging APK and run Android unit tests
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:assembleStaging :app:testStagingUnitTest --no-daemon \
+            "-PLYO_STAGING_API_BASE_URL=$LYO_STAGING_API_BASE_URL" \
+            -PLYO_STAGING_CLASSROOM_TTS_STREAMING_PILOT=true
+      - name: Verify pilot enabled only on staged APK
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          config=$(find app/build/generated/source/buildConfig -path '*/staging/*/BuildConfig.java' -print -quit)
+          test -n "$config"
+          grep -F 'API_ENVIRONMENT = "staging"' "$config"
+          grep -F 'CLASSROOM_TTS_STREAMING_PILOT = true' "$config"
+      - name: Enable Android emulator acceleration
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify private authenticated POST shape without learner data
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-boot-timeout: 600
+          script: cd android && gradle :app:connectedDebugAndroidTest --no-daemon "-PLYO_STAGING_API_BASE_URL=$LYO_STAGING_API_BASE_URL" -PLYO_STAGING_CLASSROOM_TTS_STREAMING_PILOT=true -Pandroid.testInstrumentationRunnerArguments.class=com.lyo.app.ui.screens.classroom.ClassroomProgressiveTtsSpecTest
+      - name: Upload experiment APK and emulator evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-android-STREAMING-PILOT-staging-experiment
+          path: |
+            android/app/build/outputs/apk/staging/*.apk
+            android/app/build/reports/androidTests/connected/
+            android/app/build/outputs/androidTest-results/connected/
+          if-no-files-found: warn
+          retention-days: 7
+      - name: State evidence boundary
+        shell: bash
+        run: |
+          echo 'Compiled staging-only TTS streaming experiment; POST shape tested without network.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'NOT physical-device audio QA. Do not release, merge, or deploy based solely on this run.' >> "$GITHUB_STEP_SUMMARY"
