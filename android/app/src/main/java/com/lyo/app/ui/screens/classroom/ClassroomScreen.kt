@@ -1,16 +1,22 @@
 package com.lyo.app.ui.screens.classroom
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import com.lyo.app.data.api.ApiClient
 import com.lyo.app.ui.classroom.ClassroomScreen as A2UIClassroomScreen
+import com.lyo.app.ui.classroom.ClassroomWarmup
 import com.lyo.app.ui.classroom.ClassroomLessonDuration
-import com.lyo.app.ui.components.LoadingBox
+import com.lyo.app.ui.theme.Background
 
 /**
  * Compatibility entry point for existing navigation.
@@ -49,7 +55,14 @@ fun ClassroomScreen(
     }
 
     if (!resolved) {
-        LoadingBox()
+        // Fetching course details must not leave the learner staring at a
+        // spinner; show a real, ungraded tap activity immediately.
+        Box(modifier = Modifier.fillMaxSize().background(Background)) {
+            ClassroomWarmup(
+                topic = topicOverride ?: "a new topic",
+                modifier = Modifier.align(Alignment.Center),
+            )
+        }
         return
     }
 
