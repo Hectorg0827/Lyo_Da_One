@@ -26,6 +26,13 @@ import androidx.media3.exoplayer.source.ProgressiveMediaSource
  * full-MP3 endpoint; a mid-speech error must not replay already-heard words.
  */
 @OptIn(UnstableApi::class)
+internal fun classroomVoicePostSpec(dataSpec: DataSpec, requestBytes: ByteArray): DataSpec =
+    dataSpec.buildUpon()
+        .setHttpMethod(DataSpec.HTTP_METHOD_POST)
+        .setHttpBody(requestBytes)
+        .build()
+
+@OptIn(UnstableApi::class)
 internal class ClassroomProgressiveTtsStream(
     context: Context,
     url: String,
@@ -55,11 +62,8 @@ internal class ClassroomProgressiveTtsStream(
             .setDefaultRequestProperties(headers)
 
         val dataSourceFactory = ResolvingDataSource.Factory(httpFactory) { dataSpec: DataSpec ->
-            // The POST body is kept out of URL logs. No GET fallback.
-            dataSpec.buildUpon()
-                .setHttpMethod(DataSpec.HTTP_METHOD_POST)
-                .setHttpBody(requestBytes)
-                .build()
+            // Never put learner text or credentials in a query string.
+            classroomVoicePostSpec(dataSpec, requestBytes)
         }
         val mediaSource = ProgressiveMediaSource.Factory(dataSourceFactory)
             .createMediaSource(MediaItem.fromUri(Uri.parse(url)))
