@@ -11,6 +11,7 @@ import android.util.Base64
 import com.google.gson.JsonParser
 import com.lyo.app.BuildConfig
 import com.lyo.app.data.api.ApiClient
+import com.lyo.app.data.TokenManager
 import com.lyo.app.ui.classroom.ClassroomCast
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +39,7 @@ class ClassroomVoicePlayer(context: Context) {
     private var playbackJob: Job? = null
     @Volatile private var activeCall: Call? = null
     private var player: MediaPlayer? = null
+    private var streamedAudio: ClassroomProgressiveTtsStream? = null
     private var audioFile: File? = null
     @Volatile private var generation = 0
     private var enabled = true
@@ -99,6 +101,22 @@ class ClassroomVoicePlayer(context: Context) {
                     playLocalizedDeviceFallback(text, language)
                     return@launch
                 }
+                // A separate, explicitly opted-in staging build can start
+                // playback as progressive MP3 bytes arrive from the provider.
+                // Ordinary Android builds still use the proven full-MP3 path.
+                if (BuildConfig.CLASSROOM_TTS_STREAMING_PILOT) {
+                    val token = TokenManager.accessToken
+                    if (!token.isNullOrBlank()) {
+                        try {
+                            playStreamingVoice(text, language, speakerId, token, requestedGeneration, startedAtMs)
+                            return@launch
+                        } catch (_: Exception) {
+                            traceVoice("stream_setup_failed_try_full", startedAtMs)
+                            streamedAudio?.release()
+                            streamedAudio = null
+                        }
+                    }
+                }
                 val file = fetchSharedVoice(text, language, speakerId, requestedGeneration)
                 if (requestedGeneration != generation || !enabled) {
                     file.delete()
@@ -137,6 +155,8 @@ class ClassroomVoicePlayer(context: Context) {
         player?.stopSafely()
         player?.release()
         player = null
+        streamedAudio?.release()
+        streamedAudio = null
         audioFile?.delete()
         audioFile = null
         deviceTts.stop()
@@ -148,22 +168,91 @@ class ClassroomVoicePlayer(context: Context) {
         scope.cancel()
     }
 
+    private fun voiceRequestJson(text: String, language: String, speakerId: String): String {
+        val character = (ClassroomCast.teachers + ClassroomCast.classmates + ClassroomCast.companion)
+            .firstOrNull { it.id == speakerId } ?: ClassroomCast.teachers.first()
+        val identity = teacherVoicePolicy.resolve(character.id, character.voice)
+        return ApiClient.gson.toJson(
+            mapOf(
+                "text" to text,
+                "voice" to identity.voice,
+                "speaker_id" to identity.speakerId,
+                "format" to "mp3",
+                "speed" to 0.98,
+                "content_type" to "explanation",
+                "language" to language,
+            ),
+        )
+    }
+
+    private fun playStreamingVoice(
+        text: String,
+        language: String,
+        speakerId: String,
+        token: String,
+        requestedGeneration: Int,
+        startedAtMs: Long,
+    ) {
+        val json = voiceRequestJson(text, language, speakerId)
+        val url = BuildConfig.API_BASE_URL.trimEnd('/') + "/api/v1/tts/synthesize/stream"
+        streamedAudio = ClassroomProgressiveTtsStream(
+            context = appContext,
+            url = url,
+            requestJson = json,
+            token = token,
+            onAudioStarted = {
+                if (requestedGeneration == generation && enabled) {
+                    voicePolicy.sharedPlaybackBegan()
+                    traceVoice("stream_audio_play_started", startedAtMs)
+                }
+            },
+            onFinished = {
+                if (requestedGeneration == generation) finishTurn(requestedGeneration)
+            },
+            onFailure = { audioHadStarted ->
+                if (requestedGeneration == generation && enabled) {
+                    if (audioHadStarted) {
+                        // Never restart a sentence after part of it was heard.
+                        traceVoice("stream_interrupted_captions_only", startedAtMs)
+                        finishTurn(requestedGeneration)
+                    } else {
+                        traceVoice("stream_failed_before_audio_full_retry", startedAtMs)
+                        // A streaming provider failure before any speech is
+                        // heard allows ONE retry through the proven full-MP3
+                        // endpoint. Both requests use the same cast voice.
+                        streamedAudio?.release()
+                        streamedAudio = null
+                        playbackJob = scope.launch {
+                            try {
+                                val file = fetchSharedVoice(text, language, speakerId, requestedGeneration)
+                                if (requestedGeneration != generation || !enabled) {
+                                    file.delete()
+                                    return@launch
+                                }
+                                playFile(file, requestedGeneration, startedAtMs)
+                            } catch (_: CancellationException) {
+                                // Learner moved on.
+                            } catch (_: Exception) {
+                                if (requestedGeneration == generation && enabled) {
+                                    if (voicePolicy.sharedSpeechFailed()) {
+                                        traceVoice("device_fallback_after_stream_error", startedAtMs)
+                                        playLocalizedDeviceFallback(text, language)
+                                    } else {
+                                        finishTurn(requestedGeneration)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        )
+    }
+
     private suspend fun fetchSharedVoice(text: String, language: String, speakerId: String, requestedGeneration: Int): File =
         withContext(Dispatchers.IO) {
-            val character = (ClassroomCast.teachers + ClassroomCast.classmates + ClassroomCast.companion)
-                .firstOrNull { it.id == speakerId } ?: ClassroomCast.teachers.first()
-            val identity = teacherVoicePolicy.resolve(character.id, character.voice)
-            val body = ApiClient.gson.toJson(
-                mapOf(
-                    "text" to text,
-                    "voice" to identity.voice,
-                    "speaker_id" to identity.speakerId,
-                    "format" to "mp3",
-                    "speed" to 0.98,
-                    "content_type" to "explanation",
-                    "language" to language,
-                ),
-            ).toRequestBody("application/json".toMediaType())
+            val body = voiceRequestJson(text, language, speakerId)
+                .toRequestBody("application/json".toMediaType())
             val request = Request.Builder()
                 .url(BuildConfig.API_BASE_URL.trimEnd('/') + "/api/v1/tts/synthesize")
                 .post(body)
@@ -224,6 +313,8 @@ class ClassroomVoicePlayer(context: Context) {
     private fun releaseCurrentPlayer() {
         player?.release()
         player = null
+        streamedAudio?.release()
+        streamedAudio = null
         audioFile?.delete()
         audioFile = null
     }
