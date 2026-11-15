@@ -299,7 +299,7 @@ private fun FractionBarMission(
                 }
             } else {
                 if (spanish) "Sombrea la cantidad correcta de partes iguales."
-                else "Try shading the right number of equal parts.",
+                else "Try shading the right number of equal parts."
             },
             color = if (correct) LyoVioletLight else TextSecondary,
             style = MaterialTheme.typography.bodyMedium,
