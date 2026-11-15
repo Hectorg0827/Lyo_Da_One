@@ -3,7 +3,7 @@ name: Classroom Streaming TTS Experiment (staging only)
 # Opt-in audio experiment. No production, release, PR or Railway changes.
 on:
   push:
-    branches: [exp/android-classroom-streaming-tts-staging-20261115]
+    branches: [exp/android-classroom-streaming-tts-staging-20261115, qa/lyo-classroom-integrated-staging-20261115]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   streaming-pilot:
-    if: github.ref == 'refs/heads/exp/android-classroom-streaming-tts-staging-20261115'
+    if: github.ref == 'refs/heads/exp/android-classroom-streaming-tts-staging-20261115' || github.ref == 'refs/heads/qa/lyo-classroom-integrated-staging-20261115'
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:

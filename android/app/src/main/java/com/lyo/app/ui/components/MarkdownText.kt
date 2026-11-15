@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lyo.app.ui.classroom.catalog.readableClassroomMath
 
 // ── Pure parsing — no Compose dependency, directly unit-testable ────────────
 // (see MarkdownParserTest / MarkdownInlineParserTest).
@@ -309,15 +310,19 @@ private fun MarkdownBlockView(block: MarkdownBlock, color: Color) {
 private fun inlineAnnotatedString(text: String, color: Color): AnnotatedString = buildAnnotatedString {
     MarkdownInlineParser.parse(text).forEach { span ->
         when (span) {
-            is MarkdownSpan.Plain -> append(span.text)
-            is MarkdownSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(span.text) }
-            is MarkdownSpan.Italic -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) { append(span.text) }
+            is MarkdownSpan.Plain -> append(readableClassroomMath(span.text))
+            is MarkdownSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                append(readableClassroomMath(span.text))
+            }
+            is MarkdownSpan.Italic -> withStyle(SpanStyle(fontStyle = FontStyle.Italic)) {
+                append(readableClassroomMath(span.text))
+            }
             is MarkdownSpan.BoldItalic -> withStyle(
                 SpanStyle(fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic),
-            ) { append(span.text) }
+            ) { append(readableClassroomMath(span.text)) }
             is MarkdownSpan.Code -> withStyle(
                 SpanStyle(fontFamily = FontFamily.Monospace, background = color.copy(alpha = 0.14f)),
-            ) { append(span.text) }
+            ) { append(span.text) } // Literal inline code is never interpreted as math.
         }
     }
 }
