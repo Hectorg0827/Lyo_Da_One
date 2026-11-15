@@ -281,14 +281,10 @@ fun ClassroomScreen(
                 // a QuizCard adds no transcript line, and this card is drawn
                 // over the board, so keying off narration left it covering
                 // the learner's first checkpoint.
-                if (!engine.hasBoardContent) {
-                    OpeningCard(
-                        opening = engine.opening,
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(8.dp),
-                    )
-                }
+                // The interactive mission is the opening now; do not
+                // stack the old cover card over its tappable controls.
+                // Live A2UI content replaces the mission upon first board.
+
 
                 if (engine.status == "error") {
                     Text(
@@ -306,7 +302,7 @@ fun ClassroomScreen(
                     // authenticated Classroom socket prepares its first scene.
                     // This warm-up is explicitly ungraded and never fabricates
                     // a server scene or alters the real learning record.
-                    ClassroomWarmup(
+                    ClassroomMission(
                         topic = topic,
                         modifier = Modifier.align(Alignment.Center),
                     )
