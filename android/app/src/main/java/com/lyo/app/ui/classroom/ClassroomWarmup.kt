@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -68,7 +69,13 @@ internal fun warmupFor(topic: String): ClassroomWarmupPrompt {
 }
 
 @Composable
-fun ClassroomWarmup(topic: String, modifier: Modifier = Modifier) {
+fun ClassroomWarmup(
+    topic: String,
+    modifier: Modifier = Modifier,
+    onInteraction: () -> Unit = {},
+    liveLessonReady: Boolean = false,
+    onEnterLive: () -> Unit = {},
+) {
     val prompt = remember(topic) { warmupFor(topic) }
     var selected by remember(topic) { mutableIntStateOf(-1) }
     Column(
@@ -88,7 +95,10 @@ fun ClassroomWarmup(topic: String, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.titleMedium)
         prompt.choices.forEachIndexed { index, answer ->
             OutlinedButton(
-                onClick = { selected = index },
+                onClick = {
+                    selected = index
+                    onInteraction()
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(answer)
@@ -103,7 +113,13 @@ fun ClassroomWarmup(topic: String, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
-        Text("Your live lesson will open automatically.", color = TextSecondary,
-            style = MaterialTheme.typography.labelSmall)
+        if (liveLessonReady) {
+            Button(onClick = onEnterLive, modifier = Modifier.fillMaxWidth()) {
+                Text("Enter live lesson")
+            }
+        } else {
+            Text("Your live lesson is preparing.", color = TextSecondary,
+                style = MaterialTheme.typography.labelSmall)
+        }
     }
 }
