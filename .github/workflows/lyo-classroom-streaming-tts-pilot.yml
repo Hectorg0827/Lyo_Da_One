@@ -62,7 +62,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Verify private authenticated POST shape without learner data
+      - name: Verify POST privacy and local chunked audio playback without learner data
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -71,7 +71,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-boot-timeout: 600
-          script: cd android && gradle :app:connectedDebugAndroidTest --no-daemon "-PLYO_STAGING_API_BASE_URL=$LYO_STAGING_API_BASE_URL" -PLYO_STAGING_CLASSROOM_TTS_STREAMING_PILOT=true -Pandroid.testInstrumentationRunnerArguments.class=com.lyo.app.ui.screens.classroom.ClassroomProgressiveTtsSpecTest
+          script: cd android && gradle :app:connectedDebugAndroidTest --no-daemon "-PLYO_STAGING_API_BASE_URL=$LYO_STAGING_API_BASE_URL" -PLYO_STAGING_CLASSROOM_TTS_STREAMING_PILOT=true -Pandroid.testInstrumentationRunnerArguments.class=com.lyo.app.ui.screens.classroom.ClassroomProgressiveTtsSpecTest,com.lyo.app.ui.screens.classroom.ClassroomProgressiveTtsPlaybackTest
       - name: Upload experiment APK and emulator evidence
         if: always()
         uses: actions/upload-artifact@v4
