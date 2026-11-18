@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from playwright.async_api import async_playwright
-from live_classroom_auth import http
+from live_classroom_auth import http, API
 
 WEB = "https://lyoonestagingweb-staging.up.railway.app"
 assert urlsplit(WEB).hostname.endswith("-staging.up.railway.app")
@@ -62,6 +62,25 @@ async def run():
             browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox"])
             context = await browser.new_context(viewport={"width": 412, "height": 915},
                                                 device_scale_factor=1)
+            blocked_nonstaging = []
+            allowed_hosts = {urlsplit(WEB).hostname, urlsplit(API).hostname}
+
+            async def refuse_nonstaging_requests(route):
+                request = route.request
+                host = urlsplit(request.url).hostname or ""
+                method = request.method.upper()
+                # Never send a disposable learner's credentials to production
+                # or any unrelated host if the staging Web bundle is misconfigured.
+                unsafe = host in {"api.lyoai.app", "lyoai.app"} or (
+                    method in {"POST", "PUT", "PATCH", "DELETE"} and host not in allowed_hosts
+                )
+                if unsafe:
+                    blocked_nonstaging.append((method, host))
+                    await route.abort(error_code="blockedbyclient")
+                    return
+                await route.continue_()
+
+            await context.route("**/*", refuse_nonstaging_requests)
             page = await context.new_page()
             # Exercise the same visible form and /auth/login route as learners.
             # Seeding localStorage bypassed the Zustand login store and could
@@ -82,6 +101,8 @@ async def run():
                     "() => Boolean(window.localStorage.getItem('lyo_token'))",
                     timeout=35000)
             except Exception:
+                if blocked_nonstaging:
+                    raise RuntimeError("Staging-only request guard blocked " + str(blocked_nonstaging))
                 raise RuntimeError("Visible login did not save a session; auth HTTP statuses="
                                    + str(auth_statuses))
             browser_token = await page.evaluate(
