@@ -47,6 +47,11 @@ export function buildClassroomWsUrl(apiUrl, connection, token) {
   if (connection.difficulty) params.set('difficulty', connection.difficulty);
   // The backend restores its persisted scene only when resume=1 is explicit.
   // Starting a fresh session must omit this flag to avoid stale lesson state.
+  // Client opt-in is staging-host only. The backend separately requires its
+  // explicit staging feature flag; no production WebSocket gets this channel.
+  if (new URL(apiUrl).hostname.endsWith('-staging.up.railway.app')) {
+    params.set('continuous_teaching', '1');
+  }
   if (connection.resume === true) params.set('resume', '1');
   if (token) params.set('token', token);
   return `${base}/api/v1/classroom/ws/connect?${params}`;
