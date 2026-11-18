@@ -107,18 +107,18 @@ fun parseServerEvent(raw: String): ClassroomServerEvent? {
             if (dataObj?.get("ungraded")?.takeIf { it.isJsonPrimitive }?.asBoolean != true) {
                 null
             } else {
-                val text = dataObj.get("text")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
+                val text = dataObj?.get("text")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
                 val generation = runCatching {
-                    dataObj.get("generation")?.asInt ?: -1
+                    dataObj?.get("generation")?.asInt ?: -1
                 }.getOrDefault(-1)
-                val phase = dataObj.get("phase")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
+                val phase = dataObj?.get("phase")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
                 if (text.isBlank() || text.length > 320 || generation < 1 ||
                     phase !in setOf("startup", "transition")
                 ) null
                 else ClassroomServerEvent.BridgeMessageEvent(
                     text, generation, phase,
-                    dataObj.get("prompt")?.takeIf { it.isJsonPrimitive }?.asBoolean == true,
-                    dataObj.get("ai_generated")?.takeIf { it.isJsonPrimitive }?.asBoolean == true,
+                    dataObj?.get("prompt")?.takeIf { it.isJsonPrimitive }?.asBoolean == true,
+                    dataObj?.get("ai_generated")?.takeIf { it.isJsonPrimitive }?.asBoolean == true,
                 )
             }
         }
