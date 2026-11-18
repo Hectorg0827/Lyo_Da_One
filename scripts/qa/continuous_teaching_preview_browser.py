@@ -27,6 +27,8 @@ INSTRUMENT = """(() => {
     scene_complete_event_ms: null,
     bridge_frames: 0,
     scene_frames: 0,
+    preview_classroom_sockets: 0,
+    non_preview_classroom_sockets: 0,
     audio_error_count: 0,
   };
   const now = () => Math.round(performance.now() - current);
@@ -41,6 +43,12 @@ INSTRUMENT = """(() => {
       try {
         const u = new URL(url);
         if (u.pathname === '/api/v1/classroom/ws/connect') {
+          if (u.hostname === 'lyo-continuousteaching-preview-backend-staging.up.railway.app') {
+            metrics.preview_classroom_sockets++;
+          } else {
+            metrics.non_preview_classroom_sockets++;
+            this.close(4000, 'Preview QA forbids non-preview Classroom socket');
+          }
           this.addEventListener('message', event => {
             try {
               const payload = JSON.parse(event.data);
@@ -155,8 +163,15 @@ async def measure():
                 result["ui_live"] = await page.get_by_role("button", name="Leave classroom").is_visible()
                 # Capture only a synthetic classroom, with no real credentials/PII.
                 await page.screenshot(path="artifacts/teacher-quality/continuous-teaching-preview.png")
-                success = bool(result["browser"] and result["browser"].get("first_bridge_frame_ms") is not None
-                               and result["browser"].get("first_scene_frame_ms") is not None)
+                success = bool(
+                    result["browser"]
+                    and result["browser"].get("preview_classroom_sockets", 0) >= 1
+                    and result["browser"].get("non_preview_classroom_sockets", 0) == 0
+                    and result["browser"].get("first_bridge_frame_ms") is not None
+                    and result["browser"].get("bridge_dom_ms") is not None
+                    and result["browser"].get("first_scene_frame_ms") is not None
+                    and result["browser"].get("first_audio_playing_ms") is not None
+                )
             finally:
                 await browser.close()
     except Exception as exc:
