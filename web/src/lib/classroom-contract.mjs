@@ -51,6 +51,11 @@ export function buildClassroomWsUrl(apiUrl, connection, token) {
   // explicit staging feature flag; no production WebSocket gets this channel.
   if (new URL(apiUrl).hostname.endsWith('-staging.up.railway.app')) {
     params.set('continuous_teaching', '1');
+    // The bridge can speak the learner's browser language without altering
+    // the authoritative lesson-language / grading contract.
+    const bridgeLanguage = typeof navigator !== 'undefined'
+      ? navigator.language : (connection.language || 'en-US');
+    params.set('bridge_language', bridgeLanguage);
   }
   if (connection.resume === true) params.set('resume', '1');
   if (token) params.set('token', token);
