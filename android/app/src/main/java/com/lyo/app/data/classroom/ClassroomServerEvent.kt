@@ -48,6 +48,15 @@ sealed class ClassroomServerEvent {
         val metadata: ClassroomSceneMetadata? = null,
     ) : ClassroomServerEvent()
 
+    /** Transient curiosity prompt, outside scene/milestone/grade contracts. */
+    data class BridgeMessageEvent(
+        val text: String,
+        val generation: Int,
+        val phase: String,
+        val prompt: Boolean,
+        val aiGenerated: Boolean,
+    ) : ClassroomServerEvent()
+
     data object SceneCompleteEvent : ClassroomServerEvent()
 
     /** Acknowledged-but-currently-inert real event types (system_state,
@@ -94,6 +103,25 @@ fun parseServerEvent(raw: String): ClassroomServerEvent? {
         ?: return null
 
     return when (eventType) {
+        "bridge_message" -> {
+            if (dataObj?.get("ungraded")?.takeIf { it.isJsonPrimitive }?.asBoolean != true) {
+                null
+            } else {
+                val text = dataObj.get("text")?.takeIf { it.isJsonPrimitive }?.asString?.trim().orEmpty()
+                val generation = runCatching {
+                    dataObj.get("generation")?.asInt ?: -1
+                }.getOrDefault(-1)
+                val phase = dataObj.get("phase")?.takeIf { it.isJsonPrimitive }?.asString.orEmpty()
+                if (text.isBlank() || text.length > 320 || generation < 1 ||
+                    phase !in setOf("startup", "transition")
+                ) null
+                else ClassroomServerEvent.BridgeMessageEvent(
+                    text, generation, phase,
+                    dataObj.get("prompt")?.takeIf { it.isJsonPrimitive }?.asBoolean == true,
+                    dataObj.get("ai_generated")?.takeIf { it.isJsonPrimitive }?.asBoolean == true,
+                )
+            }
+        }
         in COMPONENT_RENDER_TYPES -> {
             // Tried in this order: a top-level "component" (the common
             // case per ComponentRenderPayload.dict()), nested under
