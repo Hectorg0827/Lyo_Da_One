@@ -233,6 +233,8 @@ class ClassroomEngine(
     var bridgePrompt by mutableStateOf(false); private set
     var bridgePhase by mutableStateOf("startup"); private set
     private var bridgeClosed = false
+    private var bridgeGenerationFloor = 0
+    private var realSceneObserved = false
 
     fun replyToBridge(raw: String): Boolean {
         val answer = raw.trim()
@@ -351,6 +353,8 @@ class ClassroomEngine(
         when (event) {
             is ClassroomServerEvent.BridgeMessageEvent -> {
                 if (bridgeClosed || !isAwaitingStep || status == "error" || hasActiveCheckpoint ||
+                    event.generation <= bridgeGenerationFloor ||
+                    (realSceneObserved && event.phase == "startup") ||
                     event.generation < bridgeGeneration ||
                     (event.generation == bridgeGeneration && bridgeText == event.text)
                 ) return
@@ -382,6 +386,8 @@ class ClassroomEngine(
             }
 
             is ClassroomServerEvent.SceneStartEvent -> {
+                realSceneObserved = true
+                bridgeGenerationFloor = maxOf(bridgeGenerationFloor, bridgeGeneration)
                 endBridge()
                 stopNarration()
                 processedComponentIds.clear()
@@ -875,6 +881,7 @@ class ClassroomEngine(
         flushActivities()
         // Only a real new Continue action may open a transition bridge.
         if (nextActionIntent == "continue") {
+            bridgeGenerationFloor = maxOf(bridgeGenerationFloor, bridgeGeneration)
             bridgeClosed = false
             bridgeText = null
             bridgePrompt = false
