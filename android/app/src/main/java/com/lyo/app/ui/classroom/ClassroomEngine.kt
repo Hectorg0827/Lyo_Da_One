@@ -226,6 +226,30 @@ class ClassroomEngine(
     var learnerRecordFailed by mutableStateOf(false); private set
     var recordConcepts by mutableStateOf<List<String>>(emptyList()); private set
 
+    /** Ephemeral curiosity conversation, never lesson evidence or mastery. */
+    var bridgeText by mutableStateOf<String?>(null); private set
+    var bridgeGeneration by mutableIntStateOf(0); private set
+    var bridgePrompt by mutableStateOf(false); private set
+    var bridgePhase by mutableStateOf("startup"); private set
+    private var bridgeClosed = false
+
+    fun replyToBridge(raw: String): Boolean {
+        val answer = raw.trim()
+        if (bridgeClosed || !isAwaitingStep || bridgeText == null || !bridgePrompt ||
+            answer.isEmpty() || answer.length > 300
+        ) return false
+        if (!ClassroomSocketClient.sendBridgeReply(sessionId, bridgeGeneration, answer)) return false
+        bridgePrompt = false
+        pushTranscript("You", answer)
+        return true
+    }
+
+    private fun endBridge() {
+        bridgeClosed = true
+        bridgeText = null
+        bridgePrompt = false
+    }
+
     private fun pushTranscript(speaker: String, text: String) {
         if (text.isBlank()) return
         transcript += TranscriptLine(UUID.randomUUID().toString(), speaker, text)
@@ -324,7 +348,32 @@ class ClassroomEngine(
 
     private fun handleServerEvent(event: ClassroomServerEvent) {
         when (event) {
+            is ClassroomServerEvent.BridgeMessageEvent -> {
+                if (bridgeClosed || !isAwaitingStep || status == "error" || hasActiveCheckpoint ||
+                    event.generation < bridgeGeneration ||
+                    (event.generation == bridgeGeneration && bridgeText == event.text)
+                ) return
+                bridgeGeneration = event.generation
+                bridgePhase = event.phase
+                bridgeText = event.text
+                bridgePrompt = event.prompt
+                pushTranscript("Teacher", event.text)
+                // Same teacher voice player as the director, never a second
+                // audio engine. The authoritative scene preempts this aside.
+                if (isVoiceEnabled && !isPaused && speakingTurn == null &&
+                    playerJob?.isActive != true && voicePlayer != null
+                ) {
+                    val utteranceId = ++speechGeneration
+                    activeSpeaker = "Teacher"
+                    voicePlayer.play(event.text, voiceLanguage,
+                        ClassroomCast.speaker("Teacher", topic).id
+                    ) {
+                        if (utteranceId == speechGeneration) activeSpeaker = null
+                    }
+                }
+            }
             is ClassroomServerEvent.ComponentRenderEvent -> {
+                endBridge()
                 status = "live"
                 errorMessage = null
                 clearWait()
@@ -332,6 +381,7 @@ class ClassroomEngine(
             }
 
             is ClassroomServerEvent.SceneStartEvent -> {
+                endBridge()
                 stopNarration()
                 processedComponentIds.clear()
                 hasActiveCheckpoint = false
@@ -822,12 +872,20 @@ class ClassroomEngine(
     fun continueLesson() {
         stopNarration()
         flushActivities()
+        // Only a real new Continue action may open a transition bridge.
+        if (nextActionIntent == "continue") {
+            bridgeClosed = false
+            bridgeText = null
+            bridgePrompt = false
+        }
         val componentId = surface.dataModel.resolvePointer("/nextActionComponentId")?.takeIf { it.isJsonPrimitive }?.asString ?: "android_continue"
         if (ClassroomSocketClient.send(
                 ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId),
             )
         ) {
             beginWait()
+        } else {
+            endBridge()
         }
     }
 
