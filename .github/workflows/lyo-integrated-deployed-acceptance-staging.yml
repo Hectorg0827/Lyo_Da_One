@@ -1,0 +1,97 @@
+name: LYO integrated deployed-staging acceptance (no deploy)
+
+# Explicit staging-only, synthetic-user acceptance of the deployed Web/backend
+# using scripts at the integrated Android/Web candidate. Never touches production.
+on:
+  push:
+    branches: [qa/lyo-integrated-deployed-acceptance-20261117]
+    paths: ['.github/workflows/lyo-integrated-deployed-acceptance-staging.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lyo-integrated-deployed-staging-acceptance
+  cancel-in-progress: false
+
+jobs:
+  scope-guard:
+    name: Verify immutable integrated candidate and staging-only scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Refuse product code changes beyond approved integrated baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=0c3d53f41e453b893c4a9dfff61830d9baa3976a
+          git merge-base --is-ancestor "$BASE" HEAD
+          paths="$(git diff --name-only "$BASE" HEAD)"
+          test "$paths" = ".github/workflows/lyo-integrated-deployed-acceptance-staging.yml"
+          grep -F 'https://lyojourneystagingbackend-staging.up.railway.app' scripts/qa/live_classroom_auth.py
+          grep -F 'https://lyoonestagingweb-staging.up.railway.app' scripts/qa/browser_classroom_staging.py
+          echo "Integrated baseline: $BASE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Only the QA workflow differs; production and product files untouched." >> "$GITHUB_STEP_SUMMARY"
+
+  public-staging:
+    name: Deployed staging Web/API HTTP smoke
+    needs: scope-guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/qa/verify-lyo-staging-public.mjs
+
+  synthetic-classroom:
+    name: Authenticated Classroom first-scene and exact resume
+    needs: public-staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Authenticate, test and delete only disposable staging learner
+        run: python -u scripts/qa/live_classroom_auth.py
+
+  chromium-classroom:
+    name: Actual staging Web UI login and restored-scene recovery
+    needs: synthetic-classroom
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.56.0-noble
+    timeout-minutes: 11
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+      - run: python -u scripts/qa/browser_classroom_staging.py
+      - name: Save only synthetic learner screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-integrated-staging-chromium-screenshots
+          path: artifacts/browser-classroom-staging/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
+  thirty-minute-classroom:
+    name: 30-minute synthetic Classroom hold, forced reconnect and cleanup
+    needs: chromium-classroom
+    runs-on: ubuntu-latest
+    timeout-minutes: 38
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check websockets==14.2
+      - run: python -u scripts/qa/long_classroom_session.py
