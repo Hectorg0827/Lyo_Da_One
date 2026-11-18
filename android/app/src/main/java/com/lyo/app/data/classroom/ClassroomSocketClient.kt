@@ -160,6 +160,7 @@ object ClassroomSocketClient {
         // requires an explicit staging feature flag; production cannot use it.
         if (BuildConfig.API_ENVIRONMENT == "staging") {
             urlBuilder.addQueryParameter("continuous_teaching", "1")
+            urlBuilder.addQueryParameter("bridge_language", Locale.getDefault().toLanguageTag())
         }
         params.courseId?.let { urlBuilder.addQueryParameter("course_id", it) }
         params.reviewConceptId?.let { urlBuilder.addQueryParameter("review_concept_id", it) }
