@@ -35,6 +35,7 @@ jobs:
           expected="$(printf '%s\n' '.github/workflows/lyo-visible-login-integrated-staging.yml' 'scripts/qa/browser_classroom_staging.py')"
           actual="$(git diff --name-only "$BASE" HEAD)"
           test "$actual" = "$expected"
+          grep -F 'blocked_nonstaging' scripts/qa/browser_classroom_staging.py
           grep -F 'page.get_by_label("Email", exact=True).fill' scripts/qa/browser_classroom_staging.py
           grep -F 'page.get_by_label("Password", exact=True).fill' scripts/qa/browser_classroom_staging.py
           grep -F 'https://lyoonestagingweb-staging.up.railway.app' scripts/qa/browser_classroom_staging.py
