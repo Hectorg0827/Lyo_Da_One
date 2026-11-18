@@ -1,0 +1,70 @@
+name: LYO Continuous Teaching preview — synthetic latency benchmark
+
+on:
+  push:
+    branches: [qa/lyo-ct-preview-metrics-20261118]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lyo-ct-preview-benchmark
+  cancel-in-progress: false
+
+jobs:
+  socket-latency:
+    name: Preview backend — teacher text, AI reply, scene and transition
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify only preview QA scripts/workflow changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=2f20179fa5ed560fa1e0a728a4c87db814286e47
+          git merge-base --is-ancestor "$BASE" HEAD
+          git diff --name-only "$BASE" HEAD > /tmp/preview-delta.txt
+          if grep -vE '^scripts/qa/continuous_teaching_preview_(browser|metrics)\.py$|^\.github/workflows/lyo-continuous-teaching-preview-metrics\.yml$' /tmp/preview-delta.txt; then
+            echo 'Unauthorized non-QA change on benchmark branch' >&2
+            exit 1
+          fi
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Benchmark only the isolated Railway preview backend
+        run: python -u scripts/qa/continuous_teaching_preview_metrics.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lyo-preview-websocket-and-tts-metrics
+          path: artifacts/teacher-quality/continuous-teaching-preview.json
+          retention-days: 7
+          if-no-files-found: warn
+
+  browser-audio:
+    name: Preview Web — scene text to real browser playback start
+    needs: socket-latency
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.56.0-noble
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install real browser QA dependencies
+        run: python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+      - name: Measure synthetic teacher text, full scene and browser audio-start event
+        run: python -u scripts/qa/continuous_teaching_preview_browser.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lyo-preview-browser-audio-metrics
+          path: |
+            artifacts/teacher-quality/continuous-teaching-preview-browser.json
+            artifacts/teacher-quality/continuous-teaching-preview.png
+          retention-days: 7
+          if-no-files-found: warn
