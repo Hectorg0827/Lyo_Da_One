@@ -1,0 +1,52 @@
+name: LYO integrated staging visible Web sign-in and reconnect QA
+
+# Strictly synthetic staging accounts; no production requests, app publish or deployment.
+on:
+  push:
+    branches: [qa/lyo-visible-login-integrated-20261117]
+    paths: ['.github/workflows/lyo-visible-login-integrated-staging.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lyo-staging-visible-login-qa
+  cancel-in-progress: false
+
+jobs:
+  chromium:
+    name: Visible form login, verified identity, Classroom recovery and cleanup
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.56.0-noble
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify QA-only delta against integrated Android/Web revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE=0c3d53f41e453b893c4a9dfff61830d9baa3976a
+          git merge-base --is-ancestor "$BASE" HEAD
+          expected="$(printf '%s\n' '.github/workflows/lyo-visible-login-integrated-staging.yml' 'scripts/qa/browser_classroom_staging.py')"
+          actual="$(git diff --name-only "$BASE" HEAD)"
+          test "$actual" = "$expected"
+          grep -F 'page.get_by_label("Email", exact=True).fill' scripts/qa/browser_classroom_staging.py
+          grep -F 'page.get_by_label("Password", exact=True).fill' scripts/qa/browser_classroom_staging.py
+          grep -F 'https://lyoonestagingweb-staging.up.railway.app' scripts/qa/browser_classroom_staging.py
+          echo "QA-only script and workflow delta validated" >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Playwright test dependencies
+        run: python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+      - name: Exercise visible Web login, Classroom and resume with disposable user
+        run: python -u scripts/qa/browser_classroom_staging.py
+      - name: Retain synthetic learner screenshot evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-visible-login-integrated-qa
+          path: artifacts/browser-classroom-staging/*.png
+          if-no-files-found: ignore
+          retention-days: 7
