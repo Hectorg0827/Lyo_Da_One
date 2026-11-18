@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from playwright.async_api import async_playwright
-from live_classroom_auth import http
+from live_classroom_auth import http, API
 
 WEB = "https://lyoonestagingweb-staging.up.railway.app"
 assert urlsplit(WEB).hostname.endswith("-staging.up.railway.app")
@@ -37,6 +37,7 @@ async def run():
         "first_name": "Staging", "last_name": "QA",
     }
     token = None
+    expected_id = None
     created = False
     success = False
     browser = None
@@ -51,26 +52,66 @@ async def run():
                                {"email": person["email"], "password": password})
             if code != 200 or not login.get("access_token"): raise RuntimeError("cleanup token")
             token = login["access_token"]
-        print("PASS: isolated test registration and cleanup token", flush=True)
+        code, profile = http("GET", "/api/v1/auth/me", token=token)
+        if code != 200 or not profile.get("id"):
+            raise RuntimeError("Synthetic learner identity verification failed")
+        expected_id = str(profile["id"])
+        print("PASS: isolated registration and verified synthetic learner", flush=True)
 
         async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(headless=True, args=["--no-sandbox"])
-            # Seed localStorage before any page JavaScript or AuthProvider
-            # hydration can run; post-load injection was vulnerable to a race
-            # that cleared the token before Classroom's first connect().
-            context = await browser.new_context(
-                viewport={"width": 412, "height": 915},
-                device_scale_factor=1,
-                storage_state={"cookies": [], "origins": [{
-                    "origin": WEB,
-                    "localStorage": [{"name": "lyo_token", "value": token}]
-                }]},
-            )
+            context = await browser.new_context(viewport={"width": 412, "height": 915},
+                                                device_scale_factor=1)
+            blocked_nonstaging = []
+            allowed_hosts = {urlsplit(WEB).hostname, urlsplit(API).hostname}
+
+            async def refuse_nonstaging_requests(route):
+                request = route.request
+                host = urlsplit(request.url).hostname or ""
+                method = request.method.upper()
+                # Never send a disposable learner's credentials to production
+                # or any unrelated host if the staging Web bundle is misconfigured.
+                unsafe = host in {"api.lyoai.app", "lyoai.app"} or (
+                    method in {"POST", "PUT", "PATCH", "DELETE"} and host not in allowed_hosts
+                )
+                if unsafe:
+                    blocked_nonstaging.append((method, host))
+                    await route.abort(error_code="blockedbyclient")
+                    return
+                await route.continue_()
+
+            await context.route("**/*", refuse_nonstaging_requests)
             page = await context.new_page()
-            # Verified visible login is covered in run #43508877955.
-            # This test validates an actual pre-authenticated browser session.
-            stage = "Web auth initialization"
-            print("PASS: isolated Chromium context seeded with disposable token before page load", flush=True)
+            # Exercise the same visible form and /auth/login route as learners.
+            # Seeding localStorage bypassed the Zustand login store and could
+            # produce a false negative for Classroom auth hydration.
+            stage = "visible Web sign-in"
+            auth_statuses = []
+            def record_auth(response):
+                pathname = urlsplit(response.url).path
+                if pathname in ("/auth/login", "/auth/me"):
+                    auth_statuses.append((pathname, response.status))
+            page.on("response", record_auth)
+            await page.goto(WEB + "/auth/login", wait_until="domcontentloaded", timeout=25000)
+            await page.get_by_label("Email", exact=True).fill(person["email"])
+            await page.get_by_label("Password", exact=True).fill(password)
+            await page.get_by_role("button", name="Log In", exact=True).click()
+            try:
+                await page.wait_for_function(
+                    "() => Boolean(window.localStorage.getItem('lyo_token'))",
+                    timeout=35000)
+            except Exception:
+                if blocked_nonstaging:
+                    raise RuntimeError("Staging-only request guard blocked " + str(blocked_nonstaging))
+                raise RuntimeError("Visible login did not save a session; auth HTTP statuses="
+                                   + str(auth_statuses))
+            browser_token = await page.evaluate(
+                "() => window.localStorage.getItem('lyo_token')")
+            code, web_profile = http("GET", "/auth/me", token=browser_token)
+            if code != 200 or str(web_profile.get("id")) != expected_id:
+                raise RuntimeError("Visible login token failed /auth/me identity verification; "
+                                   "HTTP " + str(code))
+            print("PASS: visible Web sign-in and /auth/me matched synthetic learner", flush=True)
 
             # Install before the next navigation: expose a QA-only handle to
             # forcibly terminate one live WebSocket if Chromium's offline
@@ -122,20 +163,6 @@ async def run():
                         pass
                 ws.on("framereceived", on_frame)
             page.on("websocket", on_socket)
-            # Record only structural, non-secret diagnostics. No socket URLs,
-            # request bodies, tokens, scene text or browser content in logs.
-            page_errors = []
-            api_responses = []
-            observed_socket_paths = []
-            page.on("pageerror", lambda _: page_errors.append("pageerror"))
-            page.on("websocket", lambda sock: observed_socket_paths.append(
-                urlsplit(sock.url).path[:100]))
-            def on_api_response(response):
-                parsed = urlsplit(response.url)
-                if parsed.path in ("/auth/me", "/api/v1/auth/me") or parsed.path.startswith("/api/v1/classroom"):
-                    host_kind = "staging" if (parsed.hostname or "").endswith("-staging.up.railway.app") else "non-staging"
-                    api_responses.append([host_kind, parsed.path[:80], response.status])
-            page.on("response", on_api_response)
 
             summary_js = """() => (window.__lyoQaSockets || []).map(s => {
               const u = new URL(s.url);
@@ -169,24 +196,6 @@ async def run():
             if first is None:
                 entries = await page.evaluate(summary_js)
                 state_summary = [(entry["state"], len(entry["scenes"])) for entry in entries]
-                token_present = await page.evaluate("() => Boolean(localStorage.getItem('lyo_token'))")
-                status_signals = await page.evaluate("""() => {
-                  const body = document.body.innerText || '';
-                  return ['Connecting…', 'Sign in to start a secure AI classroom.',
-                    'Sign in again to resume this lesson.', 'Not connected to the classroom.',
-                    'The class session ended.', 'Retry to rejoin.', '● Live']
-                    .filter(x => body.includes(x));
-                }""")
-                print("BROWSER QA safe diagnostics: native_ws=" + str(len(entries))
-                      + " observed_ws_paths=" + str(observed_socket_paths[:12])
-                      + " api_responses=" + str(api_responses[-12:])
-                      + " page_errors=" + str(len(page_errors))
-                      + " status_signals=" + str(status_signals)
-                      + " token_present=" + str(token_present), flush=True)
-                try:
-                    await page.screenshot(path=str(ARTIFACTS / "classroom_failed_initial.png"), full_page=True)
-                except Exception:
-                    pass
                 raise RuntimeError("No Classroom scene in actual browser sockets; states=" + str(state_summary))
             if first["resume"]:
                 raise RuntimeError("Fresh Web lesson incorrectly requested resume")
@@ -254,6 +263,18 @@ async def run():
         if created and token:
             try:
                 code, result = http("DELETE", "/auth/me", token=token)
+                if code == 401 and expected_id:
+                    # Refresh only the disposable learner's expired credentials.
+                    login_code, fresh = http("POST", "/api/v1/auth/login",
+                                             {"email": person["email"], "password": password})
+                    if login_code != 200 or not fresh.get("access_token"):
+                        raise RuntimeError("Synthetic cleanup reauthentication failed")
+                    fresh_token = fresh["access_token"]
+                    identity_code, identity = http(
+                        "GET", "/api/v1/auth/me", token=fresh_token)
+                    if identity_code != 200 or str(identity.get("id")) != expected_id:
+                        raise RuntimeError("Synthetic cleanup identity mismatch")
+                    code, result = http("DELETE", "/auth/me", token=fresh_token)
                 if code == 200 and result.get("deleted") is True:
                     print("BROWSER QA cleanup: synthetic learner deleted")
                 else:
