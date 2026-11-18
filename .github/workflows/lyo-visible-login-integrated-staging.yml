@@ -29,6 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           BASE=0c3d53f41e453b893c4a9dfff61830d9baa3976a
           git merge-base --is-ancestor "$BASE" HEAD
           expected="$(printf '%s\n' '.github/workflows/lyo-visible-login-integrated-staging.yml' 'scripts/qa/browser_classroom_staging.py')"
