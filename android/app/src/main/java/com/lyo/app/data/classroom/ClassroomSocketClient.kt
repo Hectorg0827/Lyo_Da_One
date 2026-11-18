@@ -120,6 +120,15 @@ object ClassroomSocketClient {
     fun send(envelope: UserActionEnvelope): Boolean =
         socket?.send(ApiClient.gson.toJson(envelope)) == true
 
+    /** Separate ungraded bridge input: NEVER encoded as UserActionEnvelope. */
+    fun sendBridgeReply(sessionId: String, generation: Int, text: String): Boolean =
+        socket?.send(ApiClient.gson.toJson(mapOf(
+            "event_type" to "bridge_reply",
+            "session_id" to sessionId,
+            "generation" to generation,
+            "text" to text,
+        ))) == true
+
     @Synchronized
     private fun open() {
         if (!shouldRun || socket != null) return
@@ -147,6 +156,11 @@ object ClassroomSocketClient {
             .addQueryParameter("language", "auto")
             .addQueryParameter("reduced_motion", params.reducedMotion.toString())
             .addQueryParameter("token", token)
+        // Only staging APKs negotiate the optional bridge. Backend also
+        // requires an explicit staging feature flag; production cannot use it.
+        if (BuildConfig.API_ENVIRONMENT == "staging") {
+            urlBuilder.addQueryParameter("continuous_teaching", "1")
+        }
         params.courseId?.let { urlBuilder.addQueryParameter("course_id", it) }
         params.reviewConceptId?.let { urlBuilder.addQueryParameter("review_concept_id", it) }
         params.objective?.let { urlBuilder.addQueryParameter("objective", it) }
