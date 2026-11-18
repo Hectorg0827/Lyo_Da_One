@@ -74,6 +74,9 @@ async def benchmark_ws(sid, token):
         "handoff_correct": False,
         "bridge_reply_ungraded": False,
         "first_scene_kind": None,
+        "first_scene_component_count": None,
+        "transition_scene_component_count": None,
+        "transition_bridge_ai_reply_ms": None,
         "first_scene_id_seen": False,
         "transport_errors": 0,
         "teacher_text_origin": "local immediate ungraded bridge",
@@ -85,6 +88,7 @@ async def benchmark_ws(sid, token):
     start_bridged = False
     transition_bridged = False
     first_ai_sent = None
+    transition_ai_sent = None
     sent_continue = False
     async with websockets.connect(
         session_url(sid, token), open_timeout=20, close_timeout=5,
@@ -134,11 +138,14 @@ async def benchmark_ws(sid, token):
                     metrics["transition_bridge_text_ms"] = round((now-transition_at)*1000)
                     transition_bridged = True
                     if info.get("prompt") is True:
+                        transition_ai_sent = time.monotonic()
                         await socket.send(json.dumps({
                             "event_type": "bridge_reply", "session_id": sid,
                             "generation": generation,
                             "text": "I want to see how this pattern works with thirds.",
                         }))
+                elif phase == "transition" and info.get("ai_generated") is True and transition_ai_sent is not None:
+                    metrics["transition_bridge_ai_reply_ms"] = round((now-transition_ai_sent)*1000)
             if kind in {"error", "ERROR"}:
                 metrics["transport_errors"] += 1
             scene = info.get("scene") or event.get("scene") or {}
@@ -151,20 +158,25 @@ async def benchmark_ws(sid, token):
                     metrics["first_scene_frame_ms"] = round((now-start)*1000)
                     metrics["first_scene_id_seen"] = True
                     metrics["first_scene_kind"] = kind
-                    if not sent_continue:
-                        sent_continue = True
-                        transition_at = time.monotonic()
-                        await socket.send(json.dumps({
-                            "event_type": "user_action", "session_id": sid,
-                            "action_intent": "continue",
-                        }))
+                    metrics["first_scene_component_count"] = len(scene.get("components") or [])
                 elif transition_at is not None and scene_id != initial_sid:
                     metrics["transition_next_scene_ms"] = round((now-transition_at)*1000)
+                    metrics["transition_scene_component_count"] = len(scene.get("components") or [])
                     metrics["handoff_correct"] = transition_bridged
                     break
             if kind in {"scene_complete", "scene_end"} and initial_sid is not None:
                 if metrics["scene_complete_ms"] is None:
                     metrics["scene_complete_ms"] = round((now-start)*1000)
+                    if not sent_continue:
+                        sent_continue = True
+                        # Do not race Continue ahead of completion of the
+                        # prior authoritative scene; simulate the user moving on.
+                        await asyncio.sleep(0.2)
+                        transition_at = time.monotonic()
+                        await socket.send(json.dumps({
+                            "event_type": "user_action", "session_id": sid,
+                            "action_intent": "continue",
+                        }))
     return metrics
 
 
