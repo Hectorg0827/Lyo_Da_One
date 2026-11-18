@@ -316,7 +316,7 @@ fun ClassroomScreen(
                             .align(Alignment.TopCenter)
                             .padding(8.dp),
                     )
-                } else if (missionVisible && engine.bridgeText != null) {
+                } else if (missionVisible && engine.bridgeText != null && !missionEngaged) {
                     ContinuousTeachingCard(
                         text = engine.bridgeText.orEmpty(),
                         phase = engine.bridgePhase,
