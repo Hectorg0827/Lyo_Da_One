@@ -126,7 +126,7 @@ function ClassroomStage() {
 
   const {
     status, board, boardHistory, recordConcepts, viewingBoard, caption, activeSpeaker, prompt,
-    transcript, lyoState, waitingForScene, isNarrating, canContinue, continueLabel,
+    transcript, bridge, replyToBridge, lyoState, waitingForScene, isNarrating, canContinue, continueLabel,
     progressCurrent, progressTotal, progressStage, error, notice, stallPhase, resumable, soundOn, voiceOn,
     speechRate, languageCode,
     connect, disconnect, answerPrompt, answerQuiz, answerTransfer, skipQuestion, unskipQuestion,
@@ -142,6 +142,8 @@ function ClassroomStage() {
   );
 
   const [question, setQuestion] = useState('');
+  const [bridgeDraft, setBridgeDraft] = useState('');
+  useEffect(() => { setBridgeDraft(''); }, [bridge?.generation, bridge?.text]);
   const [notebookOpen, setNotebookOpen] = useState(false);
   // The notebook holds two things a learner asks for after a lesson: what
   // was said, and what it proved. They are different questions.
@@ -938,6 +940,51 @@ function ClassroomStage() {
                   </button>
                 </div>
               </div>
+            )}
+
+            {bridge && waitingForScene && status !== 'error' && status !== 'ended' && !prompt && (
+              <section
+                aria-label="Live teacher conversation before the next lesson step"
+                className="space-y-3 rounded-2xl border border-lyo-400/35 bg-lyo-500/10 p-4"
+              >
+                <p className="text-xs font-bold uppercase tracking-wide text-lyo-200">
+                  {bridge.phase === 'startup' ? 'Start learning now' : 'Connect the ideas'}
+                  <span className="ml-2 font-normal normal-case text-white/65">Conversation · not graded</span>
+                </p>
+                <p className="text-sm font-medium leading-relaxed text-white" aria-live="polite">
+                  <span className="font-bold text-lyo-200">{instructor.name}: </span>
+                  {bridge.text}
+                </p>
+                {bridge.prompt ? (
+                  <form
+                    className="flex flex-wrap gap-2"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      if (replyToBridge(bridgeDraft)) setBridgeDraft('');
+                    }}
+                  >
+                    <label htmlFor="classroom-bridge-reply" className="sr-only">Your ungraded reply to the teacher</label>
+                    <input
+                      id="classroom-bridge-reply"
+                      type="text"
+                      maxLength={300}
+                      value={bridgeDraft}
+                      onChange={(event) => setBridgeDraft(event.target.value)}
+                      placeholder="Share your thinking…"
+                      className="min-w-0 flex-1 rounded-xl border border-white/20 bg-black/20 px-3 py-2 text-sm text-white placeholder:text-white/50"
+                    />
+                    <button
+                      type="submit"
+                      disabled={!bridgeDraft.trim()}
+                      className="min-h-11 rounded-xl bg-lyo-400 px-4 text-sm font-bold text-black disabled:opacity-50"
+                    >
+                      Reply
+                    </button>
+                  </form>
+                ) : (
+                  <p className="text-xs text-white/60" role="status">Connecting your thought to the lesson…</p>
+                )}
+              </section>
             )}
 
             {shownBoard.length === 0 && !prompt && status !== 'error' && status !== 'ended' && (
