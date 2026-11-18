@@ -996,6 +996,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
   // A real scene closes its conversational bridge. Late AI replies must not
   // resurrect a question or interrupt authoritative grading or narration.
   let bridgeClosed = false;
+  let bridgeGenerationFloor = 0;
+  let lastBridgeGeneration = 0;
+  let realSceneObserved = false;
   function removeRepeatedFeedback(text: string): string {
     if (!recentAnswerFeedback) return text;
     const feedback = recentAnswerFeedback;
@@ -1180,9 +1183,12 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         const generation = Number(data.generation);
         if (!text || text.length > 320 || !Number.isInteger(generation) || generation < 1
           || (data.phase !== 'startup' && data.phase !== 'transition')) break;
+        if (generation <= bridgeGenerationFloor
+          || (realSceneObserved && data.phase === 'startup')) break;
         const existing = get().bridge;
         if (existing && (generation < existing.generation
           || (generation === existing.generation && existing.text === text))) break;
+        lastBridgeGeneration = Math.max(lastBridgeGeneration, generation);
         set({
           bridge: {
             generation, phase: data.phase, text, prompt: data.prompt === true,
@@ -1232,6 +1238,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       case 'SCENE_START':
       case 'scene_stream': {
         bridgeClosed = true;
+        realSceneObserved = true;
+        bridgeGenerationFloor = Math.max(bridgeGenerationFloor, lastBridgeGeneration);
         const start = classroomSceneStart(msg);
         set({ recordConcepts: conceptsFromClassScene(start?.scene) });
         if ((start?.scene as { metadata?: Record<string, unknown> } | undefined)?.metadata?.course_complete === true) {
@@ -1536,6 +1544,9 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       pendingErase = false;
       lastConnection = connection;
       bridgeClosed = false;
+      bridgeGenerationFloor = 0;
+      lastBridgeGeneration = 0;
+      realSceneObserved = false;
 
       // Which session this is. An explicitly-requested session id still wins
       // (a caller that already knows its session), otherwise the course
@@ -1838,7 +1849,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       learnerTakesFloor();
       // Only a new explicit Continue can start a new transient bridge.
       // The director still owns the entire next scene and its grading.
-      if (actionIntent === 'continue') bridgeClosed = false;
+      if (actionIntent === 'continue') {
+        bridgeGenerationFloor = Math.max(bridgeGenerationFloor, lastBridgeGeneration);
+        bridgeClosed = false;
+      }
       // Leave the Continue button in place if the action never left the
       // browser — clearing canContinue would strip the only way forward.
       if (!sendAction(actionIntent, get().nextActionComponentId || 'web_continue')) {
