@@ -378,7 +378,12 @@ class ClassroomEngine(
                 }
             }
             is ClassroomServerEvent.ComponentRenderEvent -> {
+                // Recovery and legacy scenes can begin with component_render
+                // rather than scene_start. Never let the ungraded teacher
+                // keep talking over the real lesson in that valid sequence.
+                val bridgeWasSpeaking = bridgeText != null
                 endBridge()
+                if (bridgeWasSpeaking) stopNarration()
                 status = "live"
                 errorMessage = null
                 clearWait()
