@@ -5,9 +5,11 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -163,4 +165,23 @@ class ClassroomMissionUiTest {
         compose.onNodeWithText("Enter live lesson").performClick()
         compose.runOnIdle { assertTrue(interacted && entered) }
     }
+    @Test
+    fun continuousTeacherTransitionAcceptsUngradedTypedReply() {
+        var reply: String? = null
+        compose.setContent {
+            ContinuousTeachingCard(
+                text = "What pattern did you notice?",
+                phase = "transition",
+                prompt = true,
+                spanish = false,
+                onReply = { value -> reply = value; true },
+            )
+        }
+        compose.onNodeWithText("CONNECTING IDEAS · NOT GRADED").assertExists()
+        compose.onNodeWithText("What pattern did you notice?").assertExists()
+        compose.onNodeWithText("Share your thinking").performTextInput("I see a pattern")
+        compose.onNodeWithText("Reply").performClick()
+        compose.runOnIdle { assertEquals("I see a pattern", reply) }
+    }
+
 }

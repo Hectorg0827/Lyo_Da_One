@@ -316,6 +316,15 @@ fun ClassroomScreen(
                             .align(Alignment.TopCenter)
                             .padding(8.dp),
                     )
+                } else if (missionVisible && engine.bridgeText != null && !missionEngaged) {
+                    ContinuousTeachingCard(
+                        text = engine.bridgeText.orEmpty(),
+                        phase = engine.bridgePhase,
+                        prompt = engine.bridgePrompt,
+                        spanish = isSpanishMission(topic, java.util.Locale.getDefault().toLanguageTag()),
+                        onReply = { answer -> engine.replyToBridge(answer) },
+                        modifier = Modifier.align(Alignment.Center).padding(16.dp),
+                    )
                 } else if (missionVisible) {
                     ClassroomMission(
                         topic = topic,
@@ -345,6 +354,20 @@ fun ClassroomScreen(
                         },
                     )
                 }
+            }
+
+            // Keep the prior board visible during generation, with a brief
+            // conversational bridge below it. Neither answer nor explanation
+            // changes the authoritative grading state.
+            if (!missionVisible && engine.isAwaitingStep && engine.bridgeText != null) {
+                ContinuousTeachingCard(
+                    text = engine.bridgeText.orEmpty(),
+                    phase = engine.bridgePhase,
+                    prompt = engine.bridgePrompt,
+                    spanish = isSpanishMission(topic, java.util.Locale.getDefault().toLanguageTag()),
+                    onReply = { answer -> engine.replyToBridge(answer) },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
             }
 
             // The step never arrived. The class says so, says it is not the

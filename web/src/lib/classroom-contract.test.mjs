@@ -51,6 +51,16 @@ test('classroom URL preserves learner controls and course context', () => {
 });
 
 
+test('ungraded continuous teacher is negotiated only on staging WebSocket URLs', () => {
+  const args = { topic: 'Fractions', sessionId: 'secure-test-session' };
+  const staging = new URL(buildClassroomWsUrl('https://lyojourneystagingbackend-staging.up.railway.app', args, 'token'));
+  const production = new URL(buildClassroomWsUrl('https://api.lyoai.app', args, 'token'));
+  assert.equal(staging.searchParams.get('continuous_teaching'), '1');
+  assert.equal(staging.searchParams.get('bridge_language'), 'en-US');
+  assert.equal(production.searchParams.has('continuous_teaching'), false);
+  assert.equal(staging.searchParams.get('session_id'), 'secure-test-session');
+});
+
 test('Classroom resume flag is explicit and absent for new sessions', () => {
   const base = 'https://lyojourneystagingbackend-staging.up.railway.app';
   const fresh = new URL(buildClassroomWsUrl(base, {

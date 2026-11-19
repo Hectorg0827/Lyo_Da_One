@@ -3,7 +3,7 @@ name: Classroom Mission Android Emulator QA (staging only)
 # QA branch only. No deployment, production, releases or real learner writes.
 on:
   push:
-    branches: [qa/lyo-classroom-retention-phase1-20261115, qa/lyo-classroom-integrated-staging-20261115]
+    branches: [qa/lyo-classroom-retention-phase1-20261115, qa/lyo-classroom-integrated-staging-20261115, feat/lyo-continuous-teaching-staging-20261118]
     paths:
       - 'android/app/src/main/java/com/lyo/app/ui/classroom/**'
       - 'android/app/src/main/java/com/lyo/app/ui/screens/classroom/**'
@@ -24,7 +24,7 @@ concurrency:
 jobs:
   classroom-mission-ui:
     name: Compose mission and handoff interaction checks (emulator, not phone signoff)
-    if: github.ref == 'refs/heads/qa/lyo-classroom-retention-phase1-20261115' || github.ref == 'refs/heads/qa/lyo-classroom-integrated-staging-20261115'
+    if: github.ref == 'refs/heads/qa/lyo-classroom-retention-phase1-20261115' || github.ref == 'refs/heads/qa/lyo-classroom-integrated-staging-20261115' || github.ref == 'refs/heads/feat/lyo-continuous-teaching-staging-20261118'
     runs-on: ubuntu-latest
     timeout-minutes: 50
     env:

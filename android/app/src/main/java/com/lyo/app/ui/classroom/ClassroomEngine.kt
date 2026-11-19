@@ -1,6 +1,7 @@
 package com.lyo.app.ui.classroom
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -226,6 +227,32 @@ class ClassroomEngine(
     var learnerRecordFailed by mutableStateOf(false); private set
     var recordConcepts by mutableStateOf<List<String>>(emptyList()); private set
 
+    /** Ephemeral curiosity conversation, never lesson evidence or mastery. */
+    var bridgeText by mutableStateOf<String?>(null); private set
+    var bridgeGeneration by mutableIntStateOf(0); private set
+    var bridgePrompt by mutableStateOf(false); private set
+    var bridgePhase by mutableStateOf("startup"); private set
+    private var bridgeClosed = false
+    private var bridgeGenerationFloor = 0
+    private var realSceneObserved = false
+
+    fun replyToBridge(raw: String): Boolean {
+        val answer = raw.trim()
+        if (bridgeClosed || !isAwaitingStep || bridgeText == null || !bridgePrompt ||
+            answer.isEmpty() || answer.length > 300
+        ) return false
+        if (!ClassroomSocketClient.sendBridgeReply(sessionId, bridgeGeneration, answer)) return false
+        bridgePrompt = false
+        pushTranscript("You", answer)
+        return true
+    }
+
+    private fun endBridge() {
+        bridgeClosed = true
+        bridgeText = null
+        bridgePrompt = false
+    }
+
     private fun pushTranscript(speaker: String, text: String) {
         if (text.isBlank()) return
         transcript += TranscriptLine(UUID.randomUUID().toString(), speaker, text)
@@ -324,7 +351,39 @@ class ClassroomEngine(
 
     private fun handleServerEvent(event: ClassroomServerEvent) {
         when (event) {
+            is ClassroomServerEvent.BridgeMessageEvent -> {
+                if (bridgeClosed || !isAwaitingStep || status == "error" || hasActiveCheckpoint ||
+                    event.generation <= bridgeGenerationFloor ||
+                    (realSceneObserved && event.phase == "startup") ||
+                    event.generation < bridgeGeneration ||
+                    (event.generation == bridgeGeneration && bridgeText == event.text)
+                ) return
+                bridgeGeneration = event.generation
+                bridgePhase = event.phase
+                bridgeText = event.text
+                bridgePrompt = event.prompt
+                pushTranscript("Teacher", event.text)
+                // Same teacher voice player as the director, never a second
+                // audio engine. The authoritative scene preempts this aside.
+                if (isVoiceEnabled && !isPaused && speakingTurn == null &&
+                    playerJob?.isActive != true && voicePlayer != null
+                ) {
+                    val utteranceId = ++speechGeneration
+                    activeSpeaker = "Teacher"
+                    voicePlayer.play(event.text, voiceLanguage,
+                        ClassroomCast.speaker("Teacher", topic).id
+                    ) {
+                        if (utteranceId == speechGeneration) activeSpeaker = null
+                    }
+                }
+            }
             is ClassroomServerEvent.ComponentRenderEvent -> {
+                // Recovery and legacy scenes can begin with component_render
+                // rather than scene_start. Never let the ungraded teacher
+                // keep talking over the real lesson in that valid sequence.
+                val bridgeWasSpeaking = bridgeText != null
+                endBridge()
+                if (bridgeWasSpeaking) stopNarration()
                 status = "live"
                 errorMessage = null
                 clearWait()
@@ -332,6 +391,9 @@ class ClassroomEngine(
             }
 
             is ClassroomServerEvent.SceneStartEvent -> {
+                realSceneObserved = true
+                bridgeGenerationFloor = maxOf(bridgeGenerationFloor, bridgeGeneration)
+                endBridge()
                 stopNarration()
                 processedComponentIds.clear()
                 hasActiveCheckpoint = false
@@ -822,12 +884,21 @@ class ClassroomEngine(
     fun continueLesson() {
         stopNarration()
         flushActivities()
+        // Only a real new Continue action may open a transition bridge.
+        if (nextActionIntent == "continue") {
+            bridgeGenerationFloor = maxOf(bridgeGenerationFloor, bridgeGeneration)
+            bridgeClosed = false
+            bridgeText = null
+            bridgePrompt = false
+        }
         val componentId = surface.dataModel.resolvePointer("/nextActionComponentId")?.takeIf { it.isJsonPrimitive }?.asString ?: "android_continue"
         if (ClassroomSocketClient.send(
                 ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId),
             )
         ) {
             beginWait()
+        } else {
+            endBridge()
         }
     }
 
