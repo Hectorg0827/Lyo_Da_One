@@ -70,7 +70,7 @@ class ClassroomVoicePlayer(context: Context) {
         done?.invoke()
     }
 
-    fun play(text: String, language: String, speakerId: String = "teacher_1", onComplete: (() -> Unit)? = null) {
+    fun play(text: String, language: String, speakerId: String = "teacher_1", allowDeviceFallback: Boolean = true, onComplete: (() -> Unit)? = null) {
         stop()
         if (!enabled || text.isBlank()) { onComplete?.invoke(); return }
         completion = onComplete
@@ -87,7 +87,14 @@ class ClassroomVoicePlayer(context: Context) {
                 // A learner action or new scene owns the floor now.
             } catch (_: Exception) {
                 if (requestedGeneration == generation && enabled) {
-                    playLocalizedDeviceFallback(text, language)
+                    if (allowDeviceFallback) {
+                        playLocalizedDeviceFallback(text, language)
+                    } else {
+                        // During the ungraded transition bridge, do not switch
+                        // to a different robotic system voice mid-lesson.
+                        // Keep the visible text and let the real scene speak.
+                        finishTurn(requestedGeneration)
+                    }
                 }
             }
         }
