@@ -58,6 +58,30 @@ jobs:
           s = s.replace(scene_marker, scene_marker +
               '\n                    if not resume and not seen_bridge:\n'
               '                        raise RuntimeError("No ungraded bridge preceded first scene")')
+          return_marker = '        return scene_id, round((time.monotonic() - start) * 1000)'
+          assert s.count(return_marker) == 1
+          transition_check = (
+              '        if resume:\n'
+              '            transition_start = time.monotonic()\n'
+              '            await ws.send(json.dumps({"event_type": "user_action",\n'
+              '                "action_intent": "continue", "session_id": session_id,\n'
+              '                "component_id": "qa_preview_continue"}))\n'
+              '            while time.monotonic() - transition_start < 8:\n'
+              '                remaining = 8 - (time.monotonic() - transition_start)\n'
+              '                raw = await asyncio.wait_for(ws.recv(), timeout=max(0.1, remaining))\n'
+              '                message = json.loads(raw)\n'
+              '                data = message.get("data") or {}\n'
+              '                if (str(data.get("event_type") or message.get("event_type") or "").lower()\n'
+              '                        == "bridge_message" and data.get("phase") == "transition"):\n'
+              '                    if data.get("ungraded") is not True:\n'
+              '                        raise RuntimeError("Transition reply was graded")\n'
+              '                    print("PASS: ungraded transition bridge, ms=" +\n'
+              '                          str(round((time.monotonic()-transition_start)*1000)), flush=True)\n'
+              '                    break\n'
+              '            else:\n'
+              '                raise RuntimeError("No transition bridge within eight seconds")\n'
+          )
+          s = s.replace(return_marker, transition_check + return_marker)
           p.write_text(s)
           compile(s, str(p), 'exec')
           print('PASS: ephemeral QA runner targets dedicated preview backend only')
@@ -87,8 +111,21 @@ jobs:
           assert b.count('https://lyoonestagingweb-staging.up.railway.app') == 1
           api.write_text(a.replace('https://lyojourneystagingbackend-staging.up.railway.app',
                   'https://lyo-continuousteaching-preview-backend-staging.up.railway.app'))
-          web.write_text(b.replace('https://lyoonestagingweb-staging.up.railway.app',
-                  'https://lyo-continuousteaching-preview-web-staging.up.railway.app'))
+          b = b.replace('https://lyoonestagingweb-staging.up.railway.app',
+                  'https://lyo-continuousteaching-preview-web-staging.up.railway.app')
+          ui_anchor = '            await page.get_by_role("button", name="Leave classroom").wait_for(timeout=25000)'
+          assert b.count(ui_anchor) == 1
+          ui_probe = (
+              '            bridge = page.locator(\\'section[aria-label="Live teacher conversation before the next lesson step"]\\')\n'
+              '            await bridge.wait_for(timeout=12000)\n'
+              '            print("PASS: real preview Web rendered instant teacher conversation", flush=True)\n'
+              '            await page.get_by_label("Your ungraded reply to the teacher").fill("Sharing equally")\n'
+              '            await page.get_by_role("button", name="Reply", exact=True).click()\n'
+              '            print("PASS: learner submitted ungraded Web bridge reply", flush=True)\n'
+          )
+          b = b.replace(ui_anchor, ui_probe + ui_anchor)
+          web.write_text(b)
+          compile(b, str(web), 'exec')
           print('PASS: Chromium target pinned to dedicated previews')
           PY
       - run: python -u scripts/qa/browser_classroom_staging.py
