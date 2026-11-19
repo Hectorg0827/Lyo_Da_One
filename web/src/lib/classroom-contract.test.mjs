@@ -43,6 +43,31 @@ test('classroom URL preserves learner controls and course context', () => {
   assert.equal(url.searchParams.get('token'), 'token-1');
 });
 
+test('production Continuous Teaching canary requires explicit canonical build flag', () => {
+  const previous = process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION;
+  const args = { topic: 'Math', sessionId: 'canary-1' };
+  try {
+    delete process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION;
+    const disabled = new URL(buildClassroomWsUrl('https://api.lyoai.app', args, 'token'));
+    assert.equal(disabled.searchParams.has('continuous_teaching'), false);
+    const staging = new URL(buildClassroomWsUrl('https://lyo-continuousteaching-preview-backend-staging.up.railway.app', args, 'token'));
+    assert.equal(staging.searchParams.get('continuous_teaching'), '1');
+    process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION = '1';
+    const enabled = new URL(buildClassroomWsUrl('https://api.lyoai.app', args, 'token'));
+    assert.equal(enabled.searchParams.get('continuous_teaching'), '1');
+    const other = new URL(buildClassroomWsUrl('https://api-preview.lyoai.app', args, 'token'));
+    assert.equal(other.searchParams.has('continuous_teaching'), false);
+    process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION = '0';
+    const revoked = new URL(buildClassroomWsUrl('https://api.lyoai.app', args, 'token'));
+    assert.equal(revoked.searchParams.has('continuous_teaching'), false);
+    const resumed = new URL(buildClassroomWsUrl('https://api.lyoai.app', { ...args, resume: true }, 'token'));
+    assert.equal(resumed.searchParams.get('resume'), '1');
+  } finally {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION;
+    else process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION = previous;
+  }
+});
+
 test('invalid modes fail safely to solo teacher mode', () => {
   assert.equal(normalizeClassroomMode('party'), 'solo');
 });
