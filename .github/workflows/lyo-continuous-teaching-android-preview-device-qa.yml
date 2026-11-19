@@ -8,6 +8,11 @@ on:
     paths:
       - '.github/workflows/lyo-continuous-teaching-android-preview-device-qa.yml'
       - 'android/**'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'web/**'
+      - '.github/workflows/lyo-continuous-teaching-android-preview-device-qa.yml'
   workflow_dispatch:
 
 permissions:
