@@ -1,0 +1,85 @@
+name: LYO Continuous Teaching isolated preview acceptance
+
+on:
+  push:
+    branches: [qa/lyo-continuous-preview-acceptance-20261118]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lyo-continuous-preview-acceptance
+  cancel-in-progress: false
+
+jobs:
+  preview-auth-classroom:
+    name: Synthetic preview Classroom, bridge and recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Scope QA to existing dedicated preview, never regular staging or production
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/qa/live_classroom_auth.py')
+          s = p.read_text()
+          old = 'https://lyojourneystagingbackend-staging.up.railway.app'
+          new = 'https://lyo-continuousteaching-preview-backend-staging.up.railway.app'
+          assert s.count(old) == 1
+          s = s.replace(old, new)
+          s = s.replace('    if resume:\n        params["resume"]', '    params["continuous_teaching"] = "1"\n    if resume:\n        params["resume"]')
+          s = s.replace('                if kind == "ERROR":',
+              '''                if kind == "BRIDGE_MESSAGE" and not resume:
+                      if nested.get("ungraded") is not True:
+                          raise RuntimeError("Bridge reply was graded")
+                      print("PASS: ungraded bridge arrived before full scene, ms=" +
+                            str(round((time.monotonic()-start)*1000)), flush=True)
+                  if kind == "ERROR":''')
+          p.write_text(s)
+          compile(s, str(p), 'exec')
+          print('PASS: ephemeral QA runner targets dedicated preview backend only')
+          PY
+      - name: Real authenticated synthetic learner, Classroom and saved-scene recovery
+        run: python -u scripts/qa/live_classroom_auth.py
+
+  preview-web-chromium:
+    name: Preview Web Chromium auth and scene recovery
+    needs: preview-auth-classroom
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright/python:v1.56.0-noble
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+      - name: Scope Web and API to the already-deployed preview pair
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          api = Path('scripts/qa/live_classroom_auth.py')
+          web = Path('scripts/qa/browser_classroom_staging.py')
+          a = api.read_text()
+          b = web.read_text()
+          assert a.count('https://lyojourneystagingbackend-staging.up.railway.app') == 1
+          assert b.count('https://lyoonestagingweb-staging.up.railway.app') == 1
+          api.write_text(a.replace('https://lyojourneystagingbackend-staging.up.railway.app',
+                  'https://lyo-continuousteaching-preview-backend-staging.up.railway.app'))
+          web.write_text(b.replace('https://lyoonestagingweb-staging.up.railway.app',
+                  'https://lyo-continuousteaching-preview-web-staging.up.railway.app'))
+          print('PASS: Chromium target pinned to dedicated previews')
+          PY
+      - run: python -u scripts/qa/browser_classroom_staging.py
+      - name: Retain sanitized staging QA screenshots for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: continuous-teaching-preview-synthetic-screenshots
+          path: artifacts/browser-classroom-staging/*.png
+          if-no-files-found: ignore
+          retention-days: 7
