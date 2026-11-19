@@ -242,6 +242,19 @@ fun ClassroomScreen(
                 }
             }
 
+            // Conversation while the canonical teacher scene generates.
+            // It is ungraded and disappears as soon as a real scene arrives.
+            if (engine.bridgeText != null && engine.status != "error") {
+                ContinuousTeachingCard(
+                    text = engine.bridgeText.orEmpty(),
+                    phase = engine.bridgePhase,
+                    prompt = engine.bridgePrompt,
+                    spanish = java.util.Locale.getDefault().language == "es",
+                    onReply = { answer -> engine.replyToBridge(answer) },
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+            }
+
             // The step never arrived. The class says so, says it is not the
             // learner's fault, and gives them two things that actually move
             // it — asking again, and leaving the stuck session behind.
