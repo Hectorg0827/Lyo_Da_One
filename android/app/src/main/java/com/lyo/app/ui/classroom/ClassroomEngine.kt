@@ -1,6 +1,7 @@
 package com.lyo.app.ui.classroom
 
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -214,6 +215,32 @@ class ClassroomEngine(
     var learnerRecordFailed by mutableStateOf(false); private set
     var recordConcepts by mutableStateOf<List<String>>(emptyList()); private set
 
+    /** Ephemeral ungraded bridge, never lesson evidence or mastery. */
+    var bridgeText by mutableStateOf<String?>(null); private set
+    var bridgeGeneration by mutableIntStateOf(0); private set
+    var bridgePrompt by mutableStateOf(false); private set
+    var bridgePhase by mutableStateOf("startup"); private set
+    private var bridgeClosed = false
+    private var bridgeGenerationFloor = 0
+    private var realSceneObserved = false
+
+    fun replyToBridge(raw: String): Boolean {
+        val answer = raw.trim()
+        if (bridgeClosed || !awaitingStep || bridgeText == null || !bridgePrompt ||
+            answer.isEmpty() || answer.length > 300
+        ) return false
+        if (!ClassroomSocketClient.sendBridgeReply(sessionId, bridgeGeneration, answer)) return false
+        bridgePrompt = false
+        pushTranscript("You", answer)
+        return true
+    }
+
+    private fun endBridge() {
+        bridgeClosed = true
+        bridgeText = null
+        bridgePrompt = false
+    }
+
     private fun pushTranscript(speaker: String, text: String) {
         if (text.isBlank()) return
         transcript += TranscriptLine(UUID.randomUUID().toString(), speaker, text)
@@ -299,13 +326,41 @@ class ClassroomEngine(
 
     private fun handleServerEvent(event: ClassroomServerEvent) {
         when (event) {
+            is ClassroomServerEvent.BridgeMessageEvent -> {
+                if (bridgeClosed || !awaitingStep || status == "error" || hasActiveCheckpoint ||
+                    event.generation <= bridgeGenerationFloor ||
+                    (realSceneObserved && event.phase == "startup") ||
+                    event.generation < bridgeGeneration ||
+                    (event.generation == bridgeGeneration && bridgeText == event.text)
+                ) return
+                bridgeGeneration = event.generation
+                bridgePhase = event.phase
+                bridgeText = event.text
+                bridgePrompt = event.prompt
+                pushTranscript("Teacher", event.text)
+                // Reuse the single established voice player; no competing audio.
+                if (isVoiceEnabled && !isPaused && playerJob?.isActive != true &&
+                    voicePlayer != null
+                ) {
+                    voicePlayer.play(event.text, voiceLanguage, ClassroomCast.speaker("Teacher", topic).id, allowDeviceFallback = false)
+                }
+            }
+
             is ClassroomServerEvent.ComponentRenderEvent -> {
+                val bridgeWasSpeaking = bridgeText != null
+                endBridge()
+                realSceneObserved = true
+                bridgeGenerationFloor = maxOf(bridgeGenerationFloor, bridgeGeneration)
+                if (bridgeWasSpeaking) stopNarration()
                 status = "live"
                 clearWait()
                 processComponent(event.component)
             }
 
             is ClassroomServerEvent.SceneStartEvent -> {
+                realSceneObserved = true
+                bridgeGenerationFloor = maxOf(bridgeGenerationFloor, bridgeGeneration)
+                endBridge()
                 stopNarration()
                 processedComponentIds.clear()
                 hasActiveCheckpoint = false
@@ -701,12 +756,20 @@ class ClassroomEngine(
     fun continueLesson() {
         stopNarration()
         flushActivities()
+        if (nextActionIntent == "continue") {
+            bridgeGenerationFloor = maxOf(bridgeGenerationFloor, bridgeGeneration)
+            bridgeClosed = false
+            bridgeText = null
+            bridgePrompt = false
+        }
         val componentId = surface.dataModel.resolvePointer("/nextActionComponentId")?.takeIf { it.isJsonPrimitive }?.asString ?: "android_continue"
         if (ClassroomSocketClient.send(
                 ClassroomBridge.continueLessonAction(sessionId, nextActionIntent, componentId),
             )
         ) {
             beginWait()
+        } else {
+            endBridge()
         }
     }
 
