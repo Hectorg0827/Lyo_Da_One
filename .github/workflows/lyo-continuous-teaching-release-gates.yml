@@ -3,6 +3,11 @@ name: Continuous Teaching Web/Android release compilation (no publish)
 on:
   push:
     branches: [rc/lyo-continuous-teaching-focused-clients-20261119]
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'web/**'
+      - '.github/workflows/lyo-continuous-teaching-release-gates.yml'
   workflow_dispatch:
 
 permissions:
