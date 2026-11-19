@@ -342,7 +342,7 @@ class ClassroomEngine(
                 if (isVoiceEnabled && !isPaused && playerJob?.isActive != true &&
                     voicePlayer != null
                 ) {
-                    voicePlayer.play(event.text, voiceLanguage, ClassroomCast.speaker("Teacher", topic).id)
+                    voicePlayer.play(event.text, voiceLanguage, ClassroomCast.speaker("Teacher", topic).id, allowDeviceFallback = false)
                 }
             }
 
