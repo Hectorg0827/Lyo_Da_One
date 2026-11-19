@@ -34,13 +34,30 @@ jobs:
           assert s.count(old) == 1
           s = s.replace(old, new)
           s = s.replace('    if resume:\n        params["resume"]', '    params["continuous_teaching"] = "1"\n    if resume:\n        params["resume"]')
-          s = s.replace('                if kind == "ERROR":',
-              '''                if kind == "BRIDGE_MESSAGE" and not resume:
-                      if nested.get("ungraded") is not True:
-                          raise RuntimeError("Bridge reply was graded")
-                      print("PASS: ungraded bridge arrived before full scene, ms=" +
-                            str(round((time.monotonic()-start)*1000)), flush=True)
-                  if kind == "ERROR":''')
+          s = s.replace(
+              '        async def wait():\n            async for raw in ws:',
+              '        async def wait():\n            seen_bridge = False\n            async for raw in ws:')
+          marker = '                if kind == "ERROR":'
+          bridge_check = (
+              '                if kind == "BRIDGE_MESSAGE" and not resume:\n'
+              '                    if nested.get("ungraded") is not True:\n'
+              '                        raise RuntimeError("Bridge reply was graded")\n'
+              '                    if not seen_bridge:\n'
+              '                        seen_bridge = True\n'
+              '                        print("PASS: bridge before scene, ms=" +\n'
+              '                              str(round((time.monotonic()-start)*1000)), flush=True)\n'
+              '                        if nested.get("prompt") is True and isinstance(nested.get("generation"), int):\n'
+              '                            await ws.send(json.dumps({"event_type": "bridge_reply",\n'
+              '                                "session_id": session_id, "generation": nested["generation"],\n'
+              '                                "text": "I think fractions can help us share equally."}))\n'
+          )
+          assert s.count(marker) == 1
+          s = s.replace(marker, bridge_check + marker)
+          scene_marker = '                if isinstance(scene, dict) and scene.get("scene_id"):'
+          assert s.count(scene_marker) == 1
+          s = s.replace(scene_marker, scene_marker +
+              '\n                    if not resume and not seen_bridge:\n'
+              '                        raise RuntimeError("No ungraded bridge preceded first scene")')
           p.write_text(s)
           compile(s, str(p), 'exec')
           print('PASS: ephemeral QA runner targets dedicated preview backend only')
