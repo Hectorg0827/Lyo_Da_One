@@ -156,9 +156,13 @@ object ClassroomSocketClient {
             .addQueryParameter("language", "auto")
             .addQueryParameter("reduced_motion", params.reducedMotion.toString())
             .addQueryParameter("token", token)
-        // Only staging APKs negotiate the optional bridge. Backend also
-        // requires an explicit staging feature flag; production cannot use it.
-        if (BuildConfig.API_ENVIRONMENT == "staging") {
+        // Staging and production are independently gated. Production requires
+        // an explicit release-build opt-in, canonical API host and the backend
+        // JWT-authenticated user allowlist; a client param never grants access.
+        if (BuildConfig.API_ENVIRONMENT == "staging" ||
+            (BuildConfig.API_ENVIRONMENT == "production" &&
+             BuildConfig.CLASSROOM_CONTINUOUS_TEACHING_PRODUCTION_ENABLED)
+        ) {
             urlBuilder.addQueryParameter("continuous_teaching", "1")
             urlBuilder.addQueryParameter("bridge_language", Locale.getDefault().toLanguageTag())
         }
