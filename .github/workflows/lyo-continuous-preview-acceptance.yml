@@ -124,6 +124,24 @@ jobs:
               '            print("PASS: learner submitted ungraded Web bridge reply", flush=True)\n'
           )
           b = b.replace(ui_anchor, ui_probe + ui_anchor)
+          assert b.count('                  this.__qaSceneIds = [];') == 1
+          b = b.replace('                  this.__qaSceneIds = [];',
+              '                  this.__qaSceneIds = [];\n                  this.__qaBridgeFlags = [];')
+          scene_hook = '                    if (scene?.scene_id) this.__qaSceneIds.push(String(scene.scene_id));'
+          assert b.count(scene_hook) == 1
+          b = b.replace(scene_hook, scene_hook +
+              '\n                    if (event.event_type === "bridge_message" && event.data?.generation) this.__qaBridgeFlags.push(event.data?.ai_generated === true);')
+          confirm = '            print("PASS: learner submitted ungraded Web bridge reply", flush=True)'
+          assert b.count(confirm) == 1
+          follow_up = (
+              '\n            await page.wait_for_function('
+              '"() => (window.__lyoQaSockets || []).some(s => (s.__qaBridgeFlags || []).length >= 2)", '
+              'timeout=9000)\n'
+              '            ai_reply = await page.evaluate('
+              '"() => (window.__lyoQaSockets || []).some(s => (s.__qaBridgeFlags || [])[1] === true)")\n'
+              '            print("PASS: follow-up reply received; Gemini_generated=" + str(ai_reply), flush=True)'
+          )
+          b = b.replace(confirm, confirm + follow_up)
           web.write_text(b)
           compile(b, str(web), 'exec')
           print('PASS: Chromium target pinned to dedicated previews')
