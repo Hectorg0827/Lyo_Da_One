@@ -116,7 +116,7 @@ jobs:
           ui_anchor = '            await page.get_by_role("button", name="Leave classroom").wait_for(timeout=25000)'
           assert b.count(ui_anchor) == 1
           ui_probe = (
-              '            bridge = page.locator(\\'section[aria-label="Live teacher conversation before the next lesson step"]\\')\n'
+              '            bridge = page.get_by_role("region", name="Live teacher conversation before the next lesson step")\n'
               '            await bridge.wait_for(timeout=12000)\n'
               '            print("PASS: real preview Web rendered instant teacher conversation", flush=True)\n'
               '            await page.get_by_label("Your ungraded reply to the teacher").fill("Sharing equally")\n'
