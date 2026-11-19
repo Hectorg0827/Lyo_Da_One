@@ -989,6 +989,17 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     resumePlayer();
   }
 
+  function enqueueBridgeSpeech(text: string) {
+    // The bridge is *not* a classroom scene. Do not clear waitingForScene,
+    // waitingSince, stallPhase, or response-latency metrics when it speaks.
+    // The director is still generating and the usual recovery watchdog
+    // must remain armed until authoritative lesson content arrives.
+    const speaker = 'Teacher';
+    prefetchSpeechLine(speaker, text);
+    turnQueue.push({ type: 'speech', speaker, text });
+    resumePlayer();
+  }
+
   // The answer-feedback event already narrates the verdict while the next
   // scene is generated. Some director responses prepend that entire verdict
   // again; speak only the new teaching so the learner does not hear it twice.
@@ -1196,7 +1207,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           },
         });
         // Same narrator and TTS queue as the lesson, not an overlapping voice.
-        enqueueTurns([{ type: 'speech', speaker: 'Teacher', text }]);
+        enqueueBridgeSpeech(text);
         break;
       }
       case 'answer_feedback': {
