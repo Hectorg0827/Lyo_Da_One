@@ -1,0 +1,79 @@
+name: Continuous Teaching Web/Android release compilation (no publish)
+
+on:
+  push:
+    branches: [rc/lyo-continuous-teaching-focused-clients-20261119]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: continuous-teaching-release-client
+  cancel-in-progress: true
+
+jobs:
+  web-production:
+    name: Web production defaults and full build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION: '0'
+      NEXT_PUBLIC_API_URL: https://api.lyoai.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Validate contract, isolated from staging API
+        working-directory: web
+        run: |
+          npm ci
+          npm test
+          npx tsc --noEmit
+          npx next build
+      - name: Verify production flag does not leak into unapproved hosts
+        working-directory: web
+        run: node --test src/lib/classroom-contract.test.mjs
+
+  android-production-compile:
+    name: Compile default-off and opted-in Android release variants (unsigned)
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        enabled: ['0', '1']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Compile release Kotlin without signing or publishing
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:generateReleaseBuildConfig :app:compileReleaseKotlin \
+            --no-daemon \
+            "-PLYO_CONTINUOUS_TEACHING_PRODUCTION_ENABLED=${{ matrix.enabled }}"
+          cfg=$(find app/build/generated/source/buildConfig -path '*/release/*/BuildConfig.java' -print -quit)
+          test -n "$cfg"
+          grep -F 'API_ENVIRONMENT = "production"' "$cfg"
+          grep -F 'API_BASE_URL = "https://api.lyoai.app/"' "$cfg"
+          if [ "${{ matrix.enabled }}" = '1' ]; then
+            grep -F 'CLASSROOM_CONTINUOUS_TEACHING_PRODUCTION_ENABLED = true' "$cfg"
+          else
+            grep -F 'CLASSROOM_CONTINUOUS_TEACHING_PRODUCTION_ENABLED = false' "$cfg"
+          fi
+      - name: Confirm no Play Store publishing was performed
+        run: echo 'Release compile-only, unsigned; no bundle, upload, promotion or signing.'
