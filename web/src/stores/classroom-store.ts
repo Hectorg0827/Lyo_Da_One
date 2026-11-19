@@ -1231,7 +1231,21 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       }
       case 'component_render': {
         const comp = (msg.component ?? (msg.data as Record<string, unknown>)?.component ?? msg.data) as ClassroomComponent | undefined;
-        if (comp?.type) handleComponent(comp);
+        if (comp?.type) {
+          // A few valid server paths send components without a preceding
+          // scene_start (including recovery). Real teaching always preempts
+          // the ungraded bridge, irrespective of the event order.
+          bridgeClosed = true;
+          realSceneObserved = true;
+          bridgeGenerationFloor = Math.max(bridgeGenerationFloor, lastBridgeGeneration);
+          if (get().bridge !== null) {
+            stopPlayer();
+            prefetchedSpeech.clear();
+            turnQueue = [];
+            set({ bridge: null });
+          }
+          handleComponent(comp);
+        }
         break;
       }
       case 'scene_start':
