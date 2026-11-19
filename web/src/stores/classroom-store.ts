@@ -160,6 +160,15 @@ export interface Caption {
   text: string;
 }
 
+/** Ungraded ephemeral teacher message, separate from the lesson grade engine. */
+export interface ClassroomBridgeMessage {
+  generation: number;
+  phase: 'startup' | 'transition';
+  text: string;
+  prompt: boolean;
+  aiGenerated: boolean;
+}
+
 type Status = 'idle' | 'connecting' | 'live' | 'ended' | 'error';
 
 export interface ClassroomConnection extends ClassroomContractConnection {
@@ -227,6 +236,8 @@ interface ClassroomStore {
   activeSpeaker: string | null; // who is talking (lights up in the cast row)
   prompt: ActivePrompt | null;  // cold-call awaiting the learner
   transcript: TranscriptItem[]; // full log — the drawer, the byproduct
+  bridge: ClassroomBridgeMessage | null;
+  replyToBridge: (text: string) => boolean;
 
   lyoState: string;
   waitingForScene: boolean;
@@ -850,6 +861,20 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
 
   // ── incoming protocol ──
 
+  // A temporary teacher aside may speak, but must never stop the scene
+  // generation timer, clear grading state, or claim a completed lesson.
+  function enqueueBridgeSpeech(text: string) {
+    prefetchSpeechLine('Teacher', text);
+    turnQueue.push({ type: 'speech', speaker: 'Teacher', text });
+    resumePlayer();
+  }
+
+  let bridgeClosed = false;
+  let bridgeGenerationFloor = 0;
+  let lastBridgeGeneration = 0;
+  let realSceneObserved = false;
+
+
   function handleComponent(comp: ClassroomComponent) {
     switch (comp.type) {
       case 'TeacherMessage': {
@@ -944,6 +969,30 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     const et = (msg.event_type as string) || (msg.type as string) || '';
 
     switch (et) {
+      case 'bridge_message': {
+        const data = msg.data as Record<string, unknown> | undefined;
+        if (typeof msg.session_id === 'string' && msg.session_id !== get().sessionId) break;
+        if (bridgeClosed || !get().waitingForScene || get().status === 'error'
+          || !data || data.ungraded !== true) break;
+        const text = typeof data.text === 'string' ? data.text.trim() : '';
+        const generation = Number(data.generation);
+        if (!text || text.length > 320 || !Number.isInteger(generation) || generation < 1
+          || (data.phase !== 'startup' && data.phase !== 'transition')) break;
+        if (generation <= bridgeGenerationFloor
+          || (realSceneObserved && data.phase === 'startup')) break;
+        const existing = get().bridge;
+        if (existing && (generation < existing.generation
+          || (generation === existing.generation && existing.text === text))) break;
+        lastBridgeGeneration = Math.max(lastBridgeGeneration, generation);
+        set({
+          bridge: {
+            generation, phase: data.phase, text, prompt: data.prompt === true,
+            aiGenerated: data.ai_generated === true,
+          },
+        });
+        enqueueBridgeSpeech(text);
+        break;
+      }
       case 'answer_feedback': {
         if (msg.session_id !== get().sessionId) break;
         const data = msg.data as Record<string, unknown> | undefined;
@@ -967,12 +1016,26 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       }
       case 'component_render': {
         const comp = (msg.component ?? (msg.data as Record<string, unknown>)?.component ?? msg.data) as ClassroomComponent | undefined;
-        if (comp?.type) handleComponent(comp);
+        if (comp?.type) {
+          bridgeClosed = true;
+          realSceneObserved = true;
+          bridgeGenerationFloor = Math.max(bridgeGenerationFloor, lastBridgeGeneration);
+          if (get().bridge) {
+            stopPlayer();
+            prefetchedSpeech.clear();
+            turnQueue = [];
+            set({ bridge: null });
+          }
+          handleComponent(comp);
+        }
         break;
       }
       case 'scene_start':
       case 'SCENE_START':
       case 'scene_stream': {
+        bridgeClosed = true;
+        realSceneObserved = true;
+        bridgeGenerationFloor = Math.max(bridgeGenerationFloor, lastBridgeGeneration);
         const start = classroomSceneStart(msg);
         set({ recordConcepts: conceptsFromClassScene(start?.scene) });
         if ((start?.scene as { metadata?: Record<string, unknown> } | undefined)?.metadata?.course_complete === true) {
@@ -990,6 +1053,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           waitingForScene: true,
           canContinue: false,
           prompt: null,
+          bridge: null,
           caption: null,
           activeSpeaker: null,
         });
@@ -1128,6 +1192,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     activeSpeaker: null,
     prompt: null,
     transcript: [],
+    bridge: null,
     lyoState: 'reading',
     waitingForScene: false,
     isNarrating: false,
@@ -1162,6 +1227,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       turnQueue = [];
       pendingErase = false;
       lastConnection = connection;
+      bridgeClosed = false;
+      bridgeGenerationFloor = 0;
+      lastBridgeGeneration = 0;
+      realSceneObserved = false;
 
       // Which session this is. An explicitly-requested session id still wins
       // (a caller that already knows its session), otherwise the course
@@ -1206,7 +1275,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         languageCode: connection.language || 'auto',
         board: [{ id: nextId(), kind: 'opening', opening }],
         boardHistory: [], recordConcepts: [], viewingBoard: -1,
-        caption: null, activeSpeaker: null, prompt: null, transcript: [],
+        caption: null, activeSpeaker: null, prompt: null, transcript: [], bridge: null,
         lyoState: 'reading', waitingForScene: true, isNarrating: false, canContinue: false,
         isPaused: false, progressCurrent: 0, progressTotal: 0,
         continueLabel: 'Continue', nextActionIntent: 'continue', nextActionComponentId: 'web_continue',
@@ -1230,6 +1299,8 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     },
 
     disconnect: () => {
+      bridgeClosed = true;
+      set({ bridge: null });
       flushActivities();
       stopPlayer();
       stopStallWatch();
@@ -1239,6 +1310,26 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       learnerActionStarted = null;
       if (ws) { try { ws.close(); } catch { /* noop */ } ws = null; }
       set({ status: 'idle' });
+    },
+
+    replyToBridge: (text: string) => {
+      const bridge = get().bridge;
+      const answer = text.trim();
+      if (!bridge || bridgeClosed || !get().waitingForScene || !bridge.prompt
+        || !answer || answer.length > 300 || !ws || ws.readyState !== WebSocket.OPEN) return false;
+      try {
+        ws.send(JSON.stringify({
+          event_type: 'bridge_reply',
+          session_id: get().sessionId,
+          generation: bridge.generation,
+          text: answer,
+        }));
+      } catch {
+        return false;
+      }
+      pushTranscript('You', answer);
+      set({ bridge: { ...bridge, prompt: false } });
+      return true;
     },
 
     answerPrompt: (option: string) => {
@@ -1437,6 +1528,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     continueLesson: () => {
       const actionIntent = get().nextActionIntent || 'continue';
       learnerTakesFloor();
+      if (actionIntent === 'continue') {
+        bridgeGenerationFloor = Math.max(bridgeGenerationFloor, lastBridgeGeneration);
+        bridgeClosed = false;
+      }
       // Leave the Continue button in place if the action never left the
       // browser — clearing canContinue would strip the only way forward.
       if (!sendAction(actionIntent, get().nextActionComponentId || 'web_continue')) {
@@ -1446,6 +1541,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       set({
         canContinue: false,
         waitingForScene: true,
+        bridge: null,
         continueLabel: 'Check understanding',
         nextActionIntent: 'continue',
       });
