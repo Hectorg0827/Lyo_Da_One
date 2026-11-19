@@ -37,6 +37,13 @@ val stagingApiUrl = setting("LYO_STAGING_API_BASE_URL")?.let { apiBaseUrl("LYO_S
 val classroomStreamingPilot =
     stagingApiUrl != null &&
     setting("LYO_STAGING_CLASSROOM_TTS_STREAMING_PILOT").equals("true", ignoreCase = true)
+// Release-only opt-in. Shipping this code does not enable the bridge: the
+// backend independently requires an approved JWT-authenticated user allowlist.
+val productionContinuousTeaching =
+    setting("LYO_CONTINUOUS_TEACHING_PRODUCTION_ENABLED") == "1"
+require(!productionContinuousTeaching || releaseApiUrl == productionApiUrl) {
+    "Continuous Teaching release canary may target only the canonical production API"
+}
 // The streaming pilot is disabled in production regardless of caller flags.
 
 // Release signing (Play Store upload key). Read from android/keystore.properties
@@ -92,6 +99,7 @@ android {
             buildConfigField("String", "API_BASE_URL", "\"${stagingApiUrl ?: productionApiUrl}\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (stagingApiUrl != null) "staging" else "production"}\"")
             buildConfigField("boolean", "CLASSROOM_TTS_STREAMING_PILOT", if (classroomStreamingPilot) "true" else "false")
+            buildConfigField("boolean", "CLASSROOM_CONTINUOUS_TEACHING_PRODUCTION_ENABLED", "false")
         }
         create("staging") {
             isMinifyEnabled = true
@@ -105,6 +113,7 @@ android {
             buildConfigField("String", "API_BASE_URL", "\"${stagingApiUrl ?: productionApiUrl}\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (stagingApiUrl != null) "staging" else "production"}\"")
             buildConfigField("boolean", "CLASSROOM_TTS_STREAMING_PILOT", if (classroomStreamingPilot) "true" else "false")
+            buildConfigField("boolean", "CLASSROOM_CONTINUOUS_TEACHING_PRODUCTION_ENABLED", "false")
         }
         release {
             isMinifyEnabled = true
@@ -116,6 +125,7 @@ android {
             buildConfigField("String", "API_BASE_URL", "\"$releaseApiUrl\"")
             buildConfigField("String", "API_ENVIRONMENT", "\"${if (releaseApiUrl == productionApiUrl) "production" else "custom"}\"")
             buildConfigField("boolean", "CLASSROOM_TTS_STREAMING_PILOT", "false")
+            buildConfigField("boolean", "CLASSROOM_CONTINUOUS_TEACHING_PRODUCTION_ENABLED", if (productionContinuousTeaching) "true" else "false")
         }
     }
     compileOptions {

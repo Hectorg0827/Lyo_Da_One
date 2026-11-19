@@ -1,0 +1,83 @@
+name: Continuous Teaching Android preview device APK (QA only)
+
+# Prepares a debug-key signed staging package that targets the EXISTING
+# isolated Continuous Teaching preview. Does not publish or touch production.
+on:
+  push:
+    branches: [release/lyo-continuous-teaching-gated-20261118]
+    paths:
+      - '.github/workflows/lyo-continuous-teaching-android-preview-device-qa.yml'
+      - 'android/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: continuous-teaching-preview-phone-qa
+  cancel-in-progress: true
+
+jobs:
+  preview-phone-apk:
+    name: Compile staging APK for physical phone QA only
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      LYO_STAGING_API_BASE_URL: https://lyo-continuousteaching-preview-backend-staging.up.railway.app
+      LYO_CONTINUOUS_TEACHING_PRODUCTION_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin to dedicated, isolated preview endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$LYO_STAGING_API_BASE_URL" = 'https://lyo-continuousteaching-preview-backend-staging.up.railway.app'
+          test "$LYO_CONTINUOUS_TEACHING_PRODUCTION_ENABLED" = '0'
+          echo "Source SHA: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build and unit-test preview staging variant, no release signing
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle :app:assembleStaging :app:testStagingUnitTest --no-daemon \
+            "-PLYO_STAGING_API_BASE_URL=$LYO_STAGING_API_BASE_URL"
+      - name: Verify APK is marked staging and cannot opt into production
+        working-directory: android
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_config=$(find app/build/generated/source/buildConfig -path '*/staging/*/BuildConfig.java' -print -quit)
+          test -n "$build_config"
+          grep -F 'API_ENVIRONMENT = "staging"' "$build_config"
+          grep -F "API_BASE_URL = \"$LYO_STAGING_API_BASE_URL/\"" "$build_config"
+          grep -F 'CLASSROOM_CONTINUOUS_TEACHING_PRODUCTION_ENABLED = false' "$build_config"
+          test "$(find app/build/outputs/apk/staging -name '*.apk' -type f | wc -l)" -eq 1
+      - name: Upload physical-phone preview-only APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-CONTINUOUS-TEACHING-preview-PHONE-QA-only
+          path: android/app/build/outputs/apk/staging/*.apk
+          if-no-files-found: error
+          retention-days: 7
+      - name: Physical phone acceptance checklist
+        shell: bash
+        run: |
+          {
+            echo '### NOT A PRODUCTION APK'
+            echo 'Targets only the isolated Continuous Teaching preview backend.'
+            echo 'Uses the same Android applicationId as the Play app; use a **dedicated phone or work profile** to avoid replacing an installed release.'
+            echo 'Verify the app Settings/About server shows the dedicated preview/staging API before login.'
+            echo 'Record phone model, OS, APK build SHA, 20 audible turns, 5 interruption/barge-ins, EN+ES voice stability, first-audio p50/p95 and saved-session restoration.'
+            echo 'Capture no real learner PII or auth tokens. Report any overlapping speech or voice switch after Skip/Next.'
+            echo '**No app publication, signed release, or production promotion was performed.**'
+          } >> "$GITHUB_STEP_SUMMARY"

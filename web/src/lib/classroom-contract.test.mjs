@@ -51,7 +51,7 @@ test('classroom URL preserves learner controls and course context', () => {
 });
 
 
-test('ungraded continuous teacher is negotiated only on staging WebSocket URLs', () => {
+test('ungraded continuous teacher defaults to staging-only in WebSocket URLs', () => {
   const args = { topic: 'Fractions', sessionId: 'secure-test-session' };
   const staging = new URL(buildClassroomWsUrl('https://lyojourneystagingbackend-staging.up.railway.app', args, 'token'));
   const production = new URL(buildClassroomWsUrl('https://api.lyoai.app', args, 'token'));
@@ -59,6 +59,29 @@ test('ungraded continuous teacher is negotiated only on staging WebSocket URLs',
   assert.equal(staging.searchParams.get('bridge_language'), 'en-US');
   assert.equal(production.searchParams.has('continuous_teaching'), false);
   assert.equal(staging.searchParams.get('session_id'), 'secure-test-session');
+});
+
+test('production Web opt-in is explicit, canonical-host-only, and revocable', () => {
+  const previous = process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION;
+  const args = { topic: 'Math', sessionId: 'test-prod' };
+  try {
+    delete process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION;
+    const defaultProd = new URL(buildClassroomWsUrl('https://api.lyoai.app', args, 'token'));
+    assert.equal(defaultProd.searchParams.has('continuous_teaching'), false);
+
+    process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION = '1';
+    const allowedProd = new URL(buildClassroomWsUrl('https://api.lyoai.app', args, 'token'));
+    assert.equal(allowedProd.searchParams.get('continuous_teaching'), '1');
+    const wrongHost = new URL(buildClassroomWsUrl('https://api-test.lyoai.app', args, 'token'));
+    assert.equal(wrongHost.searchParams.has('continuous_teaching'), false);
+
+    process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION = '0';
+    const revoked = new URL(buildClassroomWsUrl('https://api.lyoai.app', args, 'token'));
+    assert.equal(revoked.searchParams.has('continuous_teaching'), false);
+  } finally {
+    if (previous === undefined) delete process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION;
+    else process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION = previous;
+  }
 });
 
 test('Classroom resume flag is explicit and absent for new sessions', () => {

@@ -47,9 +47,14 @@ export function buildClassroomWsUrl(apiUrl, connection, token) {
   if (connection.difficulty) params.set('difficulty', connection.difficulty);
   // The backend restores its persisted scene only when resume=1 is explicit.
   // Starting a fresh session must omit this flag to avoid stale lesson state.
-  // Client opt-in is staging-host only. The backend separately requires its
-  // explicit staging feature flag; no production WebSocket gets this channel.
-  if (new URL(apiUrl).hostname.endsWith('-staging.up.railway.app')) {
+  // Production opt-in requires an explicit build-time release flag AND the
+  // canonical production API host. The backend independently requires a
+  // kill-switch and JWT-authenticated allowlist; this parameter grants no access.
+  const apiHost = new URL(apiUrl).hostname;
+  const previewOrStaging = apiHost.endsWith('-staging.up.railway.app');
+  const approvedProductionOptIn = apiHost === 'api.lyoai.app'
+    && process.env.NEXT_PUBLIC_LYO_CONTINUOUS_TEACHING_PRODUCTION === '1';
+  if (previewOrStaging || approvedProductionOptIn) {
     params.set('continuous_teaching', '1');
     // The bridge can speak the learner's browser language without altering
     // the authoritative lesson-language / grading contract.
