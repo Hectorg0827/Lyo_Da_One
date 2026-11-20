@@ -83,6 +83,10 @@ async def run():
 
             await context.route("**/*", refuse_nonstaging_requests)
             page = await context.new_page()
+            # Capture browser-side failures without logging credentials, headers or URLs.
+            js_error_kinds = []
+            page.on("pageerror", lambda error: js_error_kinds.append(
+                (type(error).__name__, str(error).splitlines()[0][:140])))
             # Exercise the same visible form and /auth/login route as learners.
             # Seeding localStorage bypassed the Zustand login store and could
             # produce a false negative for Classroom auth hydration.
@@ -104,8 +108,14 @@ async def run():
             except Exception:
                 if blocked_nonstaging:
                     raise RuntimeError("Staging-only request guard blocked " + str(blocked_nonstaging))
+                try:
+                    await page.screenshot(path=str(ARTIFACTS / "login_failure.png"),
+                                          full_page=True)
+                except Exception:
+                    pass
                 raise RuntimeError("Visible login did not save a session; auth HTTP statuses="
-                                   + str(auth_statuses))
+                                   + str(auth_statuses)
+                                   + "; browser_errors=" + str(js_error_kinds[:3]))
             browser_token = await page.evaluate(
                 "() => window.localStorage.getItem('lyo_token')")
             code, web_profile = http("GET", "/auth/me", token=browser_token)
