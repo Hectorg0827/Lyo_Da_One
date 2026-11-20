@@ -20,7 +20,7 @@ concurrency:
 jobs:
   visible-login-classroom-recovery:
     name: Exact-head Chromium / visible login / persisted Classroom
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
