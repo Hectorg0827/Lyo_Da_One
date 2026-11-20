@@ -33,7 +33,7 @@ jobs:
           npm test
           npx tsc --noEmit
           npm run build
-      - name: Security gate: no critical or high runtime advisories
+      - name: Security gate for critical or high runtime advisories
         working-directory: web
         run: npm audit --omit=dev --audit-level=high
       - name: Install pinned Chromium E2E dependencies
