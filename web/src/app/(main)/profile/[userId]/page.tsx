@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { useParams } from 'next/navigation';
 import { MessageCircle } from 'lucide-react';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
@@ -15,7 +16,8 @@ type ActivityItem = {
   time: string;
 };
 
-export default function UserProfilePage({ params }: { params: { userId: string } }) {
+export default function UserProfilePage() {
+  const params = useParams<{ userId: string }>();
   const { data: user, isLoading } = useApi(() => api.users.get(params.userId), [params.userId]);
   const { data: feedData } = useApi(() => api.users.posts(params.userId), [params.userId]);
   const [isFollowing, setIsFollowing] = useState(false);
