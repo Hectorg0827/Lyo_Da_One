@@ -1,0 +1,70 @@
+name: LYO Web security upgrade experiment
+# Isolated security branch; never deploys or modifies main/release/iOS/Android.
+on:
+  push:
+    branches: [security/lyo-web-deps-20261120]
+    paths:
+      - '.github/workflows/lyo-web-security-upgrade.yml'
+      - 'web/package.json'
+      - 'web/package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lyo-web-security-upgrade
+  cancel-in-progress: false
+
+jobs:
+  dependency-upgrade:
+    name: Patch dependencies, audit and compile Web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Prepare patched Next 15 maintenance-line dependencies
+        working-directory: web
+        run: |
+          npm install --save-exact next@15.5.29 sharp@0.35.5 mermaid@11.16.1 postcss@8.5.33 --no-audit --no-fund
+          npm install --save-dev --save-exact eslint-config-next@15.5.29 --no-audit --no-fund
+          npm audit fix --package-lock-only --no-fund || true
+      - name: Commit updated dependency lockfile only to this isolated security branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = "security/lyo-web-deps-20261120"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/package.json web/package-lock.json
+          if git diff --cached --quiet; then
+            echo 'Dependency manifest already at target state'
+          else
+            git commit -m "security(web): patch Next 15 LTS and affected runtime dependencies"
+            git push origin HEAD:security/lyo-web-deps-20261120
+          fi
+      - name: Install locked tree and run Web regressions
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+          npx tsc --noEmit
+          npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
+          NEXT_PUBLIC_LYO_JOURNEYS_ENABLED: '1'
+      - name: Gate critical and high runtime advisories
+        working-directory: web
+        run: |
+          npm audit --omit=dev --audit-level=high
+      - name: Note scope and no-deploy rule
+        if: success()
+        run: echo 'Security candidate passed Web tests, typecheck, Next build and runtime npm audit. No deployment.' >> "$GITHUB_STEP_SUMMARY"
