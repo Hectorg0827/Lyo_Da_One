@@ -1010,13 +1010,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }));
               }
 
+              const requestedLevel = options.courseContext?.difficulty
+                || /\\b(beginner|intermediate|advanced)\\s+course\\b/i.exec(trimmedContent)?.[1]?.toLowerCase();
+              const actualLevel = String(courseData.difficulty || courseData.level || '').toLowerCase();
+              const completeLessons = Array.isArray(courseData.modules)
+                && courseData.modules.some((module: { lessons?: unknown[] }) =>
+                  Array.isArray(module.lessons) && module.lessons.length > 0
+                );
               const publishedCourse = {
                 ...courseData,
-                // Only final, non-preview server handoffs with actual modules
-                // can open a lesson. Milestone/provisional cards are not courses.
-                __lyo_authoritative: !isPreview
-                  && Array.isArray(courseData.modules)
-                  && courseData.modules.length > 0,
+                // A progress milestone or failed AI fallback is not a complete
+                // course, and a Beginner result cannot satisfy an Intermediate
+                // request. Only an authoritative handoff with lessons may start.
+                __lyo_authoritative: !isPreview && completeLessons
+                  && (!requestedLevel || actualLevel === requestedLevel),
               };
 
               set((s) => ({
