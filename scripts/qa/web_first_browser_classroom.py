@@ -282,6 +282,17 @@ async def run():
             if blocked_nonstaging:
                 raise RuntimeError("Course flow attempted a non-staging request: "
                                    + str(blocked_nonstaging))
+            # A ready button alone was a false positive: a failed backend
+            # response once rendered a Beginner placeholder as ready for an
+            # explicitly Intermediate algebra course, with zero lessons.
+            await page.get_by_text("Course outline", exact=True).wait_for(
+                state="visible", timeout=5000)
+            await page.get_by_text("Intermediate", exact=True).first.wait_for(
+                state="visible", timeout=5000)
+            if await page.get_by_text(
+                "I'm having trouble responding right now. Please try again.",
+                exact=False).count():
+                raise RuntimeError("AI fallback appeared alongside a ready course")
             await page.screenshot(path=str(ARTIFACTS / "course_ready.png"), full_page=True)
             print("PASS: actual algebra course generated through Web chat", flush=True)
             await ready.click()
