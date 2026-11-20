@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 15
     env:
       LYO_WEB_BASE_URL: https://lyoonestagingweb-staging.up.railway.app
-      EXPECTED_STAGING_SHA: ce0ef81c4879505373227ec95b6fdaa42c0a4e3b
+      EXPECTED_STAGING_SHA: 1e597771170bd0c3195f4a2660644597e0b06dd7
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
