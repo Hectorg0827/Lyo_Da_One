@@ -50,5 +50,10 @@
     "eslint": "^8.57.0",
     "eslint-config-next": "15.5.29",
     "jsdom": "^26.1.0"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.33"
+    }
   }
 }
