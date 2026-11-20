@@ -2,7 +2,7 @@ name: LYO Web-first dependency security gate
 # Read-only audit of production Web dependencies, not a deployment.
 on:
   push:
-    branches: [release/lyo-web-first-20261120]
+    branches: [release/lyo-web-first-20261120, security/lyo-web-deps-20261120]
     paths: ['.github/workflows/lyo-web-first-security.yml']
   workflow_dispatch:
 permissions:
