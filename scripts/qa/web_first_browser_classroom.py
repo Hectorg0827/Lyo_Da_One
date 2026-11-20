@@ -6,6 +6,7 @@ hosts, real credentials, bearer tokens or user content in logs/artifacts.
 """
 import asyncio
 import json
+import os
 import secrets
 import sys
 import time
@@ -14,8 +15,8 @@ from urllib.parse import parse_qs, quote, urlsplit
 from playwright.async_api import async_playwright
 from web_first_live_classroom_auth import http, API
 
-WEB = "http://127.0.0.1:3000"
-assert urlsplit(WEB).hostname in {"127.0.0.1", "localhost"}
+WEB = os.environ.get("LYO_WEB_BASE_URL", "http://127.0.0.1:3000").rstrip("/")
+assert urlsplit(WEB).hostname in {"127.0.0.1", "localhost"} or (urlsplit(WEB).hostname or "").endswith("-staging.up.railway.app")
 ARTIFACTS = Path("artifacts/web-first-browser-qa")
 ARTIFACTS.mkdir(parents=True, exist_ok=True)
 
