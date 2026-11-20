@@ -203,6 +203,8 @@ export interface LearnerRecord {
  */
 export interface Recommendation {
   concept_id: string;
+  /** Human-readable name when provided; never substitute the storage ID. */
+  display_name?: string | null;
   reason: 'due_for_review' | 'needs_practice';
   detail: string;
   /** 0..1, or null when never assessed. Null and zero are different claims. */

@@ -45,6 +45,19 @@ export function buildClassroomWsUrl(apiUrl, connection, token) {
   if (connection.reviewConceptId) params.set('review_concept_id', connection.reviewConceptId);
   if (connection.objective) params.set('objective', connection.objective);
   if (connection.difficulty) params.set('difficulty', connection.difficulty);
+  // The backend restores its persisted scene only when resume=1 is explicit.
+  // Starting a fresh session must omit this flag to avoid stale lesson state.
+  // Client opt-in is staging-host only. The backend separately requires its
+  // explicit staging feature flag; no production WebSocket gets this channel.
+  if (new URL(apiUrl).hostname.endsWith('-staging.up.railway.app')) {
+    params.set('continuous_teaching', '1');
+    // The bridge can speak the learner's browser language without altering
+    // the authoritative lesson-language / grading contract.
+    const bridgeLanguage = typeof navigator !== 'undefined'
+      ? navigator.language : (connection.language || 'en-US');
+    params.set('bridge_language', bridgeLanguage);
+  }
+  if (connection.resume === true) params.set('resume', '1');
   if (token) params.set('token', token);
   return `${base}/api/v1/classroom/ws/connect?${params}`;
 }
@@ -79,6 +92,11 @@ export function isTransferReady(response, minWords = 6) {
 export function classroomCourseKey(connection) {
   const key = (connection?.courseId || connection?.topic || '').toString().trim();
   return key || 'general';
+}
+
+/** A hard refresh recovers the current class; normal navigation starts fresh. */
+export function classroomResumeOnEntry(explicitResume, navigationType) {
+  return explicitResume === true || navigationType === 'reload';
 }
 
 /** Where a surface remembers the last live session for a course. */
@@ -142,10 +160,12 @@ export function classroomSessionStart(courseKey, saved, { resume = false, now = 
  * moments at which they stop pretending.
  *
  * NOTICE: say out loud that this is taking longer than it should.
- * RECOVERY: the step is not coming — resend it once, then hand the learner
- * controls that can actually get the class moving again.
+ * RECOVERY: offer a safe reconnect to replay the server-owned scene. Never
+ * re-submit the original answer while its grading may still be in progress.
  */
 export const CLASSROOM_STALL_NOTICE_MS = 12000;
+// Show recovery controls after 30s, without automatically sending another
+// action. The backend may still be generating a valid turn at this point.
 export const CLASSROOM_STALL_RECOVERY_MS = 30000;
 
 export const CLASSROOM_STALL_NOTICE =

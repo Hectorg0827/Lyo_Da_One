@@ -68,7 +68,10 @@ export function TeachingVisualCard({ id, visual, spanish = false, readOnly = fal
             <span className="text-3xl font-semibold text-lyo-200">{value}<span className="text-xl text-[var(--text-tertiary)]">/{visual.parts}</span></span>
             <span className="text-lg text-white">{Number((visual.whole * value / visual.parts).toFixed(3))} <span className="font-sans text-sm text-[var(--text-secondary)]">{visual.unit}</span></span>
           </div>
-          <svg viewBox="0 0 600 64" className="h-16 w-full" role="img" aria-label={`${value}/${visual.parts} · ${visual.description}`}>
+          <svg viewBox="0 0 600 64" className="h-16 w-full" role="img"
+            aria-label={spanish
+              ? `${value}/${visual.parts} · ${value} de ${visual.parts} partes iguales sombreadas en una barra rectangular`
+              : `${value}/${visual.parts} · ${value} of ${visual.parts} equal sections shaded in a rectangular bar`}>
             {Array.from({ length: visual.parts }, (_, index) => (
               <rect key={index} x={index * 600 / visual.parts + 1.5} y={1} width={600 / visual.parts - 3} height={62} rx={5}
                 fill={index < value ? 'var(--lyo-300)' : 'var(--surface-2)'} stroke={index < value ? 'var(--lyo-400)' : 'var(--border)'} />

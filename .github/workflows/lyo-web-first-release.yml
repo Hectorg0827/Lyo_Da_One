@@ -1,0 +1,51 @@
+name: LYO Web-first release gate
+# Builds the Web candidate only. Does not publish artifacts or deploy services.
+on:
+  push:
+    branches: [release/lyo-web-first-20261120]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/lyo-web-first-release.yml'
+      - 'docs/lyo-web-first-release.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lyo-web-first-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web tests, typecheck, staging-configured build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: web
+    env:
+      NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
+      NEXT_PUBLIC_LYO_JOURNEYS_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node 22 and dependency cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run all Web contract and unit regressions
+        run: npm test
+      - name: Type-check Web
+        run: npx tsc --noEmit
+      - name: Compile production-mode Web bundle against staging API
+        run: npm run build
+      - name: Summarize source-only gate
+        run: |
+          echo 'Web tests, typecheck and staging-configured build passed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This does not verify real authenticated flows, teacher audio, AI quality, sustained Classroom sessions or production readiness.' >> "$GITHUB_STEP_SUMMARY"
