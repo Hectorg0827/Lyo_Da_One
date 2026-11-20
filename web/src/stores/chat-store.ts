@@ -1010,6 +1010,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }));
               }
 
+              const publishedCourse = {
+                ...courseData,
+                // Only final, non-preview server handoffs with actual modules
+                // can open a lesson. Milestone/provisional cards are not courses.
+                __lyo_authoritative: !isPreview
+                  && Array.isArray(courseData.modules)
+                  && courseData.modules.length > 0,
+              };
+
               set((s) => ({
                 generationActivity: 'course',
                 generationProgress: isPreview
@@ -1047,7 +1056,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                           ? {
                               ...m,
                               type: 'course_proposal' as const,
-                              metadata: { ...m.metadata, course: courseData },
+                              metadata: { ...m.metadata, course: publishedCourse },
                             }
                           : m
                       ),
@@ -1063,7 +1072,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                         role: 'assistant' as const,
                         content: '',
                         type: 'course_proposal' as const,
-                        metadata: { course: courseData },
+                        metadata: { course: publishedCourse },
                         createdAt: new Date().toISOString(),
                       },
                     ],
