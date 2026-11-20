@@ -7,6 +7,7 @@ on:
       - '.github/workflows/lyo-web-security-upgrade.yml'
       - 'web/package.json'
       - 'web/package-lock.json'
+      - 'web/src/**'
   workflow_dispatch:
 
 permissions:
