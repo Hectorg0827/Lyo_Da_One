@@ -98,6 +98,11 @@ async def run():
                     auth_statuses.append((pathname, response.status))
             page.on("response", record_auth)
             await page.goto(WEB + "/auth/login", wait_until="domcontentloaded", timeout=25000)
+            # Wait for React auth initialization, not merely server HTML:
+            # Next 15 can hydrate after DOMContentLoaded; filling a controlled
+            # form before hydration loses its values and produces a false login.
+            await page.get_by_role("button", name="Log In", exact=True).wait_for(
+                state="visible", timeout=30000)
             await page.get_by_label("Email", exact=True).fill(person["email"])
             await page.get_by_label("Password", exact=True).fill(password)
             await page.get_by_role("button", name="Log In", exact=True).click()
@@ -310,6 +315,8 @@ async def run():
             second_page = await second_context.new_page()
             await second_page.goto(WEB + "/auth/login",
                                    wait_until="domcontentloaded", timeout=25000)
+            await second_page.get_by_role("button", name="Log In", exact=True).wait_for(
+                state="visible", timeout=30000)
             await second_page.get_by_label("Email", exact=True).fill(person["email"])
             await second_page.get_by_label("Password", exact=True).fill(password)
             await second_page.get_by_role("button", name="Log In", exact=True).click()
