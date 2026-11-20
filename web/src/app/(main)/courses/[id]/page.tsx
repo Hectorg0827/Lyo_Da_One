@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { ChevronLeft, Loader2, AlertCircle } from 'lucide-react';
 import { Course } from '@/types';
@@ -82,11 +82,8 @@ function adaptCourseDetail(raw: Record<string, unknown>): Course {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-interface CourseDetailPageProps {
-  params: { id: string };
-}
-
-export default function CourseDetailPage({ params }: CourseDetailPageProps) {
+export default function CourseDetailPage() {
+  const params = useParams<{ id: string }>();
   const router = useRouter();
   const courseId = params.id;
 
