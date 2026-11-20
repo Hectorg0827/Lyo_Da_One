@@ -86,3 +86,14 @@ test('duration aliases render and revise consistently', () => {
   assert.match(store, /course\?\.estimatedDuration \?\? course\?\.estimated_duration \?\? course\?\.duration/);
   assert.match(store, /const previousDuration = normalizeCourseDuration\(course\)/);
 });
+
+
+test('an incomplete or wrong-level AI proposal must never appear ready to start', () => {
+  assert.match(store, /__lyo_authoritative: !isPreview && completeLessons/);
+  assert.match(store, /actualLevel === requestedLevel/);
+  assert.match(card, /const canStart = hasLessons/);
+  assert.match(card, /!isGenerating && canStart/);
+  assert.match(card, /!isGenerating && !canStart/);
+  assert.match(card, /Retry generation/);
+  assert.match(card, /Course incomplete/);
+});
