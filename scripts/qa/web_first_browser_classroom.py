@@ -10,7 +10,7 @@ import secrets
 import sys
 import time
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 from playwright.async_api import async_playwright
 from web_first_live_classroom_auth import http, API
 
@@ -243,6 +243,34 @@ async def run():
                 raise RuntimeError("Classroom UI was lost after reconnection")
             await page.screenshot(path=str(ARTIFACTS / "classroom_resumed.png"), full_page=True)
             print("PASS: real Chromium Web UI rejoined identical server scene with resume=1", flush=True)
+            # Web-first launch gate: the learner's actual AI-course entry
+            # must create a completed course proposal, not just load Classroom
+            # using a hard-coded URL. This uses only one synthetic learner.
+            stage = "AI course generation (algebra/intermediate)"
+            stream_statuses = []
+            def record_course_stream(response):
+                if urlsplit(response.url).path == "/api/v1/lyo2/chat/stream":
+                    stream_statuses.append(response.status)
+            page.on("response", record_course_stream)
+            prompt = "Create an intermediate course on algebra"
+            await page.goto(WEB + "/chat?prompt=" + quote(prompt),
+                            wait_until="domcontentloaded", timeout=25000)
+            ready = page.get_by_role("button", name="Start course", exact=True)
+            try:
+                await ready.wait_for(state="visible", timeout=125000)
+            except Exception:
+                raise RuntimeError(
+                    "No ready algebra course from actual chat. "
+                    + "Chat stream HTTP statuses=" + str(stream_statuses)
+                )
+            if blocked_nonstaging:
+                raise RuntimeError("Course flow attempted a non-staging request: "
+                                   + str(blocked_nonstaging))
+            await page.screenshot(path=str(ARTIFACTS / "course_ready.png"), full_page=True)
+            print("PASS: actual algebra course generated through Web chat", flush=True)
+            await ready.click()
+            await page.wait_for_url("**/classroom?*", timeout=20000)
+            print("PASS: generated course navigated to its Classroom", flush=True)
             success = True
     except Exception as exc:
         # The first exception line may contain the public page URL; redact
