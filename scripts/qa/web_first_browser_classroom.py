@@ -290,6 +290,26 @@ async def run():
             if not saved:
                 raise RuntimeError("Course was not found in the learner's saved Stack")
             print("PASS: algebra course found in server-backed learner Stack", flush=True)
+            # Verify a separate browser profile can see the saved course.
+            # No localStorage or cookies are shared with the first profile.
+            stage = "saved course on second browser profile"
+            second_context = await browser.new_context(
+                viewport={"width": 1365, "height": 900})
+            await second_context.route("**/*", refuse_nonstaging_requests)
+            second_page = await second_context.new_page()
+            await second_page.goto(WEB + "/auth/login",
+                                   wait_until="domcontentloaded", timeout=25000)
+            await second_page.get_by_label("Email", exact=True).fill(person["email"])
+            await second_page.get_by_label("Password", exact=True).fill(password)
+            await second_page.get_by_role("button", name="Log In", exact=True).click()
+            await second_page.wait_for_function(
+                "() => Boolean(localStorage.getItem('lyo_token'))", timeout=35000)
+            await second_page.goto(WEB + "/", wait_until="domcontentloaded", timeout=25000)
+            await second_page.get_by_text("Your courses", exact=True).wait_for(
+                state="visible", timeout=35000)
+            await second_page.get_by_text("algebra", exact=False).first.wait_for(
+                state="visible", timeout=35000)
+            print("PASS: saved algebra course visible in second browser profile", flush=True)
             success = True
     except Exception as exc:
         # The first exception line may contain the public page URL; redact
