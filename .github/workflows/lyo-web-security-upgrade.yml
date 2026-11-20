@@ -1,71 +1,74 @@
-name: LYO Web security upgrade experiment
-# Isolated security branch; never deploys or modifies main/release/iOS/Android.
+name: LYO Web security upgrade exact-head acceptance
+# Read-only build and authenticated staging QA. No deploy or merge.
 on:
   push:
     branches: [security/lyo-web-deps-20261120]
     paths:
       - '.github/workflows/lyo-web-security-upgrade.yml'
-      - 'web/package.json'
-      - 'web/package-lock.json'
-      - 'web/src/**'
+      - 'web/**'
   workflow_dispatch:
-
 permissions:
-  contents: write
-
-concurrency:
-  group: lyo-web-security-upgrade
-  cancel-in-progress: false
-
+  contents: read
 jobs:
-  dependency-upgrade:
-    name: Patch dependencies, audit and compile Web
+  patched-web-acceptance:
+    name: Locked dependency audit, Web build, authenticated Chromium
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
+      NEXT_PUBLIC_LYO_JOURNEYS_ENABLED: '1'
     steps:
       - uses: actions/checkout@v4
-        with:
-          persist-credentials: true
-          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - name: Prepare patched Next 15 maintenance-line dependencies
+      - name: Install exact committed dependency lockfile
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+      - name: All Web unit/contract tests, TypeScript, patched Next production build
         working-directory: web
         run: |
-          npm install --save-exact next@15.5.29 sharp@0.35.5 mermaid@11.16.1 postcss@8.5.33 --no-audit --no-fund
-          npm install --save-dev --save-exact eslint-config-next@15.5.29 --no-audit --no-fund
-          npm audit fix --package-lock-only --no-fund || true
-      - name: Commit updated dependency lockfile only to this isolated security branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$GITHUB_REF_NAME" = "security/lyo-web-deps-20261120"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web/package.json web/package-lock.json
-          if git diff --cached --quiet; then
-            echo 'Dependency manifest already at target state'
-          else
-            git commit -m "security(web): patch Next 15 LTS and affected runtime dependencies"
-            git push origin HEAD:security/lyo-web-deps-20261120
-          fi
-      - name: Install locked tree and run Web regressions
-        working-directory: web
-        run: |
-          npm ci --no-audit --no-fund
           npm test
           npx tsc --noEmit
           npm run build
-        env:
-          NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
-          NEXT_PUBLIC_LYO_JOURNEYS_ENABLED: '1'
-      - name: Gate critical and high runtime advisories
+      - name: Security gate: no critical or high runtime advisories
         working-directory: web
+        run: npm audit --omit=dev --audit-level=high
+      - name: Install pinned Chromium E2E dependencies
         run: |
-          npm audit --omit=dev --audit-level=high
-      - name: Note scope and no-deploy rule
+          python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+          python -m playwright install --with-deps chromium
+      - name: Authenticated browser / generated course / persisted Stack / second browser
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix web run start > /tmp/lyo-security-web.log 2>&1 &
+          WEB_PID=$!
+          trap 'kill "$WEB_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:3000/auth/login >/dev/null; then
+              break
+            fi
+            if ! kill -0 "$WEB_PID" 2>/dev/null; then
+              echo 'Web server exited during startup'
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --silent --fail http://127.0.0.1:3000/auth/login >/dev/null
+          python -u scripts/qa/web_first_browser_classroom.py
+      - name: Short-lived synthetic screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-secure-web-authenticated-e2e
+          path: artifacts/web-first-browser-qa/*.png
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Evidence boundary
         if: success()
-        run: echo 'Security candidate passed Web tests, typecheck, Next build and runtime npm audit. No deployment.' >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo 'Exact checked-out commit: locked dependency graph, 722+ Web unit tests, TypeScript, Next build, no high/critical npm advisories and real authenticated Chromium learner journey passed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Teacher audio, grading accuracy, extended session and production rollout remain separately gated.' >> "$GITHUB_STEP_SUMMARY"
