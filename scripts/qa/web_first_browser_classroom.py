@@ -271,6 +271,25 @@ async def run():
             await ready.click()
             await page.wait_for_url("**/classroom?*", timeout=20000)
             print("PASS: generated course navigated to its Classroom", flush=True)
+            # Confirm the course entry survives beyond this browser's local state.
+            stage = "saved algebra course lookup"
+            saved = False
+            for _ in range(25):
+                stack_code, stack_data = http(
+                    "GET", "/api/v1/stack/items?item_type=course&limit=100",
+                    token=browser_token)
+                if stack_code == 200 and isinstance(stack_data.get("items"), list):
+                    saved = any(
+                        "algebra" in str(item.get("title", "")).lower()
+                        and item.get("content_id")
+                        for item in stack_data["items"]
+                    )
+                    if saved:
+                        break
+                await asyncio.sleep(1)
+            if not saved:
+                raise RuntimeError("Course was not found in the learner's saved Stack")
+            print("PASS: algebra course found in server-backed learner Stack", flush=True)
             success = True
     except Exception as exc:
         # The first exception line may contain the public page URL; redact
