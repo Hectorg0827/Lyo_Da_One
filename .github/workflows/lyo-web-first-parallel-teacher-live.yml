@@ -1,8 +1,14 @@
 name: LYO Web-first deployed quick teacher acceptance
 # Existing Web staging + isolated staging backend only. No deployments or production.
 on:
-  # Live provider calls consume staging AI allowance. Never run on push.
-  # Trigger manually only after the owner authorizes a bounded QA budget.
+  # Ordinary pushes skip live AI test jobs; the explicit authorization
+  # commit marker enables a release-branch run without changing main.
+  push:
+    branches: [release/lyo-web-first-20261120]
+    paths:
+      - '.github/workflows/lyo-web-first-parallel-teacher-live.yml'
+      - 'scripts/qa/web_first_parallel_teacher_staging.py'
+      - 'scripts/qa/web_first_browser_classroom.py'
   workflow_dispatch:
     inputs:
       staging_ai_spend_approved:
@@ -15,7 +21,7 @@ permissions:
   contents: read
 jobs:
   bridge-protocol:
-    if: ${{ inputs.staging_ai_spend_approved == true }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.staging_ai_spend_approved == true) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[LYO-STAGING-AI-QA-APPROVED]')) }}
     name: Authenticated quick teacher startup, AI reply and transition
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -35,7 +41,7 @@ jobs:
         run: echo 'Exact staging backend bridge accepted a disposable learner. Protocol checks do not prove audible speech.' >> "$GITHUB_STEP_SUMMARY"
 
   visible-web-handoff:
-    if: ${{ inputs.staging_ai_spend_approved == true }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.staging_ai_spend_approved == true) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[LYO-STAGING-AI-QA-APPROVED]')) }}
     name: Real Chromium quick teacher visible then authoritative lesson
     needs: bridge-protocol
     runs-on: ubuntu-24.04
