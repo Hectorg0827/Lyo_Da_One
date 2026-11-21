@@ -8,34 +8,12 @@ import { Course } from '@/types';
 import CoursePlayer from '@/components/courses/CoursePlayer';
 import { useApi } from '@/hooks/use-api';
 import { api } from '@/lib/api';
+import { normalizeCourseModules } from '@/lib/course-adapter.mjs';
 
 // ── Adapter: backend course detail → frontend Course type ───────────────────
 
 function adaptCourseDetail(raw: Record<string, unknown>): Course {
-  const modules = Array.isArray(raw.modules)
-    ? (raw.modules as Record<string, unknown>[]).map((m, mi) => ({
-        id: String(m.id ?? `m_${mi}`),
-        title: String(m.title ?? ''),
-        description: String(m.description ?? ''),
-        order: (m.order as number) ?? mi + 1,
-        isCompleted: (m.is_completed as boolean) ?? false,
-        lessons: Array.isArray(m.lessons)
-          ? (m.lessons as Record<string, unknown>[]).map((l, li) => ({
-              id: String(l.id ?? `l_${li}`),
-              title: String(l.title ?? ''),
-              type: (l.type as 'text') ?? 'text',
-              duration: (l.duration as number) ?? 10,
-              order: (l.order as number) ?? li + 1,
-              isCompleted: (l.is_completed as boolean) ?? false,
-              content: Array.isArray(l.content)
-                ? (l.content as Course['modules'][0]['lessons'][0]['content'])
-                : Array.isArray(l.blocks)
-                ? (l.blocks as Course['modules'][0]['lessons'][0]['content'])
-                : [],
-            }))
-          : [],
-      }))
-    : [];
+  const modules = normalizeCourseModules(raw);
 
   const lessonsCount = (raw.lessons_count as number) ?? modules.reduce((acc, m) => acc + m.lessons.length, 0);
   const durationHours = (raw.estimated_duration_hours as number) ?? 0;
@@ -170,6 +148,30 @@ export default function CourseDetailPage() {
             Back to Courses
           </button>
         </motion.div>
+      </div>
+    );
+  }
+
+  // Do not present an empty reader as a completed course. The backend only
+  // promises lessons after a successful authoritative course handoff.
+  if (!course.modules.some((module) => module.lessons.length > 0)) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950 flex items-center justify-center px-4">
+        <div role="status" className="max-w-md text-center space-y-4">
+          <AlertCircle className="mx-auto h-10 w-10 text-amber-400" />
+          <h2 className="text-white text-xl font-bold">Lessons are not available yet</h2>
+          <p className="text-white/60 text-sm">
+            This course does not currently contain readable lessons. No progress has been marked complete.
+          </p>
+          <div className="flex justify-center gap-3">
+            <button onClick={refetch} className="rounded-xl bg-lyo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-lyo-500">
+              Retry loading
+            </button>
+            <button onClick={() => router.push('/courses')} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/80 hover:bg-white/10">
+              Back to Courses
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
