@@ -42,6 +42,19 @@ async def run():
             raise RuntimeError("Deployed Web SHA/health does not match test contract")
         print("PASS: deployed Web exact SHA and health", flush=True)
 
+        # The v1 /api/v1/auth/me alias supports GET but not DELETE. Deletion
+        # belongs to the enhanced /auth/me router. Check the deployed OpenAPI
+        # contract before creating another disposable learner to avoid leaks.
+        from urllib.request import urlopen as open_url
+        with open_url(API + "/openapi.json", timeout=20) as response:
+            auth_schema = json.loads(response.read())
+        if "delete" not in auth_schema.get("paths", {}).get("/auth/me", {}):
+            raise RuntimeError(
+                "Staging account deletion contract missing: DELETE /auth/me; "
+                "refusing to create a synthetic account"
+            )
+        print("PASS: staging advertises DELETE /auth/me cleanup", flush=True)
+
         code, registration = http("POST", "/api/v1/auth/register", person)
         if code not in (200, 201):
             raise RuntimeError(f"Synthetic registration failed HTTP {code}")
@@ -164,8 +177,10 @@ async def run():
             # (Retry-After: 60). Respect the documented window rather than
             # skipping deletion or treating a 429 as successful cleanup.
             for attempt in range(3):
-                code, _ = http("DELETE", "/api/v1/auth/me", token=token)
-                if code in (200, 204):
+                # Explicitly target the enhanced DELETE route, not the
+                # GET-only legacy /api/v1/auth/me profile alias.
+                code, response = http("DELETE", "/auth/me", token=token)
+                if code == 200 and response.get("deleted") is True:
                     print("PASS: synthetic learner deleted", flush=True)
                     break
                 if code != 429 or attempt == 2:
