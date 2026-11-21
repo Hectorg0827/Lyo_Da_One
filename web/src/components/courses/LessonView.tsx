@@ -220,7 +220,7 @@ function BlockRenderer({
 
     case 'text':
       return (
-        <p className="text-white/80 leading-relaxed">{block.content}</p>
+        <p className="whitespace-pre-wrap text-white/80 leading-relaxed">{block.content}</p>
       );
 
     case 'code':
@@ -235,16 +235,25 @@ function BlockRenderer({
         />
       );
 
-    case 'quiz':
+    case 'quiz': {
+      const quiz = block.content as unknown as Quiz;
+      if (!quiz || !Array.isArray(quiz.questions) || quiz.questions.length === 0) {
+        return <p role="alert" className="text-sm text-amber-300">Quiz content is unavailable. Open Classroom to practice.</p>;
+      }
       return (
-        <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
           <QuizView
-            quiz={block.content as unknown as Quiz}
+            quiz={quiz}
             inline
-            onComplete={() => onLessonComplete?.()}
+            // A completed but incorrect practice attempt must not mark a lesson
+            // complete automatically. Server grading/mastery stays authoritative.
+            onComplete={(score) => {
+              if (score === quiz.questions.length) onLessonComplete?.();
+            }}
           />
         </div>
       );
+    }
 
     case 'flashcard':
       return <FlashcardBlock block={block} />;
