@@ -114,7 +114,10 @@ private fun RowScope.GhostTab(
 ) {
     IconButton(
         onClick = { onNavigate(route) },
-        modifier = Modifier.weight(1f).height(68.dp),
+        // The visual glyph is decorative; TalkBack must announce the destination
+        // (in particular "Create"), not an ambiguous plus sign or icon name.
+        modifier = Modifier.weight(1f).height(68.dp)
+            .semantics { contentDescription = label },
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             LyoNavGlyph(glyph, selected)
@@ -130,7 +133,7 @@ private fun RowScope.GhostTab(
 private fun LyoNavGlyph(glyph: String, selected: Boolean) {
     val outline = Color.White.copy(alpha = if (selected) 1f else 0.52f)
     val accent = if (selected) Color(0xFFFF8C00) else outline
-    Canvas(Modifier.size(26.dp).semantics { contentDescription = glyph }) {
+    Canvas(Modifier.size(26.dp)) {
         val line = Stroke(width = 1.8f, cap = StrokeCap.Round, join = StrokeJoin.Round)
         scale(size.width / 24f, size.height / 24f, pivot = Offset.Zero) {
             when (glyph) {

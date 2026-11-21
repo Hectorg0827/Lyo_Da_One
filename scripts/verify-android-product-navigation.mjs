@@ -29,20 +29,28 @@ const communityViewModel = read('android/app/src/main/java/com/lyo/app/ui/screen
 // so the same feed had two names and one of them pointed somewhere else. It
 // is Discover on all three platforms now — iOS shows the same reel, web
 // serves it at /discover — and the reel is what this tab opens.
-const expectedOrder = [
-  'BottomItem(Routes.HOME, "Focus"',
-  'BottomItem(Routes.DISCOVER, "Discover"',
-  'BottomItem(Routes.CHAT, "Lyo"',
-  'BottomItem(Routes.COMMUNITY, "Community"',
-  'BottomItem(Routes.CREATE, "+"',
+const expectedTabs = [
+  ['HOME', 'Focus'],
+  ['DISCOVER', 'Discover'],
+  ['CHAT', 'Lyo'],
+  ['COMMUNITY', 'Community'],
+  ['CREATE', '+'],
 ];
 
-let previousIndex = -1;
-for (const marker of expectedOrder) {
-  const index = nav.indexOf(marker);
-  if (index < 0) throw new Error(`Android primary navigation: missing ${marker}`);
-  if (index <= previousIndex) throw new Error('Android primary navigation order does not match approved LYO hierarchy');
-  previousIndex = index;
+// Verify the *entire* list rather than merely finding five strings in order.
+// The older check silently accepted a sixth bottom tab or a duplicate route.
+const declaredTabs = nav.match(/private val bottomItems\s*=\s*listOf\(([\s\S]*?)\n\)/);
+if (!declaredTabs) throw new Error('Android primary navigation list is missing');
+const tabEntries = [...declaredTabs[1].matchAll(/BottomItem\(\s*Routes\.([A-Z_]+)\s*,\s*"([^"]+)"\s*,/g)]
+  .map((match) => [match[1], match[2]]);
+const rawEntryCount = (declaredTabs[1].match(/\bBottomItem\s*\(/g) || []).length;
+if (rawEntryCount !== expectedTabs.length || tabEntries.length !== expectedTabs.length ||
+    tabEntries.some(([route, label], i) =>
+      route !== expectedTabs[i][0] || label !== expectedTabs[i][1])) {
+  throw new Error(
+    'Android primary navigation must contain exactly Focus / Discover / Lyo / Community / +: ' +
+    JSON.stringify(tabEntries),
+  );
 }
 
 requireText(nav, 'composable(Routes.CHAT) { ChatScreen(nav) }', 'Android Lyo chat route');
@@ -68,6 +76,14 @@ for (const marker of visibleTabOrder) {
   }
   lastVisibleIndex = index;
 }
+const renderedBar = bottomBar.match(/internal fun LyoBottomBar\([\s\S]*?\n\}\n\n@Composable\nprivate fun RowScope\.GhostTab/);
+if (!renderedBar || (renderedBar[0].match(/\bGhostTab\("/g) || []).length !== 4) {
+  throw new Error('Android visible navigation must have exactly four glyph tabs plus the Lyo mascot');
+}
+requireText(bottomBar, '.semantics { contentDescription = label }', 'Accessible tab descriptions');
+const homeScreen = read('android/app/src/main/java/com/lyo/app/ui/screens/home/HomeScreen.kt');
+requireText(homeScreen, 'nav.navigate(Routes.PROFILE)', 'Learner own-profile entry');
+
 rejectText(bottomBar, 'communityLaunchEnabled = false', 'Android Community tab availability');
 // The + glyph must open the current creation studio, not the legacy sheet.
 // A prior APK had the new CreateScreen but the tab still intercepted it.
