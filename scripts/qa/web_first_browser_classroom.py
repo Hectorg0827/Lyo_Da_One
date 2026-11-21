@@ -208,8 +208,12 @@ async def run():
             if os.environ.get("LYO_REQUIRE_BRIDGE") == "1":
                 stage = "parallel quick teacher visible while Classroom loads"
                 try:
-                    await page.get_by_text("Start learning now", exact=True).wait_for(
-                        state="visible", timeout=9000)
+                    bridge_region = page.get_by_role(
+                        "region", name="Live teacher conversation before the next lesson step")
+                    await bridge_region.wait_for(state="visible", timeout=9000)
+                    if not await bridge_region.get_by_text(
+                        "Start learning now", exact=False).is_visible():
+                        raise RuntimeError("Visible bridge has no startup heading")
                 except Exception:
                     # Preserve safe, synthetic-only evidence before failing.
                     await page.screenshot(
@@ -254,7 +258,8 @@ async def run():
                 events = first["eventOrder"]
                 if not events or events[0] != "bridge:startup" or "scene" not in events:
                     raise RuntimeError("Ungraded teacher bridge did not precede scene")
-                if await page.get_by_text("Start learning now", exact=True).count():
+                if await page.get_by_role(
+                    "region", name="Live teacher conversation before the next lesson step").count():
                     raise RuntimeError("Stale quick teacher remained after real lesson")
                 print("PASS: startup bridge arrived before scene, then cleared", flush=True)
             if not first["session"]:
