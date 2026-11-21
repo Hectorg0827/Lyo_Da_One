@@ -2,18 +2,22 @@ name: LYO Web-first deployed staging acceptance
 # Deployed staging candidate only; uses a disposable learner with verified cleanup.
 # No production operations, merge, or Android/iOS build.
 on:
-  push:
-    branches: [release/lyo-web-first-20261120]
-    paths:
-      - '.github/workflows/lyo-web-first-deployed-staging.yml'
-      - 'scripts/qa/web_first_browser_classroom.py'
+  # Live provider calls consume staging AI allowance. Never run on push.
+  # Trigger manually only after the owner authorizes a bounded QA budget.
   workflow_dispatch:
+    inputs:
+      staging_ai_spend_approved:
+        description: 'I authorize bounded staging AI usage for this live test'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
 jobs:
   deployed-chromium:
+    if: ${{ inputs.staging_ai_spend_approved == true }}
     name: Pinned deployed staging Web visible login/course/Classroom/second profile
     runs-on: ubuntu-24.04
     timeout-minutes: 15
