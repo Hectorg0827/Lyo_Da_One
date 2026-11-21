@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 20
     env:
       LYO_WEB_BASE_URL: https://lyoonestagingweb-staging.up.railway.app
-      EXPECTED_WEB_SHA: 35dd22f93ea025af55f186e68f46ada17580fb44
+      EXPECTED_WEB_SHA: abbb91c58d50878fb6086e5ddab7de4e31891369
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,5 +42,5 @@ jobs:
       - name: Evidence limit
         if: success()
         run: |
-          echo 'Authenticated staging Web reader rendered fixture top-level saved lessons and rejected empty course.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Authenticated staging Web reader rendered saved lessons, rejected empty course, and scored indexed practice answer 1/1.' >> "$GITHUB_STEP_SUMMARY"
           echo 'Mocked course GET: does not prove live AI generation, real course persistence, grading or audible voice.' >> "$GITHUB_STEP_SUMMARY"
