@@ -782,6 +782,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       typeof performance !== 'undefined' ? performance.now() : Date.now();
     let firstVisibleChunkRecorded = false;
     let receivedTextDelta = false;
+    let receivedAuthoritativeCourse = false;
     let voiceHandoffTarget: string | null = null;
     let voiceHandoffReadyReported = false;
 
@@ -1026,6 +1027,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   && (!requestedLevel || actualLevel === requestedLevel),
               };
 
+              if (publishedCourse.__lyo_authoritative) {
+                receivedAuthoritativeCourse = true;
+              }
+
               set((s) => ({
                 generationActivity: 'course',
                 generationProgress: isPreview
@@ -1122,12 +1127,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 state.generationActivity === 'course'
                   ? {
                       ...(state.courseGenerationState || {
-                        phase: 'ready',
-                        progress: 100,
+                        phase: 'failed',
+                        progress: 0,
                       }),
-                      phase: 'ready',
-                      progress: 100,
-                      message: 'Course ready',
+                      // A completed SSE transport is not proof of successful
+                      // course creation. Fail closed unless a real final handoff
+                      // contained level-matched, nonempty lessons.
+                      phase: receivedAuthoritativeCourse ? 'ready' : 'failed',
+                      progress: receivedAuthoritativeCourse ? 100 : 0,
+                      message: receivedAuthoritativeCourse
+                        ? 'Course ready'
+                        : 'Course generation did not finish. Please retry.',
                     }
                   : null,
             }));
