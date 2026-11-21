@@ -139,11 +139,20 @@ async def run():
                 constructor(url, protocols) {
                   super(url, protocols);
                   this.__qaSceneIds = [];
+                  this.__qaBridgePhases = [];
+                  this.__qaEventOrder = [];
                   this.addEventListener('message', ev => {
                     try {
                       const event = JSON.parse(ev.data);
                       const scene = event.data?.scene ?? event.scene;
-                      if (scene?.scene_id) this.__qaSceneIds.push(String(scene.scene_id));
+                      if (event.event_type === 'bridge_message') {
+                        this.__qaBridgePhases.push(String(event.data?.phase || 'unknown'));
+                        this.__qaEventOrder.push('bridge:' + String(event.data?.phase || 'unknown'));
+                      }
+                      if (scene?.scene_id) {
+                        this.__qaSceneIds.push(String(scene.scene_id));
+                        this.__qaEventOrder.push('scene');
+                      }
                     } catch {}
                   });
                   window.__lyoQaSockets.push(this);
@@ -188,12 +197,21 @@ async def run():
                 resume: u.searchParams.get('resume'),
                 state: s.readyState,
                 scenes: s.__qaSceneIds || [],
+                bridgePhases: s.__qaBridgePhases || [],
+                eventOrder: s.__qaEventOrder || [],
               };
             })"""
             stage = "Classroom initial scene"
             await page.goto(WEB + "/classroom?topic=Fractions&duration=3&language=en-US",
                             wait_until="domcontentloaded", timeout=25000)
             await page.get_by_role("button", name="Leave classroom").wait_for(timeout=25000)
+            if os.environ.get("LYO_REQUIRE_BRIDGE") == "1":
+                stage = "parallel quick teacher visible while Classroom loads"
+                await page.get_by_text("Start learning now", exact=True).wait_for(
+                    state="visible", timeout=9000)
+                await page.screenshot(path=str(ARTIFACTS / "parallel_teacher_startup.png"),
+                                      full_page=True)
+                print("PASS: actual Web UI showed immediate ungraded teacher", flush=True)
             # Prefer what actual in-page WebSockets received. The external
             # Playwright event observer can miss frames, especially after
             # Next.js hydration and WebSocket replacement.
@@ -216,6 +234,13 @@ async def run():
             if first["resume"]:
                 raise RuntimeError("Fresh Web lesson incorrectly requested resume")
             initial_scene = first["scenes"][0]
+            if os.environ.get("LYO_REQUIRE_BRIDGE") == "1":
+                events = first["eventOrder"]
+                if not events or events[0] != "bridge:startup" or "scene" not in events:
+                    raise RuntimeError("Ungraded teacher bridge did not precede scene")
+                if await page.get_by_text("Start learning now", exact=True).count():
+                    raise RuntimeError("Stale quick teacher remained after real lesson")
+                print("PASS: startup bridge arrived before scene, then cleared", flush=True)
             if not first["session"]:
                 raise RuntimeError("Web Classroom did not send session identity")
             await page.screenshot(path=str(ARTIFACTS / "classroom_initial.png"), full_page=True)
