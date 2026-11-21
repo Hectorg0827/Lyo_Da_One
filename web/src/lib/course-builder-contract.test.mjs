@@ -97,3 +97,13 @@ test('an incomplete or wrong-level AI proposal must never appear ready to start'
   assert.match(card, /Retry generation/);
   assert.match(card, /Course incomplete/);
 });
+
+
+test('stream completion cannot advertise course ready without authoritative lesson evidence', () => {
+  assert.match(store, /let receivedAuthoritativeCourse = false/);
+  assert.match(store, /if \(publishedCourse\.__lyo_authoritative\)/);
+  assert.match(store, /receivedAuthoritativeCourse = true/);
+  assert.match(store, /phase: receivedAuthoritativeCourse \? 'ready' : 'failed'/);
+  assert.match(store, /progress: receivedAuthoritativeCourse \? 100 : 0/);
+  assert.match(store, /Course generation did not finish\. Please retry\./);
+});
