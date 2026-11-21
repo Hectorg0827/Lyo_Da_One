@@ -81,10 +81,13 @@ async def run():
             connected = time.monotonic()
             startup_ms, scene_ms, generation = None, None, None
             followup = False
+            ai_followup = False
+            reply_ms = None
+            reply_sent_at = None
             first_scene = None
             # The quick teacher should open before authoritative lesson generation.
             async def receive_until_scene():
-                nonlocal startup_ms, scene_ms, generation, followup, first_scene
+                nonlocal startup_ms, scene_ms, generation, followup, ai_followup, reply_ms, reply_sent_at, first_scene
                 async for raw in ws:
                     kind, payload = envelope(json.loads(raw))
                     if kind == "bridge_message":
@@ -94,6 +97,7 @@ async def run():
                             assert payload.get("prompt") is True
                             generation = payload.get("generation")
                             startup_ms = round((time.monotonic() - connected) * 1000)
+                            reply_sent_at = time.monotonic()
                             await ws.send(json.dumps({
                                 "event_type": "bridge_reply", "session_id": seat,
                                 "generation": generation,
@@ -102,6 +106,8 @@ async def run():
                         elif payload.get("phase") == "startup":
                             assert payload.get("ungraded") is True
                             followup = True
+                            ai_followup = bool(payload.get("ai_generated"))
+                            reply_ms = round((time.monotonic() - reply_sent_at) * 1000) if reply_sent_at else None
                     elif kind in {"scene_start", "scene_stream"}:
                         scene = payload.get("scene") or {}
                         if not scene and kind == "scene_start":
@@ -122,7 +128,9 @@ async def run():
                                    + str(startup_ms))
             print("PASS: ungraded parallel startup prompt in " + str(startup_ms)
                   + "ms; first scene in " + str(scene_ms)
-                  + "ms; optional followup_observed=" + str(followup), flush=True)
+                  + "ms; optional followup_observed=" + str(followup)
+                  + "; ai_generated=" + str(ai_followup)
+                  + "; reply_ms=" + str(reply_ms), flush=True)
 
             # Continue is a single authoritative lesson action; bridge transport
             # must stay open for replies while it is prepared asynchronously.
