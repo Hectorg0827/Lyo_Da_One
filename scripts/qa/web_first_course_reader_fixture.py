@@ -70,6 +70,7 @@ async def run():
 
         course_id = "11111111-1111-4111-8111-" + marker[:12]
         empty_id = "22222222-2222-4222-8222-" + marker[:12]
+        quiz_id = "33333333-3333-4333-8333-" + marker[:12]
         base_response = {
             "title": "Saved Algebra Course", "description": "Two real lessons",
             "subject": "Mathematics", "difficulty_level": "intermediate",
@@ -93,6 +94,29 @@ async def run():
         }
         empty = {
             **base_response, "id": empty_id, "lessons_count": 0, "lessons": [],
+        }
+        quiz = {
+            **base_response, "id": quiz_id, "lessons_count": 1,
+            "modules": [{
+                "id": "quiz-module", "title": "Practice Module", "order": 1,
+                "lessons": [{
+                    "id": "practice-lesson-1", "title": "Check Algebra Fundamentals",
+                    "order": 1, "type": "quiz", "duration": 3,
+                    "content": [{
+                        "id": "quiz-block", "type": "quiz",
+                        "content": {
+                            "id": "practice-quiz", "title": "Practice scoring",
+                            "questions": [{
+                                "id": "answer-index", "question": "What is 2 + 2?",
+                                "type": "multiple_choice",
+                                "options": ["3", "4", "5"],
+                                "correctAnswer": 1,
+                                "explanation": "Two plus two equals four.",
+                            }],
+                        },
+                    }],
+                }],
+            }],
         }
         requested = []
 
@@ -141,6 +165,8 @@ async def run():
                         body = full
                     elif parsed.path.endswith("/" + empty_id):
                         body = empty
+                    elif parsed.path.endswith("/" + quiz_id):
+                        body = quiz
                     else:
                         raise RuntimeError("Unexpected fixture course id")
                     await route.fulfill(status=200, content_type="application/json",
@@ -166,7 +192,27 @@ async def run():
                 assert await page.get_by_role("button", name="Mark as Complete").count() == 0
                 await page.screenshot(path=str(artifact_dir / "empty_course.png"))
                 print("PASS: missing lessons display retry without false progress", flush=True)
-                assert len(requested) >= 2
+
+                # This answer is stored as numeric option index 1, while the
+                # user sees option text "4". Earlier UI feedback showed it
+                # as correct but the final score incorrectly reported 0/1.
+                await page.goto(WEB + "/courses/" + quiz_id,
+                                wait_until="domcontentloaded", timeout=30000)
+                await page.get_by_text("What is 2 + 2?", exact=True).wait_for(
+                    state="visible", timeout=35000
+                )
+                await page.get_by_text("4", exact=True).click()
+                await page.get_by_role("button", name="Submit Answer").click()
+                await page.get_by_text("Two plus two equals four.", exact=False).wait_for(
+                    state="visible", timeout=15000
+                )
+                await page.get_by_role("button", name="See Results").click()
+                await page.get_by_text("1/1", exact=True).wait_for(
+                    state="visible", timeout=15000
+                )
+                await page.screenshot(path=str(artifact_dir / "indexed_answer_score.png"))
+                print("PASS: correct index-keyed choice receives 1/1 score, without AI", flush=True)
+                assert len(requested) >= 3
             finally:
                 await browser.close()
     finally:
