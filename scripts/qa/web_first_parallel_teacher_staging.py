@@ -6,15 +6,19 @@ event shape, never tokens, learner text, model output or provider credentials.
 """
 import asyncio
 import json
+import os
 import secrets
 import sys
 import time
 from urllib.parse import urlencode, urlsplit
 import websockets
 
-from web_first_live_classroom_auth import API, http
+import web_first_live_classroom_auth as qa
 
+API = os.environ.get("LYO_BRIDGE_STAGING_API", qa.API).rstrip("/")
 assert (urlsplit(API).hostname or "").endswith("-staging.up.railway.app")
+qa.API = API  # Reuse existing synthetic-registration/cleanup helper at target.
+http = qa.http
 
 
 def envelope(event):
