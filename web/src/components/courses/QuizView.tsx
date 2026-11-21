@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, ChevronRight, RotateCcw, Trophy } from 'lucide-react';
 import { Quiz, QuizQuestion } from '@/types';
 import { cn } from '@/lib/utils';
+import { isPracticeAnswerCorrect } from '@/lib/quiz-answer.mjs';
 
 interface QuizViewProps {
   quiz: Quiz;
@@ -34,7 +35,7 @@ export default function QuizView({ quiz, onComplete, inline = false }: QuizViewP
   }
 
   function handleNext() {
-    const isCorrect = selectedAnswers[currentQuestion] === question.correctAnswer;
+    const isCorrect = isPracticeAnswerCorrect(question, selectedAnswers[currentQuestion]);
     const newScore = score + (isCorrect ? 1 : 0);
 
     if (currentQuestion + 1 >= totalQuestions) {
@@ -57,8 +58,8 @@ export default function QuizView({ quiz, onComplete, inline = false }: QuizViewP
 
   function getOptionStyle(option: string, index: number) {
     const selected = selectedAnswers[currentQuestion];
-    const isSelected = selected === option || selected === index;
-    const isCorrect = question.correctAnswer === option || question.correctAnswer === index;
+    const isSelected = selected === index || selected === option;
+    const isCorrect = isPracticeAnswerCorrect(question, index);
 
     if (!showFeedback) {
       return isSelected
@@ -78,7 +79,7 @@ export default function QuizView({ quiz, onComplete, inline = false }: QuizViewP
   function getTrueFalseStyle(value: string) {
     const selected = selectedAnswers[currentQuestion];
     const isSelected = selected === value;
-    const isCorrect = question.correctAnswer === value;
+    const isCorrect = isPracticeAnswerCorrect(question, value);
 
     if (!showFeedback) {
       return isSelected
@@ -98,6 +99,14 @@ export default function QuizView({ quiz, onComplete, inline = false }: QuizViewP
   const scorePercent = totalQuestions > 0 ? (score / totalQuestions) * 100 : 0;
   const circumference = 2 * Math.PI * 40;
   const strokeDashoffset = circumference - (scorePercent / 100) * circumference;
+
+  if (!question) {
+    return (
+      <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5 text-amber-200">
+        This practice quiz has no questions. Return to the course or continue in Classroom.
+      </div>
+    );
+  }
 
   if (isComplete) {
     return (
@@ -225,16 +234,14 @@ export default function QuizView({ quiz, onComplete, inline = false }: QuizViewP
           {question.type === 'multiple_choice' && question.options && (
             <div className="flex flex-col gap-3">
               {question.options.map((option, index) => {
-                const isSelected =
-                  selectedAnswers[currentQuestion] === option ||
-                  selectedAnswers[currentQuestion] === index;
-                const isCorrect =
-                  question.correctAnswer === option || question.correctAnswer === index;
+                const isSelected = selectedAnswers[currentQuestion] === index ||
+                  selectedAnswers[currentQuestion] === option;
+                const isCorrect = isPracticeAnswerCorrect(question, index);
 
                 return (
                   <button
                     key={index}
-                    onClick={() => handleSelect(option)}
+                    onClick={() => handleSelect(index)}
                     disabled={showFeedback}
                     className={cn(
                       'flex items-center gap-3 w-full text-left px-4 py-3.5 rounded-xl border transition-all duration-200 cursor-pointer',
@@ -262,7 +269,7 @@ export default function QuizView({ quiz, onComplete, inline = false }: QuizViewP
             <div className="flex gap-3">
               {['True', 'False'].map((value) => {
                 const isSelected = selectedAnswers[currentQuestion] === value;
-                const isCorrect = question.correctAnswer === value;
+                const isCorrect = isPracticeAnswerCorrect(question, value);
 
                 return (
                   <button
@@ -283,6 +290,21 @@ export default function QuizView({ quiz, onComplete, inline = false }: QuizViewP
             </div>
           )}
 
+          {/* Fill-blank practice is local; Classroom mastery remains server-authoritative. */}
+          {question.type === 'fill_blank' && (
+            <label className="flex flex-col gap-2 text-sm text-white/70">
+              Your answer
+              <input
+                type="text"
+                value={String(selectedAnswers[currentQuestion] ?? '')}
+                onChange={(event) => handleSelect(event.target.value)}
+                disabled={showFeedback}
+                placeholder="Type your answer"
+                className="rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-white outline-none focus:border-lyo-500 disabled:opacity-60"
+              />
+            </label>
+          )}
+
           {/* Feedback / explanation */}
           <AnimatePresence>
             {showFeedback && question.explanation && (
@@ -293,8 +315,7 @@ export default function QuizView({ quiz, onComplete, inline = false }: QuizViewP
                 transition={{ duration: 0.2 }}
                 className={cn(
                   'rounded-xl p-4 border text-sm leading-relaxed',
-                  selectedAnswers[currentQuestion] === question.correctAnswer ||
-                    selectedAnswers[currentQuestion] === question.correctAnswer
+                  isPracticeAnswerCorrect(question, selectedAnswers[currentQuestion])
                     ? 'bg-green-500/10 border-green-500/30 text-green-300'
                     : 'bg-red-500/10 border-red-500/30 text-red-300'
                 )}
