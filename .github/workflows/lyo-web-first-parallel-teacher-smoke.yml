@@ -1,16 +1,21 @@
 name: LYO parallel teacher staging WebSocket acceptance
 # Tests only a disposable learner against a pinned staging-only backend target.
 on:
-  push:
-    branches: [release/lyo-web-first-20261120]
-    paths:
-      - 'scripts/qa/web_first_parallel_teacher_staging.py'
-      - '.github/workflows/lyo-web-first-parallel-teacher-smoke.yml'
+  # Live provider calls consume staging AI allowance. Never run on push.
+  # Trigger manually only after the owner authorizes a bounded QA budget.
   workflow_dispatch:
+    inputs:
+      staging_ai_spend_approved:
+        description: 'I authorize bounded staging AI usage for this live test'
+        required: true
+        default: false
+        type: boolean
+
 permissions:
   contents: read
 jobs:
   parallel-teacher:
+    if: ${{ inputs.staging_ai_spend_approved == true }}
     name: Startup/transition quick teacher with real staging WebSocket
     runs-on: ubuntu-24.04
     timeout-minutes: 14
