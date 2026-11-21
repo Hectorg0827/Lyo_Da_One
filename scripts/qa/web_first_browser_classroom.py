@@ -285,15 +285,24 @@ async def run():
             # A ready button alone was a false positive: a failed backend
             # response once rendered a Beginner placeholder as ready for an
             # explicitly Intermediate algebra course, with zero lessons.
-            await page.get_by_text("Course outline", exact=True).wait_for(
-                state="visible", timeout=5000)
-            await page.get_by_text("Intermediate", exact=True).first.wait_for(
-                state="visible", timeout=5000)
+            # Persist a synthetic-only screenshot *before* strict assertions
+            # so unexpected text/case differences are diagnosable.
+            await page.screenshot(path=str(ARTIFACTS / "course_ready.png"), full_page=True)
+            outline = page.get_by_text("Course outline", exact=True)
+            lesson_count = page.get_by_text("4 lessons", exact=True)
+            # The DOM stores lowercase "intermediate"; CSS capitalize affects
+            # appearance, not Playwright's case-sensitive exact text matching.
+            level = page.get_by_text("intermediate", exact=True)
+            print("COURSE QA evidence: outline=" + str(await outline.count())
+                  + ", four_lessons=" + str(await lesson_count.count())
+                  + ", level_badge=" + str(await level.count()), flush=True)
+            await outline.wait_for(state="visible", timeout=10000)
+            await lesson_count.first.wait_for(state="visible", timeout=10000)
+            await level.first.wait_for(state="visible", timeout=10000)
             if await page.get_by_text(
                 "I'm having trouble responding right now. Please try again.",
                 exact=False).count():
                 raise RuntimeError("AI fallback appeared alongside a ready course")
-            await page.screenshot(path=str(ARTIFACTS / "course_ready.png"), full_page=True)
             print("PASS: actual algebra course generated through Web chat", flush=True)
             await ready.click()
             await page.wait_for_url("**/classroom?*", timeout=20000)
