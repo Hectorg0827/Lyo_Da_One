@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { Lock } from 'lucide-react'
 import EventForm from '@/components/community/EventForm'
@@ -9,7 +9,8 @@ import { ResultSkeleton, StateMessage } from '@/components/community/CommunityRe
 import { useApi } from '@/hooks/use-api'
 import { api } from '@/lib/api'
 
-export default function EditCommunityEventPage({ params }: { params: { id: string } }) {
+export default function EditCommunityEventPage() {
+  const params = useParams<{ id: string }>()
   const router = useRouter()
   const eventId = decodeURIComponent(params.id)
   const detail = useApi(() => api.community.node('event', eventId), [eventId])

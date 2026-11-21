@@ -26,6 +26,7 @@ type DisplayCourse = Partial<Course> & {
   objectives?: string[];
   duration?: string | number;
   estimated_duration?: string | number;
+  __lyo_authoritative?: boolean;
 };
 
 interface CourseGenerationCardProps {
@@ -281,12 +282,20 @@ export default function CourseGenerationCard({
   const router = useRouter();
   const courseRevisionUndo = useChatStore((state) => state.courseRevisionUndo);
   const undoCourseRevision = useChatStore((state) => state.undoCourseRevision);
+  const reviseActiveCourse = useChatStore((state) => state.reviseActiveCourse);
   const [adjustOpen, setAdjustOpen] = useState(false);
 
   const title = useMemo(() => safeCourseTitle(course), [course]);
   const difficulty = normalizedDifficulty(course);
   const durationMinutes = normalizedDuration(course);
   const modules = course?.modules ?? [];
+  const hasLessons = modules.some((module) =>
+    Array.isArray(module.lessons) && module.lessons.length > 0
+  );
+  const canStart = hasLessons && (
+    course?.__lyo_authoritative === true ||
+    (course?.__lyo_authoritative === undefined && Boolean(course?.id))
+  );
   const outlineItems = modules.length > 0
     ? modules.map((module, index) => ({
         id: module.id || `module-${index}`,
@@ -311,6 +320,7 @@ export default function CourseGenerationCard({
   const totalLessons = generationState?.totalLessons ?? outlineItems.length;
 
   const handleStart = () => {
+    if (!canStart) return;
     const topic = safeCourseTopic(course) || title || 'General Learning';
     const objective = (
       course?.modules?.[0]?.description
@@ -347,7 +357,7 @@ export default function CourseGenerationCard({
                   ? courseRevisionUndo
                     ? 'Updating your course'
                     : 'Creating your course'
-                  : 'Course ready'}
+                  : canStart ? 'Course ready' : 'Course incomplete'}
               </p>
               <h3 className="font-semibold text-white text-lg leading-snug mt-1 break-words">
                 {title}
@@ -482,7 +492,21 @@ export default function CourseGenerationCard({
             </div>
           ) : null}
 
-          {!isGenerating && (
+          {!isGenerating && !canStart && (
+            <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 space-y-3">
+              <p role="status" className="text-sm text-amber-100/85">
+                Lyo could not finish this course. Your request is saved; retry generation before starting a lesson.
+              </p>
+              <button
+                type="button"
+                onClick={() => void reviseActiveCourse('Retry generating this course with the requested difficulty and complete lessons.')}
+                className="w-full rounded-xl bg-lyo-600 px-3 py-2.5 text-sm font-semibold text-white hover:opacity-90"
+              >
+                Retry generation
+              </button>
+            </div>
+          )}
+          {!isGenerating && canStart && (
             <div className="flex gap-2 pt-1">
               <button
                 onClick={handleStart}

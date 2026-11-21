@@ -782,6 +782,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       typeof performance !== 'undefined' ? performance.now() : Date.now();
     let firstVisibleChunkRecorded = false;
     let receivedTextDelta = false;
+    let receivedAuthoritativeCourse = false;
     let voiceHandoffTarget: string | null = null;
     let voiceHandoffReadyReported = false;
 
@@ -1010,6 +1011,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }));
               }
 
+              const requestedLevel = options.courseContext?.difficulty
+                || /\\b(beginner|intermediate|advanced)\\s+course\\b/i.exec(trimmedContent)?.[1]?.toLowerCase();
+              const actualLevel = String(courseData.difficulty || courseData.level || '').toLowerCase();
+              const completeLessons = Array.isArray(courseData.modules)
+                && courseData.modules.some((module: { lessons?: unknown[] }) =>
+                  Array.isArray(module.lessons) && module.lessons.length > 0
+                );
+              const publishedCourse = {
+                ...courseData,
+                // A progress milestone or failed AI fallback is not a complete
+                // course, and a Beginner result cannot satisfy an Intermediate
+                // request. Only an authoritative handoff with lessons may start.
+                __lyo_authoritative: !isPreview && completeLessons
+                  && (!requestedLevel || actualLevel === requestedLevel),
+              };
+
+              if (publishedCourse.__lyo_authoritative) {
+                receivedAuthoritativeCourse = true;
+              }
+
               set((s) => ({
                 generationActivity: 'course',
                 generationProgress: isPreview
@@ -1047,7 +1068,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                           ? {
                               ...m,
                               type: 'course_proposal' as const,
-                              metadata: { ...m.metadata, course: courseData },
+                              metadata: { ...m.metadata, course: publishedCourse },
                             }
                           : m
                       ),
@@ -1063,7 +1084,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                         role: 'assistant' as const,
                         content: '',
                         type: 'course_proposal' as const,
-                        metadata: { course: courseData },
+                        metadata: { course: publishedCourse },
                         createdAt: new Date().toISOString(),
                       },
                     ],
@@ -1106,12 +1127,17 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 state.generationActivity === 'course'
                   ? {
                       ...(state.courseGenerationState || {
-                        phase: 'ready',
-                        progress: 100,
+                        phase: 'failed',
+                        progress: 0,
                       }),
-                      phase: 'ready',
-                      progress: 100,
-                      message: 'Course ready',
+                      // A completed SSE transport is not proof of successful
+                      // course creation. Fail closed unless a real final handoff
+                      // contained level-matched, nonempty lessons.
+                      phase: receivedAuthoritativeCourse ? 'ready' : 'failed',
+                      progress: receivedAuthoritativeCourse ? 100 : 0,
+                      message: receivedAuthoritativeCourse
+                        ? 'Course ready'
+                        : 'Course generation did not finish. Please retry.',
                     }
                   : null,
             }));
