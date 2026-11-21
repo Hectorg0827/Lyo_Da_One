@@ -1,0 +1,33 @@
+name: LYO parallel teacher staging WebSocket acceptance
+# Tests only a disposable learner against a pinned staging-only backend target.
+on:
+  push:
+    branches: [release/lyo-web-first-20261120]
+    paths:
+      - 'scripts/qa/web_first_parallel_teacher_staging.py'
+      - '.github/workflows/lyo-web-first-parallel-teacher-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  parallel-teacher:
+    name: Startup/transition quick teacher with real staging WebSocket
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    env:
+      # Safe initial target: isolated preview, not canonical staging.
+      LYO_BRIDGE_STAGING_API: https://lyo-continuousteaching-preview-backend-staging.up.railway.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install transport dependency only
+        run: python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Verify actual parallel bridge and authoritative scene
+        run: python -u scripts/qa/web_first_parallel_teacher_staging.py
+      - name: Evidence boundary
+        if: success()
+        run: |
+          echo 'Staging-only authenticated bridge startup precedes real scene and transition quick prompt; one synthetic account deleted.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This is a protocol test, not audible voice playback or full Web UI handoff QA.' >> "$GITHUB_STEP_SUMMARY"
