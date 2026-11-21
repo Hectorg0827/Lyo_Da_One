@@ -36,11 +36,26 @@ async def run():
     created = False
     try:
         from urllib.request import urlopen
-        with urlopen(WEB + "/api/health", timeout=20) as response:
-            status = json.loads(response.read())
-        if status.get("status") != "healthy" or status.get("commit") != EXPECTED_SHA:
-            raise RuntimeError("Deployed Web SHA/health does not match test contract")
-        print("PASS: deployed Web exact SHA and health", flush=True)
+        # Railway switches active deployments only when the new image is
+        # healthy. A valid source-only build can precede that rollout.
+        # Wait without creating a learner or making paid provider requests.
+        for attempt in range(48):
+            try:
+                with urlopen(WEB + "/api/health", timeout=12) as response:
+                    status = json.loads(response.read())
+                if status.get("status") == "healthy" and status.get("commit") == EXPECTED_SHA:
+                    print("PASS: deployed Web exact SHA and health", flush=True)
+                    break
+            except Exception:
+                pass
+            if attempt % 10 == 0:
+                print("QA preflight: waiting for exact isolated staging Web SHA", flush=True)
+            await asyncio.sleep(5)
+        else:
+            raise RuntimeError(
+                "Deployed staging Web did not reach exact expected SHA within preflight; "
+                "no synthetic learner was created"
+            )
 
         # The v1 /api/v1/auth/me alias supports GET but not DELETE. Deletion
         # belongs to the enhanced /auth/me router. Check the deployed OpenAPI
