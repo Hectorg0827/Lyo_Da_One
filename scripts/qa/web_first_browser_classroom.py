@@ -207,8 +207,24 @@ async def run():
             await page.get_by_role("button", name="Leave classroom").wait_for(timeout=25000)
             if os.environ.get("LYO_REQUIRE_BRIDGE") == "1":
                 stage = "parallel quick teacher visible while Classroom loads"
-                await page.get_by_text("Start learning now", exact=True).wait_for(
-                    state="visible", timeout=9000)
+                try:
+                    await page.get_by_text("Start learning now", exact=True).wait_for(
+                        state="visible", timeout=9000)
+                except Exception:
+                    # Preserve safe, synthetic-only evidence before failing.
+                    await page.screenshot(
+                        path=str(ARTIFACTS / "parallel_teacher_not_visible.png"),
+                        full_page=True)
+                    evidence = await page.evaluate("""() => (window.__lyoQaSockets || [])
+                      .filter(s => new URL(s.url).pathname === '/api/v1/classroom/ws/connect')
+                      .map(s => ({
+                        state: s.readyState,
+                        bridgePhases: s.__qaBridgePhases,
+                        eventOrder: s.__qaEventOrder?.slice(0, 8),
+                        sceneCount: s.__qaSceneIds?.length || 0,
+                      }))""")
+                    raise RuntimeError("Quick teacher not visible; sanitized socket evidence="
+                                       + str(evidence)[:600])
                 await page.screenshot(path=str(ARTIFACTS / "parallel_teacher_startup.png"),
                                       full_page=True)
                 print("PASS: actual Web UI showed immediate ungraded teacher", flush=True)
