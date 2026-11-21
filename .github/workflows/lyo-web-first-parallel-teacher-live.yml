@@ -1,0 +1,78 @@
+name: LYO Web-first deployed quick teacher acceptance
+# Existing Web staging + isolated staging backend only. No deployments or production.
+on:
+  push:
+    branches: [release/lyo-web-first-20261120]
+    paths:
+      - '.github/workflows/lyo-web-first-parallel-teacher-live.yml'
+      - 'scripts/qa/web_first_parallel_teacher_staging.py'
+      - 'scripts/qa/web_first_browser_classroom.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  bridge-protocol:
+    name: Authenticated quick teacher startup, AI reply and transition
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      LYO_BRIDGE_STAGING_API: https://lyojourneystagingbackend-staging.up.railway.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned WebSocket transport
+        run: python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Require ungraded bridge preceding scene, AI reply and transition
+        run: python -u scripts/qa/web_first_parallel_teacher_staging.py
+      - name: Report limit
+        if: success()
+        run: echo 'Exact staging backend bridge accepted a disposable learner. Protocol checks do not prove audible speech.' >> "$GITHUB_STEP_SUMMARY"
+
+  visible-web-handoff:
+    name: Real Chromium quick teacher visible then authoritative lesson
+    needs: bridge-protocol
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      LYO_WEB_BASE_URL: https://lyoonestagingweb-staging.up.railway.app
+      LYO_REQUIRE_BRIDGE: '1'
+      EXPECTED_WEB_SHA: 9c576e44d6f50dd279f9112562831fbaee198b9f
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Confirm expected Web deployment is active
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from urllib.request import urlopen
+          url = os.environ["LYO_WEB_BASE_URL"] + "/api/health"
+          with urlopen(url, timeout=20) as response:
+              health = json.loads(response.read())
+          if health.get("status") != "healthy":
+              raise SystemExit("Web staging health not ready")
+          if health.get("commit") != os.environ["EXPECTED_WEB_SHA"]:
+              raise SystemExit("Web staging commit does not match pinned candidate")
+          print("PASS: exact Web staging commit", flush=True)
+          PY
+      - name: Install Chromium and transport dependencies
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+          python -m playwright install --with-deps chromium
+      - name: Verify quick teacher appears and hands off in visible UI
+        run: python -u scripts/qa/web_first_browser_classroom.py
+      - name: Keep disposable learner screenshots for manual review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-web-parallel-teacher-visual-evidence
+          path: artifacts/web-first-browser-qa/*.png
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Report limit
+        if: success()
+        run: echo 'Visible quick-teacher startup and scene handoff passed; audible output requires independent playback QA.' >> "$GITHUB_STEP_SUMMARY"
