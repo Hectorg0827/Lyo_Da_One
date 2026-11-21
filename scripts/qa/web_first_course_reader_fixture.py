@@ -160,10 +160,21 @@ async def run():
         if created:
             if not token:
                 raise RuntimeError("Cannot remove synthetic account without token")
-            code, _ = http("DELETE", "/api/v1/auth/me", token=token)
-            if code not in (200, 204):
-                raise RuntimeError(f"Synthetic account cleanup failed HTTP {code}")
-            print("PASS: synthetic learner deleted", flush=True)
+            # Shared GitHub runner IPs can hit the staging auth limit
+            # (Retry-After: 60). Respect the documented window rather than
+            # skipping deletion or treating a 429 as successful cleanup.
+            for attempt in range(3):
+                code, _ = http("DELETE", "/api/v1/auth/me", token=token)
+                if code in (200, 204):
+                    print("PASS: synthetic learner deleted", flush=True)
+                    break
+                if code != 429 or attempt == 2:
+                    raise RuntimeError(
+                        f"Synthetic account cleanup failed HTTP {code}; "
+                        "manual staging QA-account reconciliation required"
+                    )
+                print("Rate-limited cleanup; respecting 65s backoff", flush=True)
+                await asyncio.sleep(65)
 
 if __name__ == "__main__":
     asyncio.run(run())
