@@ -1,8 +1,9 @@
 name: LYO no-provider Chromium teacher-audio playback smoke
 on:
   push:
-    branches: [qa/lyo-web-audio-browser-20261122]
+    branches: [qa/lyo-web-audio-browser-20261122, release/lyo-web-first-20261120]
     paths:
+      - 'web/src/lib/classroom-audio.mjs'
       - 'scripts/qa/web_first_real_browser_audio_decode.py'
       - '.github/workflows/lyo-no-provider-chromium-audio.yml'
 permissions:
