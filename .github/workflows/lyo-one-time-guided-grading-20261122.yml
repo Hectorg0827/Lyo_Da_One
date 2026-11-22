@@ -1,0 +1,41 @@
+name: LYO one-time real diagnostic then guided grading 20261122
+# User approved up to $70 cumulative on existing staging-only Classroom Redis
+# ledger. Single synthetic student and at most six Continue actions.
+on:
+  push:
+    branches: [qa/lyo-web-live-gates-20261122]
+    paths:
+      - '.github/workflows/lyo-one-time-guided-grading-20261122.yml'
+permissions:
+  contents: read
+concurrency:
+  group: lyo-staging-guided-grading-20261122-once
+  cancel-in-progress: false
+jobs:
+  staged-guided-grading:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile staging-only graded interaction harness
+        run: |
+          python -m py_compile scripts/qa/web_first_real_guided_grading_v2.py
+          python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Validate isolated staging health
+        run: |
+          python - <<'PY'
+          from urllib.request import urlopen
+          with urlopen('https://lyojourneystagingbackend-staging.up.railway.app/health', timeout=20) as response:
+              if response.status != 200:
+                  raise SystemExit('Staging health check failure')
+          print('PASS: staging backend healthy')
+          PY
+      - name: Validate real diagnostic, instructional progression and scored practice
+        run: python -u scripts/qa/web_first_real_guided_grading_v2.py
+      - name: Evidence limits
+        if: success()
+        run: |
+          echo 'Authenticated guided-practice server verdict verified, not a 30-question accuracy or audible-Web acceptance.' >> "$GITHUB_STEP_SUMMARY"
