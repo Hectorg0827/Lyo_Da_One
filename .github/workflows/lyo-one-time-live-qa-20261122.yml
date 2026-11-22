@@ -1,0 +1,74 @@
+name: LYO one-time isolated staging live release probes 20261122
+# This branch was created for the user's explicit request to test live AI teacher,
+# audible speech transport, and 30-minute recovery. Not a standing release trigger.
+# Scope: one teaching scene + transition, TWO short bilingual TTS utterances,
+# and one 30-minute resumed scene. Synthetic learners only; no production.
+on:
+  push:
+    branches: [qa/lyo-web-live-gates-20261122]
+    paths:
+      - '.github/workflows/lyo-one-time-live-qa-20261122.yml'
+
+permissions:
+  contents: read
+concurrency:
+  group: lyo-one-time-20261122-staging-ai
+  cancel-in-progress: false
+
+jobs:
+  teacher:
+    name: Real AI parallel teacher + transition on isolated staging
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      LYO_BRIDGE_STAGING_API: https://lyojourneystagingbackend-staging.up.railway.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pin WebSocket dependency
+        run: python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Probe one real teacher scene and transition
+        run: python -u scripts/qa/web_first_parallel_teacher_staging.py
+      - name: Mark strict evidence limit
+        if: success()
+        run: echo 'Live teacher protocol passed. This does not verify device speaker output or 20 turns.' >> "$GITHUB_STEP_SUMMARY"
+
+  voice-audio:
+    name: Real provider bilingual speech stream non-silence
+    needs: teacher
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify ffmpeg decoding tool
+        run: command -v ffmpeg
+      - name: Probe two short utterances and decoded PCM RMS
+        run: python -u scripts/qa/web_first_tts_audio_probe.py
+      - name: Mark strict evidence limit
+        if: success()
+        run: echo 'Non-silent provider audio was decoded in two locales. Human listening and interrupt tests are still required.' >> "$GITHUB_STEP_SUMMARY"
+
+  prolonged-recovery:
+    name: Real 30-minute Classroom heartbeat, forced disconnect and resume
+    needs: voice-audio
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 44
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pin WebSocket dependency
+        run: python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Verify actual 30-minute resumed Classroom transport
+        run: python -u scripts/qa/web_first_30m_classroom.py
+      - name: Mark strict evidence limit
+        if: success()
+        run: echo '30-minute backend transport and same-scene resume passed. Does not prove audible Web client recovery.' >> "$GITHUB_STEP_SUMMARY"
