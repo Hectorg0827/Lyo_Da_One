@@ -186,12 +186,13 @@ async def run():
             await context.add_init_script(SOCKET_FIXTURE)
             await page.goto(WEB + "/classroom?topic=Fractions&duration=5&language=en-US",
                             wait_until="domcontentloaded", timeout=25000)
-            region = page.get_by_role(
-                "region", name="Live teacher conversation before the next lesson step")
+            # The aria-label changes when the response is genuinely model-generated.
+            # Keep the locator bound to the shared warm-up surface across both states.
+            region = page.locator('section[aria-label$="before the lesson"]')
             await region.wait_for(state="visible", timeout=8500)
             if not await region.get_by_text("Start learning now", exact=False).is_visible():
                 raise RuntimeError("Visible quick-teacher heading missing")
-            if not await region.get_by_text("Conversation · not graded", exact=False).is_visible():
+            if not await region.get_by_text("Warm-up · not graded", exact=False).is_visible():
                 raise RuntimeError("Quick teacher incorrectly appears graded")
             await page.screenshot(path=str(ARTIFACTS / "bridge_visible.png"), full_page=True)
             print("PASS: real deployed Web rendered ungraded quick teacher", flush=True)
@@ -202,7 +203,9 @@ async def run():
             await region.get_by_role("button", name="Reply", exact=True).click()
             await region.get_by_text("That is a useful observation", exact=False).wait_for(
                 state="visible", timeout=2500)
-            print("PASS: Web rendered a quick teacher reply while scene remained pending",
+            await region.get_by_text("AI quick reply · not graded", exact=False).wait_for(
+                state="visible", timeout=2000)
+            print("PASS: Web separated AI-generated reply from scripted ungraded warm-up",
                   flush=True)
 
             stage = "authoritative teaching handoff"
