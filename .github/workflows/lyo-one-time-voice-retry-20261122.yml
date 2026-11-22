@@ -1,0 +1,30 @@
+name: LYO one-time bilingual speech retry 20261122
+# Single approved isolated staging voice probe; fixes missing ffmpeg runner utility.
+# No model teaching, no classroom mutation, no production requests.
+on:
+  push:
+    branches: [qa/lyo-web-live-gates-20261122]
+    paths:
+      - '.github/workflows/lyo-one-time-voice-retry-20261122.yml'
+
+permissions:
+  contents: read
+jobs:
+  bilingual-speech:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install audio decoder missing on GitHub runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -n 1
+      - name: Probe two short real speech streams and verify non-silent PCM
+        run: python -u scripts/qa/web_first_tts_audio_probe.py
+      - name: Clarify evidence
+        if: success()
+        run: echo 'Decoded actual bilingual speech from staging provider. Browser speaker playback, 20 turns and interruptions remain separate gates.' >> "$GITHUB_STEP_SUMMARY"
