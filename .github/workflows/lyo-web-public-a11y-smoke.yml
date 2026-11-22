@@ -1,0 +1,38 @@
+name: LYO Web-first public WCAG + responsive smoke
+# Public staging pages only; no learner accounts or provider calls.
+on:
+  push:
+    branches: [qa/web-public-a11y-20261122]
+    paths:
+      - 'scripts/qa/web_public_a11y_smoke.py'
+      - '.github/workflows/lyo-web-public-a11y-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-a11y:
+    name: Real Chromium axe WCAG and mobile viewport preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated axe and pinned browser (no provider)
+        run: |
+          npm install --prefix /tmp/lyo-axe --no-audit --no-fund --no-save axe-core@4.10.3
+          python -m pip install --disable-pip-version-check playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Compile and run WCAG / overflow / keyboard smoke
+        run: |
+          python -m py_compile scripts/qa/web_public_a11y_smoke.py
+          python -u scripts/qa/web_public_a11y_smoke.py
+      - name: Limit claims to tested surfaces
+        if: always()
+        run: |
+          echo 'Public login/signup/privacy/terms/support only, viewport 320/390/768.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This cannot certify authenticated Classroom accessibility, a screen reader, or full Web WCAG compliance.' >> "$GITHUB_STEP_SUMMARY"
