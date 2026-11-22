@@ -88,7 +88,16 @@ async def main():
         status, loaded = qa.http("GET", "/api/v1/learning/courses/" + cid, token=token)
         if status != 200 or loaded.get("title") != title:
             raise RuntimeError("Course read-after-write failed HTTP " + str(status))
-        if loaded.get("modules", [{}])[0].get("lessons", [{}])[0].get("title") != "Solving equations":
+        created_modules = created.get("modules") or []
+        reloaded_modules = loaded.get("modules") or []
+        first_lessons = (reloaded_modules[0].get("lessons") or []) if (
+            reloaded_modules and isinstance(reloaded_modules[0], dict)) else []
+        print("COURSE DIAGNOSTIC: created_modules=" + str(len(created_modules))
+              + " reloaded_modules=" + str(len(reloaded_modules))
+              + " reloaded_lessons=" + str(len(first_lessons))
+              + " reloaded_keys=" + ",".join(sorted(loaded.keys())),
+              flush=True)
+        if not first_lessons or first_lessons[0].get("title") != "Solving equations":
             raise RuntimeError("Structured lesson content was not preserved")
         status, listing = qa.http("GET", "/api/v1/learning/courses?skip=0&limit=100", token=token)
         if status != 200 or not isinstance(listing, list) or not any(str(x.get("id")) == cid for x in listing):
