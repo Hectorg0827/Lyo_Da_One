@@ -1,0 +1,43 @@
+name: LYO Web voice 20-turn simulated media gate
+# Synthetic Chromium browser validation only; not physical speech or AI.
+on:
+  push:
+    branches: [qa/web-voice-20-media-20261122]
+    paths:
+      - 'scripts/qa/web_voice_capture_playback_20.py'
+      - '.github/workflows/lyo-web-voice-20-simulation.yml'
+      - 'web/src/lib/voice-playback.mjs'
+      - 'web/src/lib/voice-barge-in.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-browser-media:
+    name: 20 synthetic browser media turns and five aborts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      OPENAI_API_KEY: ''
+      GEMINI_API_KEY: ''
+      GOOGLE_API_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: No-provider compile
+        run: python -m py_compile scripts/qa/web_voice_capture_playback_20.py
+      - name: Install Chromium only
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Verify microphone capture and production playback/abort helpers
+        run: python -u scripts/qa/web_voice_capture_playback_20.py
+      - name: Evidence boundary
+        if: always()
+        run: |
+          echo 'This test uses a synthetic Chromium microphone and original locally generated WAV.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Twenty playback cycles and five aborts are not twenty real LYO spoken AI turns, actual acoustic barge-ins, speaker audition, or physical-device signoff.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No provider tokens or learner data are used.' >> "$GITHUB_STEP_SUMMARY"
