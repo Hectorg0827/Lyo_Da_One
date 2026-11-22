@@ -90,9 +90,14 @@ async def main():
     created = False
     success = False
     try:
-        code, registration = http("POST", "/api/v1/auth/register", user)
-        if code not in (200, 201):
-            raise RuntimeError("Registration failed with HTTP " + str(code))
+        for attempt in range(3):
+            code, registration = http("POST", "/api/v1/auth/register", user)
+            if code in (200, 201):
+                break
+            if code != 429 or attempt == 2:
+                raise RuntimeError("Registration failed with HTTP " + str(code))
+            print("Staging registration rate-limited; 65s backoff", flush=True)
+            await asyncio.sleep(65)
         created = True
         token = registration.get("access_token")
         if not token:
