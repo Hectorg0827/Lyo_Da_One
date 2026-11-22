@@ -57,7 +57,7 @@ jobs:
     steps:
       - name: Verify exact deployed Web revision and staging backend reachability
         env:
-          EXPECTED_WEB_SHA: 88b4c7b4b73d0e51120517de20bc7a996528228b
+          EXPECTED_WEB_SHA: 37dec29fc1080e17c3b4b252e68a0d32f39d3b91
           WEB_HEALTH_URL: https://lyoonestagingweb-staging.up.railway.app/api/health
           BACKEND_HEALTH_URL: https://lyojourneystagingbackend-staging.up.railway.app/health
         run: |
@@ -105,7 +105,7 @@ jobs:
     timeout-minutes: 30
     env:
       LYO_WEB_BASE_URL: https://lyoonestagingweb-staging.up.railway.app
-      EXPECTED_WEB_SHA: 88b4c7b4b73d0e51120517de20bc7a996528228b
+      EXPECTED_WEB_SHA: 37dec29fc1080e17c3b4b252e68a0d32f39d3b91
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
