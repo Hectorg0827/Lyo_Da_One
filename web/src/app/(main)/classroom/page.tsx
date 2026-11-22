@@ -809,12 +809,14 @@ function ClassroomStage() {
           startup has no board yet, and a prior prompt can hide the canvas. */}
             {bridge && status !== 'error' && status !== 'ended' && !prompt && (
               <section
-                aria-label="Live teacher conversation before the next lesson step"
+                aria-label={bridge.aiGenerated ? 'AI-generated warm-up reply before the lesson' : 'Ungraded warm-up before the lesson'}
                 className="mx-3 mb-2 max-h-[35vh] shrink-0 space-y-3 overflow-y-auto rounded-2xl border border-lyo-400/35 bg-lyo-500/10 p-4"
               >
                 <p className="text-xs font-bold uppercase tracking-wide text-lyo-200">
                   {bridge.phase === 'startup' ? 'Start learning now' : 'Connect the ideas'}
-                  <span className="ml-2 font-normal normal-case text-white/65">Conversation · not graded</span>
+                  <span className="ml-2 font-normal normal-case text-white/65">
+                    {bridge.aiGenerated ? 'AI quick reply · not graded' : 'Warm-up · not graded'}
+                  </span>
                 </p>
                 <p className="text-sm font-medium leading-relaxed text-white" aria-live="polite">
                   <span className="font-bold text-lyo-200">{instructor.name}: </span>
