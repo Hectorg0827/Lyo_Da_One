@@ -1,19 +1,25 @@
 name: LYO Web-first public WCAG + responsive smoke
-# Public staging pages only; no learner accounts or provider calls.
+# Build QA branch locally; visit only localhost, never production or paid AI.
 on:
   push:
     branches: [qa/web-public-a11y-20261122]
     paths:
       - 'scripts/qa/web_public_a11y_smoke.py'
       - '.github/workflows/lyo-web-public-a11y-smoke.yml'
+      - 'web/src/app/auth/signup/page.tsx'
+      - 'web/src/components/legal/LegalPage.tsx'
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
   public-a11y:
-    name: Real Chromium axe WCAG and mobile viewport preflight
+    name: Exact-branch Chromium axe WCAG + responsive preflight
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
+      NEXT_PUBLIC_LYO_JOURNEYS_ENABLED: '1'
+      LYO_WEB_BASE_URL: http://127.0.0.1:3000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,17 +28,40 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install isolated axe and pinned browser (no provider)
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install exact Web dependency lock and axe
         run: |
+          npm --prefix web ci --no-audit --no-fund
           npm install --prefix /tmp/lyo-axe --no-audit --no-fund --no-save axe-core@4.10.3
+      - name: Compile exact candidate
+        run: |
+          npm --prefix web test
+          npm --prefix web run build
+      - name: Install pinned Chromium
+        run: |
           python -m pip install --disable-pip-version-check playwright==1.56.0
           python -m playwright install --with-deps chromium
-      - name: Compile and run WCAG / overflow / keyboard smoke
+      - name: Run public WCAG/overflow/keyboard against locally built candidate
+        shell: bash
         run: |
+          set -euo pipefail
+          npm --prefix web run start >/tmp/lyo-a11y-web.log 2>&1 &
+          WEB_PID=$!
+          trap 'kill "$WEB_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:3000/auth/login >/dev/null; then break; fi
+            if ! kill -0 "$WEB_PID" 2>/dev/null; then
+              echo 'Candidate Web exited before readiness'
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --silent --fail http://127.0.0.1:3000/auth/login >/dev/null
           python -m py_compile scripts/qa/web_public_a11y_smoke.py
           python -u scripts/qa/web_public_a11y_smoke.py
       - name: Limit claims to tested surfaces
         if: always()
         run: |
-          echo 'Public login/signup/privacy/terms/support only, viewport 320/390/768.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'This cannot certify authenticated Classroom accessibility, a screen reader, or full Web WCAG compliance.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Exact QA Web branch on local server. Public login/signup/privacy/terms/support at viewport 320/390/768.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This cannot certify deployed staging, authenticated Classroom accessibility, actual screen readers, or production WCAG compliance.' >> "$GITHUB_STEP_SUMMARY"
