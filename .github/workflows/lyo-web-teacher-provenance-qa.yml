@@ -34,4 +34,5 @@ jobs:
           npm run build
       - name: Evidence boundary
         if: success()
-        run: echo 'Source QA only: model-generated warm-up vs local prompt labels. Staging E2E and AI pedagogy remain separate release gates.' >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo 'Source QA only: model-generated warm-up vs local prompt labels. Staging E2E and AI pedagogy remain separate release gates.' >> "$GITHUB_STEP_SUMMARY"
