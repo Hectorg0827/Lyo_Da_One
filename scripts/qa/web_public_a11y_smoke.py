@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 
 from playwright.async_api import async_playwright
 
-WEB_BASE = "https://lyoonestagingweb-staging.up.railway.app"
+WEB_BASE = os.environ.get("LYO_WEB_BASE_URL", "https://lyoonestagingweb-staging.up.railway.app")
 ROUTES = ("/auth/login", "/auth/signup", "/privacy", "/terms", "/support")
 VIEWPORTS = (320, 390, 768)
 AXE_SCRIPT = Path(os.environ.get(
@@ -22,8 +22,9 @@ AXE_SCRIPT = Path(os.environ.get(
 
 async def main():
     parsed = urlsplit(WEB_BASE)
-    if parsed.scheme != "https" or parsed.hostname != "lyoonestagingweb-staging.up.railway.app":
-        raise RuntimeError("Non-staging URL refused")
+    if not ((parsed.scheme == "https" and parsed.hostname == "lyoonestagingweb-staging.up.railway.app")
+            or (parsed.scheme == "http" and parsed.hostname == "127.0.0.1" and parsed.port == 3000)):
+        raise RuntimeError("Only deployed staging or isolated local candidate is allowed")
     if not AXE_SCRIPT.is_file():
         raise RuntimeError("axe-core was not installed at the approved CI path")
     failures = []
