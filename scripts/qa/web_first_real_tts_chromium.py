@@ -160,6 +160,70 @@ async def run():
                       + "first_playback_ms=" + str(result["firstAudibleMs"])
                       + " total_ms=" + str(result["totalMs"]),
                       flush=True)
+            # One additional actual staging TTS response is buffered once and
+            # replayed five times with independent AbortControllers. This
+            # exercises real decoded MP3 cancellation without five upstream
+            # synthesis requests or model-provider spending.
+            interruptions = await page.evaluate("""async ({api, token}) => {
+                const response = await fetch(api + '/api/v1/tts/synthesize/stream', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json',
+                              'Authorization': 'Bearer ' + token},
+                    body: JSON.stringify({
+                        text: 'We are solving the algebra problem. Let us begin with the variable.',
+                        language: 'en-US', format: 'mp3', speed: 0.98,
+                    }),
+                    cache: 'no-store',
+                });
+                if (!response.ok) return {error: 'tts-http-' + response.status};
+                const samples = new Uint8Array(await response.arrayBuffer());
+                if (samples.length < 4096) return {error: 'incomplete-audio'};
+                const mime = response.headers.get('Content-Type') || 'audio/mpeg';
+                const verdicts = [];
+                for (let i = 0; i < 5; i++) {
+                    const controller = new AbortController();
+                    const audio = new Audio();
+                    let started=0, ended=0, abortCaught=false, maxTime=0;
+                    audio.addEventListener('timeupdate', () => {
+                        maxTime = Math.max(maxTime, audio.currentTime);
+                    });
+                    audio.addEventListener('ended', () => { ended++; });
+                    const clip = new Response(samples.slice(), {
+                        status: 200, headers: {'Content-Type': mime}
+                    });
+                    try {
+                        await window.__lyoQaPlayTTS(Promise.resolve(clip), {
+                            signal: controller.signal, createAudio: () => audio,
+                            startupTimeoutMs: 9000,
+                            onStarted: () => {
+                                started++;
+                                setTimeout(() => controller.abort(), 240);
+                            },
+                        });
+                    } catch (error) {
+                        abortCaught = error?.name === 'AbortError';
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 45));
+                    verdicts.push({
+                        started, ended, abortCaught,
+                        cleaned: audio.paused && !audio.getAttribute('src'),
+                    });
+                }
+                return {verdicts, bytes: samples.length};
+            }""", {"api": API, "token": token})
+            if interruptions.get("error"):
+                raise RuntimeError("Live-audio interruption setup "
+                                   + interruptions["error"])
+            verdicts = interruptions.get("verdicts") or []
+            if len(verdicts) != 5 or any(
+                v.get("started") != 1 or v.get("ended") != 0
+                or v.get("abortCaught") is not True
+                or v.get("cleaned") is not True for v in verdicts
+            ):
+                raise RuntimeError("Five real decoded-voice interruptions failed")
+            print("PASS: five back-to-back real-Kokoro-MP3 browser interruptions; "
+                  "all stopped before ended, all cleaned, "
+                  "one buffered TTS response reused", flush=True)
         passed = True
     except Exception as exc:
         # Never log bearer tokens, URLs with credentials, or synthetic PII.
