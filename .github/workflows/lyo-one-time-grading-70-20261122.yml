@@ -1,0 +1,46 @@
+name: LYO one-time real AI teacher grading on approved $70 staging ledger
+# User explicitly authorized additional $10 cumulative (to $70) on Nov 21.
+# Single synthetic grading journey; never production; no recurring trigger.
+on:
+  push:
+    branches: [qa/lyo-web-live-gates-20261122]
+    paths:
+      - '.github/workflows/lyo-one-time-grading-70-20261122.yml'
+permissions:
+  contents: read
+concurrency:
+  group: lyo-one-time-approved-grade-20261122
+  cancel-in-progress: false
+jobs:
+  real-grade:
+    name: Authenticated model-generated algebra quiz and feedback
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_STAGING_BACKEND_SHA: 0e6af4a5cef0966b88adc9cf78e13e2a99a40b6f
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify one-time QA script and transport dependencies
+        run: |
+          python -m py_compile scripts/qa/web_first_real_ai_teacher_grading.py
+          python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Require isolated staging health
+        run: |
+          python - <<'PY'
+          from urllib.request import Request, urlopen
+          url = 'https://lyojourneystagingbackend-staging.up.railway.app/health'
+          with urlopen(Request(url, headers={'Accept': 'application/json'}), timeout=20) as response:
+              if response.status != 200:
+                  raise SystemExit('Staging backend unhealthy; refusal to test')
+          print('PASS: isolated staging backend healthy')
+          PY
+      - name: Submit exactly one answer to a real provider-authored algebra quiz
+        run: python -u scripts/qa/web_first_real_ai_teacher_grading.py
+      - name: Evidence limits
+        if: success()
+        run: |
+          echo 'Provider-backed algebra quiz and feedback interaction passed on isolated staging; synthetic learner was deleted.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'One answer does not establish 30-question grading accuracy or device-audible Web interaction.' >> "$GITHUB_STEP_SUMMARY"
