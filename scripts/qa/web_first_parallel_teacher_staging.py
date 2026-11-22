@@ -43,9 +43,14 @@ async def run():
     }
     token, created, success = None, False, False
     try:
-        status, registered = http("POST", "/api/v1/auth/register", user)
-        if status not in (200, 201):
-            raise RuntimeError("synthetic registration failed: " + str(status))
+        for attempt in range(3):
+            status, registered = http("POST", "/api/v1/auth/register", user)
+            if status in (200, 201):
+                break
+            if status != 429 or attempt == 2:
+                raise RuntimeError("synthetic registration failed: " + str(status))
+            print("Staging registration rate-limited; 65s backoff", flush=True)
+            await asyncio.sleep(65)
         created = True
         token = registered.get("access_token")
         if not token:
