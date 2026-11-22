@@ -1,16 +1,12 @@
 name: LYO Web-first deployed quick teacher acceptance
 # Existing Web staging + isolated staging backend only. No deployments or production.
 on:
-  # Ordinary pushes skip live AI test jobs; the explicit authorization
-  # commit marker enables a release-branch run without changing main.
-  push:
-    branches: [release/lyo-web-first-20261120]
-    paths:
-      - '.github/workflows/lyo-web-first-parallel-teacher-live.yml'
-      - 'scripts/qa/web_first_parallel_teacher_staging.py'
-      - 'scripts/qa/web_first_browser_classroom.py'
   workflow_dispatch:
     inputs:
+      expected_staging_sha:
+        description: 'Exact 40-character Web commit deployed to isolated staging'
+        required: true
+        type: string
       staging_ai_spend_approved:
         description: 'I authorize bounded staging AI usage for this live test'
         required: true
@@ -21,7 +17,7 @@ permissions:
   contents: read
 jobs:
   bridge-protocol:
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.staging_ai_spend_approved == true) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[LYO-STAGING-AI-QA-APPROVED]')) }}
+    if: ${{ inputs.staging_ai_spend_approved == true }}
     name: Authenticated quick teacher startup, AI reply and transition
     runs-on: ubuntu-24.04
     timeout-minutes: 12
@@ -41,7 +37,7 @@ jobs:
         run: echo 'Exact staging backend bridge accepted a disposable learner. Protocol checks do not prove audible speech.' >> "$GITHUB_STEP_SUMMARY"
 
   visible-web-handoff:
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.staging_ai_spend_approved == true) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[LYO-STAGING-AI-QA-APPROVED]')) }}
+    if: ${{ inputs.staging_ai_spend_approved == true }}
     name: Real Chromium quick teacher visible then authoritative lesson
     needs: bridge-protocol
     runs-on: ubuntu-24.04
@@ -49,7 +45,7 @@ jobs:
     env:
       LYO_WEB_BASE_URL: https://lyoonestagingweb-staging.up.railway.app
       LYO_REQUIRE_BRIDGE: '1'
-      EXPECTED_WEB_SHA: 9c576e44d6f50dd279f9112562831fbaee198b9f
+      EXPECTED_WEB_SHA: ${{ inputs.expected_staging_sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -66,7 +62,11 @@ jobs:
               health = json.loads(response.read())
           if health.get("status") != "healthy":
               raise SystemExit("Web staging health not ready")
-          if health.get("commit") != os.environ["EXPECTED_WEB_SHA"]:
+          import re
+          expected = os.environ["EXPECTED_WEB_SHA"].strip()
+          if not re.fullmatch(r'[0-9a-f]{40}', expected):
+              raise SystemExit('Explicit 40-character Web SHA required')
+          if health.get("commit") != expected:
               raise SystemExit("Web staging commit does not match pinned candidate")
           print("PASS: exact Web staging commit", flush=True)
           PY
