@@ -1,0 +1,35 @@
+name: LYO staging live TTS bilingual Chromium no-paid-fallback gate
+# Single scoped staging test, not a scheduled provider health load test.
+# Abort before TTS calls when the backend reports paid fallback enabled.
+on:
+  push:
+    branches: [qa/lyo-staging-real-tts-chromium-20261122]
+    paths:
+      - '.github/workflows/lyo-staging-real-tts-chromium.yml'
+permissions:
+  contents: read
+concurrency:
+  group: lyo-one-time-staging-real-tts-chromium-20261122
+  cancel-in-progress: false
+jobs:
+  stream-and-play:
+    name: Authenticated real TTS stream, English and Spanish Chromium playback
+    runs-on: ubuntu-24.04
+    timeout-minutes: 13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate QA script and install browser dependencies
+        run: |
+          python -m py_compile scripts/qa/web_first_real_tts_chromium.py
+          python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+          python -m playwright install --with-deps chromium
+      - name: Verify provider fallback is unpaid, stream live staging voices to Chromium
+        run: python -u scripts/qa/web_first_real_tts_chromium.py
+      - name: Evidence limitation
+        if: success()
+        run: |
+          echo 'Verified actual authenticated staging TTS streaming reaches Chromium LYO player and decodes EN/ES audio.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Chromium media-clock is not proof of sound from a user device. No model-grade accuracy tested.' >> "$GITHUB_STEP_SUMMARY"
