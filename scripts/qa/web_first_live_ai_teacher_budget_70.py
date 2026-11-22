@@ -103,8 +103,13 @@ async def main():
             next_sent = False
             deadline = started + 110
             while time.monotonic() < deadline:
-                raw = await asyncio.wait_for(socket.recv(),
-                                              timeout=min(25, max(0.1, deadline-time.monotonic())))
+                try:
+                    raw = await asyncio.wait_for(socket.recv(),
+                                                  timeout=min(25, max(0.1, deadline-time.monotonic())))
+                except asyncio.TimeoutError:
+                    # Model generation may exceed one receive period. Respect
+                    # the overall test deadline rather than submitting retries.
+                    continue
                 kind, data, obj = event_parts(raw)
                 if kind == "error":
                     raise RuntimeError("Classroom returned error event")
@@ -122,19 +127,19 @@ async def main():
                               + " components=" + ",".join(scene["components"])
                               + " first_ms=" + str(round((time.monotonic()-started)*1000)),
                               flush=True)
-                        if not next_sent and source == "ai_generated":
-                            # One bounded authoritative action only; never
-                            # submit student answers or fabricated grades.
-                            await socket.send(json.dumps({
-                                "event_type": "user_action", "session_id": seat,
-                                "action_intent": "continue",
-                            }))
-                            next_sent = True
-                        if provider_authored and len(scenes) >= 2:
+                        if provider_authored and next_sent and len(scenes) >= 2:
                             break
-                if kind in {"scene_complete","scene_end"} and provider_authored and next_sent:
-                    # Observe a bounded follow-up window for another scene.
-                    if len(scenes) >= 2:
+                if kind in {"scene_complete","scene_end"} and provider_authored:
+                    if not next_sent:
+                        # Wait for the provider-authored scene to finish before
+                        # progressing. Never interrupt active streaming or
+                        # submit an answer that could create a false grade.
+                        await socket.send(json.dumps({
+                            "event_type": "user_action", "session_id": seat,
+                            "action_intent": "continue",
+                        }))
+                        next_sent = True
+                    elif len(scenes) >= 2:
                         break
             print("TEACHER RESULT: scene_count=" + str(len(scenes))
                   + " authentic_model_scene=" + str(provider_authored)
