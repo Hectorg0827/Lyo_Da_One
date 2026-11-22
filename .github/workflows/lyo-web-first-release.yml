@@ -98,3 +98,39 @@ jobs:
                       raise SystemExit("FAIL: staging health/revision check did not pass") from exc
                   time.sleep(10)
           PY
+
+  zero-provider-ui:
+    name: Staging browser reader and Classroom fixture (zero AI)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      LYO_WEB_BASE_URL: https://lyoonestagingweb-staging.up.railway.app
+      EXPECTED_WEB_SHA: 88b4c7b4b73d0e51120517de20bc7a996528228b
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Chromium test dependencies
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+          python -m playwright install --with-deps chromium
+      - name: Verify actual deployed Web saved course reader without provider
+        run: python -u scripts/qa/web_first_course_reader_fixture.py
+      - name: Verify actual deployed Web quick teacher scene handoff without provider
+        run: python -u scripts/qa/web_first_bridge_visual_fixture.py
+      - name: Retain synthetic UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-web-first-zero-provider-ui
+          path: |
+            artifacts/web-first-course-reader/*.png
+            artifacts/web-first-bridge-visual-fixture/*.png
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Explicit evidence boundary
+        if: success()
+        run: |
+          echo 'PASS: real staging UI login and simulated course/teacher fixtures.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This does not verify real course persistence, AI grading, audible output or live teacher quality.' >> "$GITHUB_STEP_SUMMARY"
