@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -40,9 +40,10 @@ function AuthInput({
   placeholder: string;
   rightSlot?: React.ReactNode;
 }) {
+  const id = useId();
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-semibold text-secondary uppercase tracking-wider">{label}</label>
+      <label htmlFor={id} className="text-xs font-semibold text-secondary uppercase tracking-wider">{label}</label>
       <div
         className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 focus-within:ring-1 focus-within:ring-[#6366f1]/60"
         style={{
@@ -52,7 +53,9 @@ function AuthInput({
       >
         <Icon size={16} className="text-secondary shrink-0" />
         <input
+          id={id}
           type={type}
+          autoComplete={type === 'password' ? 'new-password' : type === 'email' ? 'email' : 'name'}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
@@ -210,6 +213,7 @@ export default function SignupPage() {
                   <button
                     type="button"
                     onClick={() => setShowPassword((v) => !v)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
                     className="text-secondary hover:text-primary transition-colors duration-150 shrink-0"
                   >
                     {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
