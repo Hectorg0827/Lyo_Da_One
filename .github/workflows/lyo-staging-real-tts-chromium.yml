@@ -6,6 +6,14 @@ on:
     branches: [qa/lyo-staging-real-tts-chromium-20261122]
     paths:
       - '.github/workflows/lyo-staging-real-tts-chromium.yml'
+      - 'scripts/qa/web_first_real_tts_chromium.py'
+  workflow_dispatch:
+    inputs:
+      staging_tts_retest_approved:
+        description: 'Allow one staging-only Kokoro TTS Web QA run (paid fallback must be disabled)'
+        type: boolean
+        default: false
+        required: true
 permissions:
   contents: read
 concurrency:
@@ -14,6 +22,7 @@ concurrency:
 jobs:
   stream-and-play:
     name: Authenticated real TTS stream, English and Spanish Chromium playback
+    if: ${{ github.event_name == 'push' || inputs.staging_tts_retest_approved == true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 13
     steps:
