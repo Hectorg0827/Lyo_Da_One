@@ -49,3 +49,52 @@ jobs:
         run: |
           echo 'Web tests, typecheck and staging-configured build passed.' >> "$GITHUB_STEP_SUMMARY"
           echo 'This does not verify real authenticated flows, teacher audio, AI quality, sustained Classroom sessions or production readiness.' >> "$GITHUB_STEP_SUMMARY"
+
+  # Read-only deployed-staging gate; does not exercise AI or learner accounts.
+  staging-health:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify exact deployed Web revision and staging backend reachability
+        env:
+          EXPECTED_WEB_SHA: 88b4c7b4b73d0e51120517de20bc7a996528228b
+          WEB_HEALTH_URL: https://lyoonestagingweb-staging.up.railway.app/api/health
+          BACKEND_HEALTH_URL: https://lyojourneystagingbackend-staging.up.railway.app/health
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          from urllib.request import Request, urlopen
+          from urllib.parse import urlsplit
+
+          allowed = {
+              "lyoonestagingweb-staging.up.railway.app",
+              "lyojourneystagingbackend-staging.up.railway.app",
+          }
+          for key in ("WEB_HEALTH_URL", "BACKEND_HEALTH_URL"):
+              parsed = urlsplit(os.environ[key])
+              if parsed.scheme != "https" or parsed.hostname not in allowed:
+                  raise SystemExit("FAIL: non-staging URL refused")
+
+          def get(url):
+              request = Request(url, headers={"Accept": "application/json", "User-Agent": "lyo-ci-staging-health"})
+              with urlopen(request, timeout=12) as response:
+                  if response.status != 200:
+                      raise RuntimeError("non-200 health response")
+                  return response.read(8192)
+
+          expected = os.environ["EXPECTED_WEB_SHA"]
+          for attempt in range(6):
+              try:
+                  web = json.loads(get(os.environ["WEB_HEALTH_URL"]))
+                  if web.get("status") != "healthy" or str(web.get("commit", "")).strip() != expected:
+                      raise RuntimeError("Web reported unexpected status or SHA")
+                  get(os.environ["BACKEND_HEALTH_URL"])
+                  print("PASS: exact staging Web revision, healthy Web, backend HTTP 200")
+                  break
+              except Exception as exc:
+                  if attempt == 5:
+                      raise SystemExit("FAIL: staging health/revision check did not pass") from exc
+                  time.sleep(10)
+          PY
