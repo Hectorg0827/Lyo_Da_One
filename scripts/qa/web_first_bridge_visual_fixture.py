@@ -134,9 +134,17 @@ async def run():
     browser = None
     stage = "registration"
     try:
-        status, registered = http("POST", "/api/v1/auth/register", person)
-        if status not in (200, 201):
-            raise RuntimeError("Registration failed")
+        # Two synthetic-user fixtures run consecutively from one GitHub runner IP.
+        # Staging auth may correctly rate-limit the second registration (HTTP 429).
+        # Respect that protection instead of reporting an unrelated UI failure.
+        for attempt in range(3):
+            status, registered = http("POST", "/api/v1/auth/register", person)
+            if status in (200, 201):
+                break
+            if status != 429 or attempt == 2:
+                raise RuntimeError("Registration failed HTTP " + str(status))
+            print("Registration rate-limited; respecting 65s backoff", flush=True)
+            await asyncio.sleep(65)
         created = True
         token = registered.get("access_token")
         if not token:
