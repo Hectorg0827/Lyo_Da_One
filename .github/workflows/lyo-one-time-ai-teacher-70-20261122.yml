@@ -1,0 +1,47 @@
+name: LYO one-time authorized real AI Teacher staging acceptance 20261122
+# One-time, deliberately path-scoped trigger after explicit user approval on
+# Nov 21 2026 for $10 more (cumulative $70), never a general release trigger.
+# Existing Redis ledger is not reset. No production, Android or iOS.
+on:
+  push:
+    branches: [qa/lyo-web-live-gates-20261122]
+    paths:
+      - '.github/workflows/lyo-one-time-ai-teacher-70-20261122.yml'
+permissions:
+  contents: read
+concurrency:
+  group: lyo-approved-ai-teacher-20261122-single-run
+  cancel-in-progress: false
+jobs:
+  real-ai-teacher:
+    name: Real intermediate algebra provider-backed teacher and one transition
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      EXPECTED_BACKEND_SHA: 0e6af4a5cef0966b88adc9cf78e13e2a99a40b6f
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify syntax and install pinned WebSocket transport
+        run: |
+          python -m py_compile scripts/qa/web_first_live_ai_teacher_budget_70.py
+          python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Require Railway isolated backend health (no production routes)
+        run: |
+          python - <<'PY'
+          from urllib.request import Request, urlopen
+          url = 'https://lyojourneystagingbackend-staging.up.railway.app/health'
+          with urlopen(Request(url, headers={'Accept': 'application/json'}), timeout=20) as response:
+              if response.status != 200:
+                  raise SystemExit('FAIL: isolated staging backend health')
+          print('PASS: isolated staging backend health')
+          PY
+      - name: Run exactly one synthetic learner/teacher attempt
+        run: python -u scripts/qa/web_first_live_ai_teacher_budget_70.py
+      - name: QA evidence limit
+        if: success()
+        run: |
+          echo 'Provider-backed authoritative teaching and bounded transition passed on the inspected staging backend.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Not evidence for 30-question pedagogical grading, browser audio, device playback or production readiness.' >> "$GITHUB_STEP_SUMMARY"
