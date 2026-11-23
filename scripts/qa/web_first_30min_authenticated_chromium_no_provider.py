@@ -177,9 +177,17 @@ async def run():
                     raise RuntimeError("Synthetic teaching scene disappeared")
                 # Genuine browser interactions throughout the time window.
                 await notebook.click(timeout=12000)
-                clicks += 1
-                if observed % 2 == 0:
-                    await page.get_by_role("button", name="Keep teacher captions visible").count()
+                # The notebook drawer has a full-screen backdrop, so the
+                # toolbar opener is not clickable until its own close control
+                # is used; click the real visible drawer close button.
+                tabs = page.get_by_role("tablist", name="Notebook")
+                await tabs.wait_for(state="visible", timeout=5000)
+                await tabs.get_by_role("tab", name="What was said").click()
+                await page.locator(
+                    "div.fixed.right-0.top-0.bottom-0 button"
+                ).first.click(timeout=7000)
+                await tabs.wait_for(state="hidden", timeout=7000)
+                clicks += 3
                 if observed in (36, 77):
                     await page.reload(wait_until="domcontentloaded", timeout=35000)
                     await page.get_by_role("button", name="Leave classroom").wait_for(
