@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/qa/web_first_authenticated_classroom_a11y.py'
       - 'web/src/app/(main)/classroom/page.tsx'
+      - 'web/src/components/classroom/ClassroomCaptionSync.tsx'
       - '.github/workflows/lyo-web-auth-classroom-a11y.yml'
   workflow_dispatch:
 
