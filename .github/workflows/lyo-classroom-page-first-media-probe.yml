@@ -1,0 +1,31 @@
+name: LYO real Classroom page-to-first-media timing (synthetic scene)
+on:
+  push:
+    branches: [qa/staging-classroom-page-first-audio-20261122]
+    paths:
+      - 'scripts/qa/web_first_classroom_page_first_audio_probe.py'
+      - '.github/workflows/lyo-classroom-page-first-media-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  page-first-media:
+    name: Signed-in Web Classroom instant synthetic scene -> real Kokoro playback
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Compile and install pinned browser
+        run: |
+          python -m py_compile scripts/qa/web_first_classroom_page_first_audio_probe.py
+          python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+          python -m playwright install --with-deps chromium
+      - name: Test real speaker on Web staging, paid fallback disabled
+        run: python -u scripts/qa/web_first_classroom_page_first_audio_probe.py
+      - name: Precise scope
+        if: always()
+        run: |
+          echo 'Real authenticated Classroom UI, real local Kokoro staging speech, deterministic immediate teaching scene; measure browser navigation->HTMLAudioElement playing.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No model generation and NOT physical audible output, true first AI lesson speech, or grading.' >> "$GITHUB_STEP_SUMMARY"
