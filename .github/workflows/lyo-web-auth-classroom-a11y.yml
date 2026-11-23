@@ -1,10 +1,11 @@
 name: LYO authenticated Web Classroom and Chat axe smoke
-# Existing deployed staging Web only; no real text AI / TTS or learner data.
+# Compile exact QA source locally; use staging backend ONLY for synthetic auth.
 on:
   push:
     branches: [qa/web-auth-classroom-a11y-20261122]
     paths:
       - 'scripts/qa/web_first_authenticated_classroom_a11y.py'
+      - 'web/src/app/(main)/classroom/page.tsx'
       - '.github/workflows/lyo-web-auth-classroom-a11y.yml'
   workflow_dispatch:
 
@@ -13,11 +14,14 @@ permissions:
 
 jobs:
   signed-in-classroom-a11y:
-    name: Staging authenticated Chat/Classroom axe and viewport QA
+    name: Exact-head authenticated Chat/Classroom axe and viewport QA
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
+    timeout-minutes: 30
     env:
-      EXPECTED_WEB_SHA: '9247f2d6e75329e9c9eba9d5fbf8762917449921'
+      EXPECTED_WEB_SHA: local-candidate
+      NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
+      NEXT_PUBLIC_LYO_JOURNEYS_ENABLED: '1'
+      LYO_WEB_BASE_URL: http://127.0.0.1:3000
       OPENAI_API_KEY: ''
       GEMINI_API_KEY: ''
     steps:
@@ -28,17 +32,41 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Compile test, install isolated axe and pinned Chromium
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install Web exact lock and isolated axe
+        run: |
+          npm --prefix web ci --no-audit --no-fund
+          npm install --prefix /tmp/lyo-axe --no-audit --no-fund --no-save axe-core@4.10.3
+      - name: Compile release-mode Web candidate
+        run: |
+          npm --prefix web test
+          npm --prefix web run build
+      - name: Install pinned Chromium
         run: |
           python -m py_compile scripts/qa/web_first_authenticated_classroom_a11y.py
-          npm install --prefix /tmp/lyo-axe --no-audit --no-fund --no-save axe-core@4.10.3
           python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
           python -m playwright install --with-deps chromium
-      - name: Run Web authenticated accessibility smoke without AI/TTS
-        run: python -u scripts/qa/web_first_authenticated_classroom_a11y.py
-      - name: Explicit scope limit
+      - name: Run authenticated Web WCAG/viewport check on actual QA source
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix web run start > /tmp/lyo-auth-a11y-web.log 2>&1 &
+          WEB_PID=$!
+          trap 'kill "$WEB_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:3000/auth/login >/dev/null; then break; fi
+            if ! kill -0 "$WEB_PID" 2>/dev/null; then
+              echo "Candidate server exited before auth page"
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --silent --fail http://127.0.0.1:3000/auth/login >/dev/null
+          python -u scripts/qa/web_first_authenticated_classroom_a11y.py
+      - name: Explicit evidence limit
         if: always()
         run: |
-          echo 'Two authenticated Web routes x three viewport widths, real staging UI with local synthetic Classroom WebSocket.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'All model and TTS browser requests refused, user synthetic account cleanup asserted; no paid AI requests.' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Not full Web accessibility, physical screen-reader, real AI teacher, or spoken microphone acceptance.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Exact QA-branch Web locally built and tested; two authenticated routes x three viewport widths, staging auth and synthetic Classroom WebSocket.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'All provider requests intercepted; synthetic accounts cleaned; no production or Railway deployment.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Not real voice, teacher grading, full WCAG, physical screen reader, or 30-minute class acceptance.' >> "$GITHUB_STEP_SUMMARY"
