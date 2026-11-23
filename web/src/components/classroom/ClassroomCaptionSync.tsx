@@ -5,15 +5,6 @@ import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import { useClassroomStore } from '@/stores/classroom-store';
 
-const SPEAKER_TONE: Record<string, string> = {
-  Teacher: 'text-accent-purple',
-  Maya: 'text-accent-teal',
-  Sam: 'text-accent-orange',
-  Rio: 'text-accent-green',
-  Zack: 'text-accent-gold',
-  You: 'text-lyo-300',
-};
-
 type SpokenState = {
   generation: number;
   speaker: string;
@@ -196,7 +187,7 @@ export default function ClassroomCaptionSync() {
         >
           {visualText ? (
             <p className="text-white/95">
-              <span className={`mr-1.5 font-bold ${SPEAKER_TONE[caption.speaker] ?? 'text-lyo-300'}`}>
+              <span className="mr-1.5 font-bold text-white">
                 {caption.speaker}:
               </span>
               {preparingVoice && <span className="mr-1.5 text-[11px] font-medium text-amber-200/90">(voice loading)</span>}
