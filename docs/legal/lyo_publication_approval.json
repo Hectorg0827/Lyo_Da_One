@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "release_target": "LYO public Web production",
+  "source_issue": "https://github.com/Hectorg0827/Lyo_Da_One/issues/258",
+  "status": "NOT_APPROVED",
+  "note": "Do not publish legal placeholder values, represent an unregistered entity as incorporated, or infer retention/deletion/provider facts from development configurations.",
+  "required": {
+    "legal_operating_entity_and_jurisdiction": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "verified_business_postal_address": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "privacy_contact_and_support_mailbox_ownership": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "AI_model_and_speech_subprocessors": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "analytics_crash_hosting_and_storage_inventory": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "controller_processor_contracts_and_training_claims": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "account_data_and_media_deletion_verified": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "backups_logs_and_retention_schedule_verified": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "sale_ads_and_tracking_claims_verified": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "children_minor_age_and_guardian_rules_reviewed": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "billing_refunds_and_subscriptions_if_applicable": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "governing_law_disputes_and_liability_reviewed": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "support_response_capacity_approved": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "privacy_terms_effective_date_and_notice_process": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "qualified_counsel_review_signed": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    },
+    "owner_publication_approval_signed": {
+      "status": "pending",
+      "evidence_reference": "",
+      "approved_by": ""
+    }
+  }
+}

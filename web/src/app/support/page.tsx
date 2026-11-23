@@ -23,8 +23,10 @@ export default function SupportPage() {
         <p>
           Need help with LYO? Email us at{' '}
           <a className="font-semibold text-violet-300 hover:underline" href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>{' '}
-          and we will get back to you, usually within [2 business days]. Please include the email address on
-          your LYO account and which device you are using (web, iPhone or Android).
+          for account access, technical problems, safety concerns or privacy requests.
+          Include the email address on your LYO account and which platform you are using.
+          Do not send passwords or sensitive identity documents by email. Response times vary;
+          no fixed support-response deadline is promised.
         </p>
       }
     >
