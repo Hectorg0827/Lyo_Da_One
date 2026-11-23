@@ -1293,9 +1293,7 @@ function ClassroomStage() {
                     )}
                     {transcript.map((line) => (
                       <p key={line.id} className="text-[13px] leading-relaxed text-white/80">
-                        <span className={cn('font-bold mr-1.5',
-                          line.speaker === 'You' ? 'text-accent-gold'
-                            : classroomSpeaker(line.speaker, topic)?.accent ?? 'text-white/60')}>
+                        <span className="font-bold mr-1.5 text-white">
                           {line.speaker}:
                         </span>
                         {line.text}
