@@ -7,6 +7,7 @@ All AI/TTS requests and non-auth browser mutations are blocked. Axe scans
 mobile/desktop layouts. No real teacher, microphone, grading or production.
 """
 import asyncio
+import ast
 import json
 import os
 import secrets
@@ -17,7 +18,23 @@ from urllib.request import urlopen
 
 from playwright.async_api import async_playwright
 from web_first_live_classroom_auth import API, http
-from web_first_bridge_visual_fixture import SOCKET_FIXTURE
+
+
+def read_static_socket_fixture():
+    """Load the existing authored QA fixture without its URL-specific side effects."""
+    source = Path(__file__).with_name("web_first_bridge_visual_fixture.py").read_text(
+        encoding="utf-8"
+    )
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == "SOCKET_FIXTURE"
+            for target in node.targets
+        ):
+            return ast.literal_eval(node.value)
+    raise RuntimeError("Expected static QA-only Classroom WebSocket fixture missing")
+
+
+SOCKET_FIXTURE = read_static_socket_fixture()
 
 WEB = os.environ.get("LYO_WEB_BASE_URL", "https://lyoonestagingweb-staging.up.railway.app").rstrip("/")
 EXPECTED_SHA = os.environ["EXPECTED_WEB_SHA"]
