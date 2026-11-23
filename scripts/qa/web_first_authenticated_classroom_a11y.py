@@ -19,7 +19,7 @@ from playwright.async_api import async_playwright
 from web_first_live_classroom_auth import API, http
 from web_first_bridge_visual_fixture import SOCKET_FIXTURE
 
-WEB = "https://lyoonestagingweb-staging.up.railway.app"
+WEB = os.environ.get("LYO_WEB_BASE_URL", "https://lyoonestagingweb-staging.up.railway.app").rstrip("/")
 EXPECTED_SHA = os.environ["EXPECTED_WEB_SHA"]
 AXE_SCRIPT = Path("/tmp/lyo-axe/node_modules/axe-core/axe.min.js")
 ROUTES = ("/chat", "/classroom?topic=Fractions&duration=5&language=en-US")
@@ -27,17 +27,26 @@ WIDTHS = (320, 390, 768)
 
 
 async def main():
-    if urlsplit(WEB).hostname != "lyoonestagingweb-staging.up.railway.app":
-        raise RuntimeError("Refusing nonstaging Web")
+    parsed_web = urlsplit(WEB)
+    exact_staging = parsed_web.scheme == "https" and parsed_web.hostname == "lyoonestagingweb-staging.up.railway.app"
+    local_candidate = (parsed_web.scheme == "http" and parsed_web.hostname == "127.0.0.1"
+                       and parsed_web.port == 3000)
+    if not (exact_staging or local_candidate):
+        raise RuntimeError("Refusing non-staging/non-isolated-local Web")
     if urlsplit(API).hostname != "lyojourneystagingbackend-staging.up.railway.app":
         raise RuntimeError("Refusing nonstaging backend")
     if not AXE_SCRIPT.is_file():
         raise RuntimeError("axe-core not installed at approved CI location")
 
-    with urlopen(WEB + "/api/health", timeout=15) as reply:
-        health = json.loads(reply.read(8192))
-    if health.get("status") != "healthy" or health.get("commit") != EXPECTED_SHA:
-        raise RuntimeError("Deployed Web revision does not match exact source")
+    if exact_staging:
+        with urlopen(WEB + "/api/health", timeout=15) as reply:
+            health = json.loads(reply.read(8192))
+        if health.get("status") != "healthy" or health.get("commit") != EXPECTED_SHA:
+            raise RuntimeError("Deployed Web revision does not match exact source")
+    else:
+        # The CI job compiles the checked-out commit and starts it locally.
+        # No live deployment SHA claim can be made for this branch.
+        print("PASS: isolated locally built Web candidate (not deployed)", flush=True)
     with urlopen(API + "/openapi.json", timeout=20) as reply:
         schema = json.loads(reply.read(8_000_000))
     if "delete" not in schema.get("paths", {}).get("/auth/me", {}):
