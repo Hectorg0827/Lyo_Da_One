@@ -1,0 +1,43 @@
+name: LYO 30m authenticated Web Classroom no-provider endurance
+# Real deployed staging UI, true browser login, synthetic Classroom events only.
+on:
+  push:
+    branches: [qa/web-classroom-30min-authenticated-endurance-20261122]
+    paths:
+      - 'scripts/qa/web_first_30min_authenticated_chromium_no_provider.py'
+      - '.github/workflows/lyo-web-30min-auth-endurance.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lyo-staging-single-30minute-auth-browser-20261122
+  cancel-in-progress: false
+jobs:
+  real-browser-30m:
+    name: Authenticated Chromium 30m active Classroom (synthetic tutor)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 42
+    env:
+      EXPECTED_WEB_SHA: 2cf4eddcdfa344a134d6f7ded68c2e782096551f
+      OPENAI_API_KEY: ''
+      GEMINI_API_KEY: ''
+      GOOGLE_API_KEY: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile and provision pinned browser runner
+        run: |
+          python -m py_compile scripts/qa/web_first_30min_authenticated_chromium_no_provider.py
+          python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+          python -m playwright install --with-deps chromium
+      - name: Require 1800 real elapsed seconds, periodic UI actions and two refreshes
+        run: python -u scripts/qa/web_first_30min_authenticated_chromium_no_provider.py
+      - name: Preserve explicit evidence boundary
+        if: always()
+        run: |
+          echo 'This runs real signed-in Chromium against pinned Railway staging Web for >=1800 seconds with periodic UI actions and two real browser refreshes.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Teaching events are a known static synthetic WebSocket fixture; model/TTS requests denied.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'It is NOT the full 30-minute graded teacher/physical-audio pedagogical signoff.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Synthetic student must be deleted. No production or paid provider requests.' >> "$GITHUB_STEP_SUMMARY"
