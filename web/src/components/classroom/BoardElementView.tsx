@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   configureDictation,
+  dictationErrorMessage,
   createBrowserSpeechRecognition,
   type BrowserSpeechRecognition,
 } from '@/lib/browser-speech';
@@ -409,6 +410,7 @@ function TransferView({
 }) {
   const [response, setResponse] = useState(el.response || '');
   const [listening, setListening] = useState(false);
+  const [dictationError, setDictationError] = useState('');
   const [speechSupported, setSpeechSupported] = useState(false);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
   const dictationBaseRef = useRef('');
@@ -461,7 +463,10 @@ function TransferView({
   // so the transcript is accumulated here and carried across every restart.
   const startDictation = (continuing = false): boolean => {
     const recognition = createBrowserSpeechRecognition();
-    if (!recognition) return false;
+    if (!recognition) {
+      setDictationError(dictationErrorMessage(undefined, isSpanish));
+      return false;
+    }
     recognitionRef.current = recognition;
     configureDictation(
       recognition,
@@ -492,7 +497,8 @@ function TransferView({
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition) return;
-      if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      if (!dictatingRef.current) return;
+      setDictationError(dictationErrorMessage(event?.error, isSpanish));
       recognitionRef.current = null;
       dictatingRef.current = false;
       setListening(false);
@@ -502,6 +508,7 @@ function TransferView({
       recognition.start();
       return true;
     } catch {
+      setDictationError(dictationErrorMessage(undefined, isSpanish));
       recognitionRef.current = null;
       return false;
     }
@@ -512,7 +519,7 @@ function TransferView({
       stopDictation();
       return;
     }
-    if (!createBrowserSpeechRecognition()) return;
+    setDictationError('');
     onInputStart();
     transcriptRef.current.reset();
     dictationBaseRef.current = response ? response.replace(/\s*$/, ' ') : '';
@@ -552,6 +559,7 @@ function TransferView({
           {el.feedback}
         </p>
       )}
+      {dictationError && !locked && <p role="alert" className="text-sm text-amber-200">{dictationError}</p>}
       {el.skipped ? (
         <div className="flex items-center gap-3">
           <p className="text-sm text-white/40 italic">{isSpanish ? 'Omitida.' : 'Skipped.'}</p>
