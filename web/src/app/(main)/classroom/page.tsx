@@ -14,6 +14,7 @@ import { CALL_TO_ACTION, invitation } from '@/lib/teach-it.mjs';
 import { DISCOVER_LAUNCH_ENABLED } from '@/lib/launch-features';
 import {
   configureDictation,
+  dictationErrorMessage,
   createBrowserSpeechRecognition,
   type BrowserSpeechRecognition,
 } from '@/lib/browser-speech';
@@ -162,6 +163,7 @@ function ClassroomStage() {
   const [listeningTarget, setListeningTarget] = useState<'question' | 'prompt' | null>(null);
   const [promptResponse, setPromptResponse] = useState('');
   const [engagedPromptId, setEngagedPromptId] = useState<string | null>(null);
+  const [dictationError, setDictationError] = useState('');
   const [speechSupported, setSpeechSupported] = useState(false);
   const [visualHeight, setVisualHeight] = useState<number | null>(null);
   const boardScrollRef = useRef<HTMLDivElement>(null);
@@ -465,7 +467,10 @@ function ClassroomStage() {
   // pause — so the transcript lives here and is carried across every restart.
   const startDictation = (target: 'question' | 'prompt', continuing = false): boolean => {
     const recognition = createBrowserSpeechRecognition();
-    if (!recognition) return false;
+    if (!recognition) {
+      setDictationError(dictationErrorMessage(undefined, language?.toLowerCase().startsWith('es')));
+      return false;
+    }
     recognitionRef.current = recognition;
     configureDictation(recognition, language === 'auto' ? null : language);
     if (continuing) transcriptRef.current.carryOver();
@@ -495,7 +500,8 @@ function ClassroomStage() {
     };
     recognition.onerror = (event) => {
       if (recognitionRef.current !== recognition) return;
-      if (event?.error === 'no-speech' || event?.error === 'aborted') return;
+      if (!dictatingRef.current) return;
+      setDictationError(dictationErrorMessage(event?.error, language?.toLowerCase().startsWith('es')));
       recognitionRef.current = null;
       dictatingRef.current = false;
       setListeningTarget(null);
@@ -505,6 +511,7 @@ function ClassroomStage() {
       recognition.start();
       return true;
     } catch {
+      setDictationError(dictationErrorMessage(undefined, language?.toLowerCase().startsWith('es')));
       recognitionRef.current = null;
       return false;
     }
@@ -515,7 +522,7 @@ function ClassroomStage() {
       stopDictation();
       return;
     }
-    if (!createBrowserSpeechRecognition()) return;
+    setDictationError('');
     if (target === 'prompt' && prompt) {
       setEngagedPromptId(prompt.id);
       interruptPrompt();
@@ -533,6 +540,8 @@ function ClassroomStage() {
       className="relative mx-auto flex h-full min-h-0 max-w-5xl flex-col overflow-hidden pb-[max(0.5rem,env(safe-area-inset-bottom))]"
       style={visualHeight ? { height: visualHeight } : undefined}
     >
+
+      {dictationError && <p role="alert" className="px-4 py-2 text-sm text-amber-200">{dictationError}</p>}
 
       {/* ── Top bar ── */}
       <div className="flex items-start gap-3 border-b border-lyo-400/10 bg-gradient-to-r from-lyo-500/10 via-transparent to-accent-purple/5 px-3 py-2.5 sm:px-4">
