@@ -41,3 +41,19 @@ export function configureDictation(
   recognition.continuous = true;
   recognition.maxAlternatives = 3;
 }
+
+export function dictationErrorMessage(error?: string, spanish = false): string {
+  switch (error) {
+    case 'not-allowed':
+    case 'service-not-allowed':
+      return spanish ? 'Permite el acceso al micrófono y al dictado en el navegador, o escribe tu respuesta.' : 'Allow microphone and dictation access in your browser, or type your response.';
+    case 'audio-capture':
+      return spanish ? 'Comprueba que el micrófono esté conectado y seleccionado, y vuelve a intentarlo.' : 'Check that your microphone is connected and selected, then try again.';
+    case 'network':
+      return spanish ? 'No se pudo conectar al servicio de dictado. Vuelve a intentarlo o escribe tu respuesta.' : 'Could not reach the speech service. Try again or type your response.';
+    case 'no-speech':
+      return spanish ? 'No se detectó voz. Pulsa el micrófono para volver a intentarlo.' : 'No speech was detected. Press the microphone to try again.';
+    default:
+      return spanish ? 'El dictado se detuvo. Vuelve a intentarlo o escribe tu respuesta.' : 'Dictation stopped. Try again or type your response.';
+  }
+}
