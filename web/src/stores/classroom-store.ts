@@ -982,9 +982,21 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
     // requests saturated the single-CPU Kokoro worker, delaying all three
     // and causing the opening speech to time out. The one-ahead queue warms
     // later phrases only after the first audio actually starts playing.
-    const first = firstAudibleTurn(turns);
+    const topic = get().topic.trim();
+    const narratedTurns = turns.map((turn) => {
+      const isNarrated = turn.type === 'speech' || turn.type === 'user_prompt';
+      if (!isNarrated || !/^try this (?:question|sentence) in your own words[.!]?$/i.test(turn.text?.trim() ?? '')) {
+        return turn;
+      }
+      const subject = topic ? ` with ${topic}` : '';
+      return {
+        ...turn,
+        text: `Let's practice the next step${subject}. Your answer will help me see what makes sense so far and where I can help.`,
+      };
+    });
+    const first = firstAudibleTurn(narratedTurns);
     if (first) prefetchSpeechLine(first.speaker || 'Teacher', (first.text ?? '').trim());
-    turnQueue.push(...turns);
+    turnQueue.push(...narratedTurns);
     waitingSince = null;
     stallNudged = false;
     set({ waitingForScene: false, stallPhase: 'none' });
