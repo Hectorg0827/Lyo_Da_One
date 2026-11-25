@@ -442,6 +442,7 @@ function stopStallWatch() {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.lyoai.app';
 const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
+const DEVICE_VOICE_NOTICE = 'Using your device voice while the classroom voice reconnects.';
 const CLASSROOM_VOICE_NOTICE = 'Teacher audio is temporarily unavailable. Captions will continue, and LYO will retry voice automatically.';
 const CLASSROOM_AUDIO_PERMISSION_NOTICE = 'Your browser blocked teacher audio. Tap the speaker control off and on to enable voice for the next explanation. Captions remain available.';
 const CLASSROOM_RECONNECT_NOTICE = 'Connection interrupted. Reconnecting to your lesson — your answers are saved.';
@@ -645,6 +646,10 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
           startupTimeoutMs: 75000,
           onStarted: () => {
             emitSegment(segment, index);
+            const notice = get().notice;
+            if (notice === CLASSROOM_VOICE_NOTICE || notice === CLASSROOM_AUDIO_PERMISSION_NOTICE || notice === DEVICE_VOICE_NOTICE) {
+              set({ notice: null });
+            }
           },
           onDownloaded: () => {
             if (!controller.signal.aborted && generation === speechGeneration) {
@@ -667,14 +672,11 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
       window.dispatchEvent(new CustomEvent('classroom:voice-error', {
         detail: { category: permissionBlocked ? 'browser-activation' : 'playback', name: error.name || 'Error', generation },
       }));
-      // A browser autoplay refusal is not a server outage: the stream was
-      // delivered, but Chrome requires a user gesture to play it. Do not put
-      // the healthy natural-voice provider into cooldown just as the learner
-      // taps the speaker to enable playback. Other failures retain a short
-      // cooldown to avoid hammering a cold or temporarily broken endpoint.
-      if (!permissionBlocked) {
-        serverVoiceUnavailableUntil = Math.max(serverVoiceUnavailableUntil, Date.now() + 15_000);
-      }
+      // Only a failed HTTP response starts provider cooldown. A local playback
+      // failure or a skipped request must not postpone the next remote attempt.
+      const reason = error instanceof Error && /^(Teacher audio (playback failed(?: \\(media code [0-4]\\))?|startup timed out|completion timed out)|Shared voice unavailable|Invalid streamed audio)$/.test(error.message)
+        ? error.message : 'Playback rejected';
+      console.warn(`Classroom teacher audio: ${error.name || 'Error'}; ${reason}; started=${Boolean(error.playbackStarted || voiceStarted)}`);
       if (error.playbackStarted || voiceStarted) {
         // Do not replay already-heard words through a second, robotic voice.
         set((state) => ({ notice: permissionBlocked ? CLASSROOM_AUDIO_PERMISSION_NOTICE : (state.notice ?? CLASSROOM_VOICE_NOTICE) }));
@@ -693,7 +695,7 @@ export const useClassroomStore = create<ClassroomStore>((set, get) => {
         });
         if (generation === speechGeneration) {
           set((state) => ({
-            notice: permissionBlocked ? CLASSROOM_AUDIO_PERMISSION_NOTICE : (state.notice ?? 'Using your device voice while the classroom voice reconnects.'),
+            notice: permissionBlocked ? CLASSROOM_AUDIO_PERMISSION_NOTICE : (state.notice ?? DEVICE_VOICE_NOTICE),
           }));
           emitLineEnd('completed');
           onDone();
