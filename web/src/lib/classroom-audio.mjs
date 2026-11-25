@@ -277,7 +277,7 @@ export async function playSpeechResponse(responsePromise, {
     clearTimeout(startupTimer);
     onStarted();
   };
-  const errored = () => fail(new Error('Teacher audio playback failed'));
+  const errored = () => fail(new Error(`Teacher audio playback failed (media code ${audio.error?.code ?? 0})`));
   audio.addEventListener('playing', playing);
   audio.addEventListener('ended', finish);
   audio.addEventListener('error', errored);
