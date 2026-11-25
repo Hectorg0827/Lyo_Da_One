@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import toast from 'react-hot-toast'
 import { CalendarClock, Loader2, Lock, MapPin, UserRound, Video } from 'lucide-react'
 import { useApi } from '@/hooks/use-api'
@@ -14,7 +14,8 @@ import { INVITE_STATUS_COPY, formatWhen, friendlyError, invitePath, safeWebUrl }
  * the learner on the event's guest list (their Lyo account, so every device
  * sees the event) and opens it.
  */
-export default function CommunityInvitePage({ params }: { params: { token: string } }) {
+export default function CommunityInvitePage() {
+  const params = useParams<{ token: string }>()
   const token = decodeURIComponent(params.token)
   const router = useRouter()
   const [accepting, setAccepting] = useState(false)

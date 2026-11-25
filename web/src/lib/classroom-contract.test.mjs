@@ -8,6 +8,7 @@ import {
   buildClassroomWsUrl,
   canResumeClassroom,
   classroomCourseKey,
+  classroomResumeOnEntry,
   classroomOpening,
   classroomSceneStart,
   classroomSessionStart,
@@ -16,6 +17,12 @@ import {
   isTransferReady,
   normalizeClassroomMode,
 } from './classroom-contract.mjs';
+
+test('a hard refresh resumes its saved lesson, while a normal entry starts fresh', () => {
+  assert.equal(classroomResumeOnEntry(false, 'reload'), true);
+  assert.equal(classroomResumeOnEntry(false, 'navigate'), false);
+  assert.equal(classroomResumeOnEntry(true, 'navigate'), true);
+});
 
 test('classroom URL preserves learner controls and course context', () => {
   const url = new URL(buildClassroomWsUrl('https://api.lyoapp.com/', {
@@ -41,6 +48,31 @@ test('classroom URL preserves learner controls and course context', () => {
   assert.equal(url.searchParams.get('reduced_motion'), 'true');
   assert.equal(url.searchParams.get('language'), 'es-US');
   assert.equal(url.searchParams.get('token'), 'token-1');
+});
+
+
+test('ungraded continuous teacher is negotiated only on staging WebSocket URLs', () => {
+  const args = { topic: 'Fractions', sessionId: 'secure-test-session' };
+  const staging = new URL(buildClassroomWsUrl('https://lyojourneystagingbackend-staging.up.railway.app', args, 'token'));
+  const production = new URL(buildClassroomWsUrl('https://api.lyoai.app', args, 'token'));
+  assert.equal(staging.searchParams.get('continuous_teaching'), '1');
+  assert.equal(staging.searchParams.get('bridge_language'), 'en-US');
+  assert.equal(production.searchParams.has('continuous_teaching'), false);
+  assert.equal(staging.searchParams.get('session_id'), 'secure-test-session');
+});
+
+test('Classroom resume flag is explicit and absent for new sessions', () => {
+  const base = 'https://lyojourneystagingbackend-staging.up.railway.app';
+  const fresh = new URL(buildClassroomWsUrl(base, {
+    topic: 'Fractions', sessionId: 'session-1',
+  }, 'token'));
+  const recovered = new URL(buildClassroomWsUrl(base, {
+    topic: 'Fractions', sessionId: 'session-1', resume: true,
+  }, 'token'));
+  assert.equal(fresh.searchParams.has('resume'), false);
+  assert.equal(recovered.searchParams.get('resume'), '1');
+  assert.equal(recovered.searchParams.get('session_id'), fresh.searchParams.get('session_id'));
+  assert.equal(recovered.searchParams.get('token'), fresh.searchParams.get('token'));
 });
 
 test('invalid modes fail safely to solo teacher mode', () => {
@@ -161,6 +193,7 @@ test('the opening falls back to the objective the entry contract would send', ()
 test('the stall thresholds give the first one time to be slow before it is broken', () => {
   assert.ok(CLASSROOM_STALL_NOTICE_MS > 0);
   assert.ok(CLASSROOM_STALL_RECOVERY_MS > CLASSROOM_STALL_NOTICE_MS);
+  assert.equal(CLASSROOM_STALL_RECOVERY_MS, 30_000);
   assert.match(CLASSROOM_STALL_RECOVERY, /not a wrong answer/);
 });
 

@@ -20,7 +20,7 @@ export function LegalPage({
 }) {
   return (
     <main className="min-h-screen bg-[#0d0f18] px-4 py-10 text-white sm:px-6">
-      <article className="mx-auto max-w-3xl">
+      <article className="mx-auto max-w-3xl [&_a]:underline [&_a]:underline-offset-2">
         <nav className="mb-8 flex flex-wrap items-center justify-between gap-3 text-sm">
           <Link href="/" className="font-bold tracking-[0.2em] text-violet-200">LYO</Link>
           <div className="flex gap-4 text-white/60">

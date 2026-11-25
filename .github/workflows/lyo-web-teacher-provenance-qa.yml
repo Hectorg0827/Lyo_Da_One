@@ -1,0 +1,38 @@
+name: LYO Web teacher provenance isolated QA
+on:
+  push:
+    branches: [fix/web-teacher-provenance-20261122]
+    paths:
+      - 'web/src/app/(main)/classroom/page.tsx'
+      - '.github/workflows/lyo-web-teacher-provenance-qa.yml'
+permissions:
+  contents: read
+jobs:
+  web-provenance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: web
+    env:
+      NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
+      NEXT_PUBLIC_LYO_JOURNEYS_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install pinned dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Full Web unit and integration contracts
+        run: npm test
+      - name: Verify TypeScript and Next.js staging build
+        run: |
+          npx tsc --noEmit
+          npm run build
+      - name: Evidence boundary
+        if: success()
+        run: |
+          echo 'Source QA only: model-generated warm-up vs local prompt labels. Staging E2E and AI pedagogy remain separate release gates.' >> "$GITHUB_STEP_SUMMARY"

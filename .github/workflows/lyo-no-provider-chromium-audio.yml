@@ -1,0 +1,33 @@
+name: LYO no-provider Chromium teacher-audio playback smoke
+on:
+  push:
+    branches: [qa/lyo-web-audio-browser-20261122, release/lyo-web-first-20261120]
+    paths:
+      - 'web/src/lib/classroom-audio.mjs'
+      - 'scripts/qa/web_first_real_browser_audio_decode.py'
+      - '.github/workflows/lyo-no-provider-chromium-audio.yml'
+permissions:
+  contents: read
+jobs:
+  chromium-audio:
+    name: Decode / currentTime / ended / interruption in real Chromium
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile local original WAV QA script
+        run: python -m py_compile scripts/qa/web_first_real_browser_audio_decode.py
+      - name: Install no-provider Chromium only
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.56.0
+          python -m playwright install --with-deps chromium
+      - name: Real browser decode and interruption with production LYO player module
+        run: python -u scripts/qa/web_first_real_browser_audio_decode.py
+      - name: Evidence boundaries
+        if: success()
+        run: |
+          echo 'Chromium media decode/playback progression/ended/interrupt passed using LYO client code and local original WAV.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This DOES NOT assert TTS provider connectivity, real audio from a physical speaker or end-user volume. No paid AI requests.' >> "$GITHUB_STEP_SUMMARY"

@@ -5,7 +5,7 @@ import { RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useChatStore } from '@/stores/chat-store';
 import { reviewEntryHref } from '@/lib/entry-contract.mjs';
-import { formatSkillLabel as formatSkill } from '@/lib/utils';
+import { conceptDisplayName } from '@/lib/learner-model.mjs';
 
 /**
  * The return half of the spaced-repetition loop: skills a past check flagged
@@ -24,32 +24,35 @@ export default function DueReviewsNudge() {
   return (
     <div className="flex w-full gap-2 overflow-x-auto no-scrollbar px-4 pb-1 justify-start sm:justify-center">
       <AnimatePresence>
-        {dueReviews.map((item, i) => (
-          <motion.button
-            key={item.skill_id}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ delay: 0.1 + i * 0.06, duration: 0.3, ease: 'easeOut' }}
-            onClick={() => {
-              const label = item.skill_name?.trim() || formatSkill(item.skill_id);
-              const href = reviewEntryHref(label, item.skill_id);
-              if (!href) return;
-              dismissDueReview(item.skill_id);
-              router.push(href);
-            }}
-            className="flex items-center gap-1.5 shrink-0 px-4 py-2 rounded-[20px] text-sm font-medium
-              bg-amber-500/10 border border-amber-400/30 text-amber-100
-              hover:bg-amber-500/15 active:scale-95 transition-all duration-200 cursor-pointer"
-            title={item.last_misconception ?? undefined}
-          >
-            <RotateCcw className="w-3.5 h-3.5 opacity-80" aria-hidden="true" />
-            Review: {item.skill_name?.trim() || formatSkill(item.skill_id)}
-            {item.days_overdue > 0 && (
-              <span className="text-amber-100/60 text-xs">· {item.days_overdue}d</span>
-            )}
-          </motion.button>
-        ))}
+        {dueReviews.map((item, i) => {
+          const display = conceptDisplayName({ concept_id: item.skill_id, display_name: item.skill_name });
+          const label = display === 'Skill name unavailable' ? 'a saved learning concept' : display;
+          return (
+            <motion.button
+              key={item.skill_id}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ delay: 0.1 + i * 0.06, duration: 0.3, ease: 'easeOut' }}
+              onClick={() => {
+                const href = reviewEntryHref(label, item.skill_id);
+                if (!href) return;
+                dismissDueReview(item.skill_id);
+                router.push(href);
+              }}
+              className="flex items-center gap-1.5 shrink-0 px-4 py-2 rounded-[20px] text-sm font-medium
+                bg-amber-500/10 border border-amber-400/30 text-amber-100
+                hover:bg-amber-500/15 active:scale-95 transition-all duration-200 cursor-pointer"
+              title={item.last_misconception ?? undefined}
+            >
+              <RotateCcw className="w-3.5 h-3.5 opacity-80" aria-hidden="true" />
+              Review: {label}
+              {item.days_overdue > 0 && (
+                <span className="text-amber-100/60 text-xs">· {item.days_overdue}d</span>
+              )}
+            </motion.button>
+          );
+        })}
       </AnimatePresence>
     </div>
   );

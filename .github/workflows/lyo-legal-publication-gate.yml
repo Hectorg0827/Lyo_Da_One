@@ -1,0 +1,58 @@
+name: LYO legal publication approval gate - issue 258
+# Only the exact public release branch is blocked by missing legal signoff.
+# The isolated QA branch verifies the detector rejects placeholders.
+on:
+  push:
+    branches:
+      - qa/legal-disclosure-release-guard-20261122
+      - release/lyo-web-first-20261120
+    paths:
+      - 'web/src/app/privacy/page.tsx'
+      - 'web/src/app/terms/page.tsx'
+      - 'web/src/app/support/page.tsx'
+      - 'web/src/components/legal/LegalPage.tsx'
+      - 'docs/legal/**'
+      - 'scripts/qa/lyo_legal_publication_gate.py'
+      - '.github/workflows/lyo-legal-publication-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gate-regressions:
+    name: Detect placeholders and unapproved terms without paid services
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Lint and test fail-closed legal gate
+        run: |
+          python -m py_compile scripts/qa/lyo_legal_publication_gate.py
+          python scripts/qa/lyo_legal_publication_gate.py --unit
+      - name: Verify present legal approval is deliberately blocked
+        if: github.ref == 'refs/heads/qa/legal-disclosure-release-guard-20261122'
+        run: |
+          set +e
+          python scripts/qa/lyo_legal_publication_gate.py > /tmp/lyo-legal-gate.txt
+          STATUS=$?
+          set -e
+          test "$STATUS" -eq 2
+          grep -q 'LEGAL PRODUCTION RELEASE BLOCKED' /tmp/lyo-legal-gate.txt
+          cat /tmp/lyo-legal-gate.txt
+          echo 'PASS: test branch intentionally rejects unapproved notice and missing counsel signoff.' >> "$GITHUB_STEP_SUMMARY"
+  production-legal-clearance:
+    name: Require owner and counsel publication approval before LYO production
+    if: github.ref == 'refs/heads/release/lyo-web-first-20261120'
+    needs: gate-regressions
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Strict final public policy source and manifest verification
+        run: python scripts/qa/lyo_legal_publication_gate.py
+      - name: No legal draft may be represented as approved
+        if: always()
+        run: |
+          echo 'Issue #258: do not ship Privacy/Terms/Support placeholders or unreviewed claims.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This automated scan cannot itself substitute for actual attorney and owner approval.' >> "$GITHUB_STEP_SUMMARY"

@@ -1,10 +1,11 @@
 'use client';
 
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ChevronDown, ChevronUp, Clock, Play, RotateCcw, Check, Layers } from 'lucide-react';
 import type { StackItem } from '@/lib/stack';
+import { stackCourseHref } from '@/lib/course-destination.mjs';
 import CourseArtwork from '@/components/home/CourseArtwork';
 import {
   ACTION_REVIEW,
@@ -25,6 +26,7 @@ import {
   deckStaggerMilliseconds,
   isFinished,
   matchesFilter,
+  progressDisplayFor,
   progressFor,
 } from '@/lib/focus-presentation.mjs';
 
@@ -243,9 +245,21 @@ function CourseCard({
   onBodyClick?: () => void;
 }) {
   const [flipped, setFlipped] = useState(false);
-  const openBack = onBodyClick ?? (() => setFlipped(true));
+  const frontFaceButtonRef = useRef<HTMLButtonElement>(null);
+  const backFaceButtonRef = useRef<HTMLButtonElement>(null);
+  const showBack = () => {
+    setFlipped(true);
+    // The focused button is about to become aria-hidden. Move focus to a
+    // control on the revealed face after React commits the rotation state.
+    requestAnimationFrame(() => backFaceButtonRef.current?.focus({ preventScroll: true }));
+  };
+  const showFront = () => {
+    setFlipped(false);
+    requestAnimationFrame(() => frontFaceButtonRef.current?.focus({ preventScroll: true }));
+  };
+  const openBack = onBodyClick ?? showBack;
 
-  const href = `/courses/${item.content_id || item.id}`;
+  const href = stackCourseHref(item);
   const action = actionFor(item);
   const finished = isFinished(item);
   const blurb = blurbFor(item);
@@ -261,19 +275,8 @@ function CourseCard({
       >
         {/* ── Front ── */}
         <div
-          className="absolute inset-0 overflow-hidden rounded-[21px] border border-white/10 shadow-[0_18px_32px_-16px_rgba(0,0,0,0.95)] [backface-visibility:hidden]"
-          onClick={openBack}
-          role="button"
-          tabIndex={flipped ? -1 : 0}
-          aria-label={
-            onBodyClick ? `${item.title} — open the stack` : `${item.title} — show description`
-          }
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              openBack();
-            }
-          }}
+          className={`absolute inset-0 overflow-hidden rounded-[21px] border border-white/10 shadow-[0_18px_32px_-16px_rgba(0,0,0,0.95)] [backface-visibility:hidden] ${flipped ? 'pointer-events-none' : ''}`}
+          aria-hidden={flipped}
         >
           <CourseArtwork title={item.title} className="absolute inset-0 h-full w-full" />
           {/* The scrim carries the title, so it is weighted to the lower
@@ -281,24 +284,35 @@ function CourseCard({
               pale lines exactly where the text sits. */}
           <div className="absolute inset-0 bg-[linear-gradient(to_bottom,rgba(5,7,13,0.06)_0%,rgba(5,7,13,0.52)_44%,rgba(5,7,13,0.94)_100%)]" />
 
+          {/* A separate background button means the course navigation link and
+              the share/flip controls are never nested inside another button.
+              The transparent hit area sits behind the foreground actions. */}
+          <button
+            ref={frontFaceButtonRef}
+            type="button"
+            onClick={openBack}
+            tabIndex={flipped ? -1 : 0}
+            aria-label={onBodyClick ? `${item.title} — open the stack` : `${item.title} — show description`}
+            className="absolute inset-0 z-[1] rounded-[21px] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white"
+          />
+
           {finished && (
-            <span className="absolute left-3.5 top-3.5 inline-flex items-center gap-1 rounded-md border border-[#10B981]/45 bg-[#10B981]/20 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.11em] text-[#BDF5DA]">
+            <span className="pointer-events-none absolute left-3.5 top-3.5 z-10 inline-flex items-center gap-1 rounded-md border border-[#10B981]/45 bg-[#10B981]/20 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.11em] text-[#BDF5DA]">
               <Check size={9} strokeWidth={3} />
               Finished
             </span>
           )}
 
           <div
-            className="absolute right-3 top-3 flex items-center gap-1.5"
-            onClick={(event) => event.stopPropagation()}
+            className="absolute right-3 top-3 z-20 flex items-center gap-1.5"
           >
-            {menu}
+            {/* The injected menu may own arbitrary buttons; unmount it on the
+                hidden side so none of them remain in the keyboard tab order. */}
+            {!flipped && menu}
             <button
               type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setFlipped(true);
-              }}
+              onClick={showBack}
+              tabIndex={flipped ? -1 : 0}
               aria-label="Flip card"
               className="grid h-[29px] w-[29px] place-items-center rounded-full border border-white/[0.15] bg-black/40 text-white backdrop-blur-md transition-colors hover:bg-black/70"
             >
@@ -306,7 +320,7 @@ function CourseCard({
             </button>
           </div>
 
-          <div className="absolute inset-x-0 bottom-0 flex flex-col gap-2.5 p-4">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col gap-2.5 p-4">
             <h3 className="font-rounded text-[16.5px] font-bold leading-[1.18] tracking-[-0.028em] text-white line-clamp-2">
               {item.title}
             </h3>
@@ -332,11 +346,7 @@ function CourseCard({
                   />
                 </div>
                 <span className="shrink-0 text-[10px] font-bold text-white/70 tabular-nums">
-                  {finished
-                    ? 'Complete'
-                    : item.status === 'not_started' && progress.percent === 0
-                      ? 'Not started'
-                      : `${progress.percent}%`}
+                  {progressDisplayFor(item)}
                 </span>
               </div>
             ) : (
@@ -348,8 +358,8 @@ function CourseCard({
             <div className="flex items-center gap-2">
               <Link
                 href={href}
-                onClick={(event) => event.stopPropagation()}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 font-rounded text-[12.5px] font-bold text-[#0A0D16] shadow-[0_6px_16px_-6px_rgba(0,0,0,0.8)] transition-transform duration-200 hover:scale-[1.03]"
+                tabIndex={flipped ? -1 : 0}
+                className="pointer-events-auto relative z-20 inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 font-rounded text-[12.5px] font-bold text-[#0A0D16] shadow-[0_6px_16px_-6px_rgba(0,0,0,0.8)] transition-transform duration-200 hover:scale-[1.03]"
               >
                 <Play size={12} className="fill-current" />
                 {actionLabel(action)}
@@ -360,33 +370,31 @@ function CourseCard({
 
         {/* ── Back ── */}
         <div
-          className="absolute inset-0 overflow-hidden rounded-[21px] border border-white/10 bg-[#141A2A] shadow-[0_18px_32px_-16px_rgba(0,0,0,0.95)] [backface-visibility:hidden] [transform:rotateY(180deg)]"
-          onClick={() => setFlipped(false)}
-          role="button"
-          tabIndex={flipped ? 0 : -1}
-          aria-label="Back of card — flip to return"
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              setFlipped(false);
-            }
-          }}
+          className={`absolute inset-0 overflow-hidden rounded-[21px] border border-white/10 bg-[#141A2A] shadow-[0_18px_32px_-16px_rgba(0,0,0,0.95)] [backface-visibility:hidden] [transform:rotateY(180deg)] ${flipped ? '' : 'pointer-events-none'}`}
+          aria-hidden={!flipped}
         >
           <CourseArtwork title={item.title} className="absolute inset-0 h-full w-full opacity-[0.16]" />
 
           <button
+            ref={backFaceButtonRef}
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              setFlipped(false);
-            }}
+            onClick={showFront}
+            tabIndex={flipped ? 0 : -1}
+            aria-label="Back of card — flip to return"
+            className="absolute inset-0 z-[1] rounded-[21px] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-white"
+          />
+
+          <button
+            type="button"
+            onClick={showFront}
+            tabIndex={flipped ? 0 : -1}
             aria-label="Flip back"
-            className="absolute right-3 top-3 z-10 grid h-[29px] w-[29px] place-items-center rounded-full border border-white/[0.15] bg-black/40 text-white backdrop-blur-md transition-colors hover:bg-black/70"
+            className="absolute right-3 top-3 z-20 grid h-[29px] w-[29px] place-items-center rounded-full border border-white/[0.15] bg-black/40 text-white backdrop-blur-md transition-colors hover:bg-black/70"
           >
             <RotateCcw size={13} className="-scale-x-100" />
           </button>
 
-          <div className="relative flex h-full flex-col gap-2 p-4">
+          <div className="pointer-events-none relative z-10 flex h-full flex-col gap-2 p-4">
             <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#B59CFF]">
               About this course
             </p>
@@ -405,8 +413,8 @@ function CourseCard({
             <div className="mt-auto">
               <Link
                 href={href}
-                onClick={(event) => event.stopPropagation()}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.16] bg-white/[0.11] px-4 py-2 font-rounded text-[12.5px] font-bold text-white transition-colors hover:bg-white/20"
+                tabIndex={flipped ? 0 : -1}
+                className="pointer-events-auto relative z-20 inline-flex items-center gap-1.5 rounded-full border border-white/[0.16] bg-white/[0.11] px-4 py-2 font-rounded text-[12.5px] font-bold text-white transition-colors hover:bg-white/20"
               >
                 <Play size={12} className="fill-current" />
                 {actionLabel(action === ACTION_REVIEW ? ACTION_REVIEW : action)}

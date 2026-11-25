@@ -102,6 +102,8 @@ export default function CoursePlayer({ course, onBack }: CoursePlayerProps) {
   const activeLessonCompleted = activeLesson
     ? completedLessonIds.has(activeLesson.id)
     : false;
+  const hasReadableContent = Boolean(activeLesson?.content.length);
+
 
   const localProgressPercent = useMemo(() => {
     if (flatLessons.length === 0) return 0;
@@ -141,7 +143,7 @@ export default function CoursePlayer({ course, onBack }: CoursePlayerProps) {
   };
 
   const completeAndAdvance = async () => {
-    if (!activeLesson || isCompleting) return;
+    if (!activeLesson || !hasReadableContent || isCompleting) return;
 
     if (completedLessonIds.has(activeLesson.id)) {
       if (currentFlatIndex < flatLessons.length - 1) goNext();
@@ -194,7 +196,7 @@ export default function CoursePlayer({ course, onBack }: CoursePlayerProps) {
 
   const isFirst = currentFlatIndex <= 0;
   const isLast = currentFlatIndex >= flatLessons.length - 1;
-  const nextButtonDisabled = isCompleting || (isLast && activeLessonCompleted);
+  const nextButtonDisabled = isCompleting || !hasReadableContent || (isLast && activeLessonCompleted);
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-[#050810] text-white">
@@ -242,7 +244,24 @@ export default function CoursePlayer({ course, onBack }: CoursePlayerProps) {
                 transition={{ duration: 0.2 }}
                 className="mx-auto max-w-3xl"
               >
-                <LessonView lesson={activeLesson} />
+                {hasReadableContent ? (
+                  <LessonView
+                    lesson={activeLesson}
+                    onComplete={() => { void completeAndAdvance(); }}
+                    isCompleted={activeLessonCompleted}
+                  />
+                ) : (
+                  <div role="status" className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-5">
+                    <p className="font-semibold text-amber-200">Lesson content is not available</p>
+                    <p className="mt-2 text-sm text-white/60">
+                      The saved lesson has no readable material. It cannot be marked complete.
+                      You can open the live Classroom to continue learning.
+                    </p>
+                    <button type="button" onClick={enterClassroom} className="mt-4 rounded-lg bg-lyo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-lyo-500">
+                      Open AI Classroom
+                    </button>
+                  </div>
+                )}
               </motion.div>
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-white/30">

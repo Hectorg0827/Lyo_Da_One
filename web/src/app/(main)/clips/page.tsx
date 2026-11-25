@@ -14,13 +14,13 @@ import { redirect } from 'next/navigation';
  * clip that 404s is a worse outcome than a tidy route list. Query parameters
  * carry over so those links land on the clip they named.
  */
-export default function ClipsPage({
+export default async function ClipsPage({
   searchParams,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(searchParams)) {
+  for (const [key, value] of Object.entries(await searchParams)) {
     if (typeof value === 'string') query.set(key, value);
     else if (Array.isArray(value) && value[0]) query.set(key, value[0]);
   }

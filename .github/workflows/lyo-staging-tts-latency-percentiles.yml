@@ -1,0 +1,36 @@
+name: LYO staging real Kokoro first playback latency percentiles
+on:
+  push:
+    branches: [qa/staging-tts-first-playback-latency-20261122]
+    paths:
+      - 'scripts/qa/web_first_kokoro_browser_latency_percentiles.py'
+      - '.github/workflows/lyo-staging-tts-latency-percentiles.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lyo-staging-kokoro-latency-samples-20261122
+  cancel-in-progress: false
+jobs:
+  actual-no-paid-fallback-tts:
+    name: 20 synthetic-learner browser TTS samples p50/p95
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Chromium and validate syntax
+        run: |
+          python -m py_compile scripts/qa/web_first_kokoro_browser_latency_percentiles.py
+          python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+          python -m playwright install --with-deps chromium
+      - name: Strict paid fallback off + English/Spanish live staging real audio
+        run: python -u scripts/qa/web_first_kokoro_browser_latency_percentiles.py
+      - name: Evidence boundary
+        if: always()
+        run: |
+          echo '20 live staging local Kokoro TTS samples with single synthetic JWT; paid fallback explicitly disabled.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Reports TTFB, HTMLAudioElement playing and >=100ms media progress percentiles. Not physical audibility or Classroom lesson-entry first-voice time.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No text model grading or production. Deletion required before success.' >> "$GITHUB_STEP_SUMMARY"

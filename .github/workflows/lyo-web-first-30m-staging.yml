@@ -1,0 +1,32 @@
+name: LYO Web-first staging 30-minute Classroom transport
+# Isolated synthetic learner against staging backend only. No deployment.
+on:
+  push:
+    branches: [release/lyo-web-first-20261120]
+    paths:
+      - '.github/workflows/lyo-web-first-30m-staging.yml'
+      - 'scripts/qa/web_first_30m_classroom.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prolonged-lesson-recovery:
+    name: Staging backend 30m heartbeat and same-scene resume
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned transport dependency
+        run: python -m pip install --disable-pip-version-check websockets==14.2
+      - name: Run authenticated 30-minute transport acceptance
+        run: python -u scripts/qa/web_first_30m_classroom.py
+      - name: Record evidence boundary
+        if: success()
+        run: |
+          echo 'Staging backend transport passed 30-minute heartbeat/reconnect.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This does not verify Web UI, audible playback, assessment grading or Web client memory retention.' >> "$GITHUB_STEP_SUMMARY"

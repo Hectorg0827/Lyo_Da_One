@@ -1,0 +1,57 @@
+name: LYO Web-first dependency security gate
+# Read-only audit of production Web dependencies, not a deployment.
+on:
+  push:
+    branches: [release/lyo-web-first-20261120, security/lyo-web-deps-20261120, qa/lyo-web-dependency-gate-20261122]
+    paths:
+      - '.github/workflows/lyo-web-first-security.yml'
+      - 'web/package.json'
+      - 'web/package-lock.json'
+  pull_request:
+    branches: [main, release/lyo-web-first-20261120]
+    paths:
+      - '.github/workflows/lyo-web-first-security.yml'
+      - 'web/package.json'
+      - 'web/package-lock.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  production-dependencies:
+    name: Audit production dependency advisories
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Audit locked production dependency graph
+        run: |
+          npm audit --omit=dev --json > npm-audit-production.json || true
+          node - <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('npm-audit-production.json', 'utf8'));
+          if (!report.metadata || !report.metadata.vulnerabilities) {
+            throw new Error('npm audit did not provide vulnerability metadata');
+          }
+          const v = report.metadata.vulnerabilities;
+          const summary = ['critical', 'high', 'moderate', 'low']
+            .map(x => x + ': ' + (v[x] || 0)).join(', ');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, 'Production npm advisory counts: ' + summary + '\n');
+          console.log(summary);
+          if ((v.critical || 0) + (v.high || 0) > 0) {
+            process.exitCode = 1;
+          }
+          NODE
+      - name: Preserve dependency advisory evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-web-first-npm-audit
+          path: web/npm-audit-production.json
+          retention-days: 3
+          if-no-files-found: ignore

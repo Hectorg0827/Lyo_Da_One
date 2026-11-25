@@ -1,0 +1,136 @@
+name: LYO Web-first release gate
+# Builds the Web candidate only. Does not publish artifacts or deploy services.
+on:
+  push:
+    branches: [release/lyo-web-first-20261120]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/lyo-web-first-release.yml'
+      - 'docs/lyo-web-first-release.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lyo-web-first-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web tests, typecheck, staging-configured build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: web
+    env:
+      NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
+      NEXT_PUBLIC_LYO_JOURNEYS_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node 22 and dependency cache
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run all Web contract and unit regressions
+        run: npm test
+      - name: Type-check Web
+        run: npx tsc --noEmit
+      - name: Compile production-mode Web bundle against staging API
+        run: npm run build
+      - name: Summarize source-only gate
+        run: |
+          echo 'Web tests, typecheck and staging-configured build passed.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This does not verify real authenticated flows, teacher audio, AI quality, sustained Classroom sessions or production readiness.' >> "$GITHUB_STEP_SUMMARY"
+
+  # Read-only deployed-staging gate; does not exercise AI or learner accounts.
+  staging-health:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify exact deployed Web revision and staging backend reachability
+        env:
+          EXPECTED_WEB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          WEB_HEALTH_URL: https://lyoonestagingweb-staging.up.railway.app/api/health
+          BACKEND_HEALTH_URL: https://lyojourneystagingbackend-staging.up.railway.app/health
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import time
+          from urllib.request import Request, urlopen
+          from urllib.parse import urlsplit
+
+          allowed = {
+              "lyoonestagingweb-staging.up.railway.app",
+              "lyojourneystagingbackend-staging.up.railway.app",
+          }
+          for key in ("WEB_HEALTH_URL", "BACKEND_HEALTH_URL"):
+              parsed = urlsplit(os.environ[key])
+              if parsed.scheme != "https" or parsed.hostname not in allowed:
+                  raise SystemExit("FAIL: non-staging URL refused")
+
+          def get(url):
+              request = Request(url, headers={"Accept": "application/json", "User-Agent": "lyo-ci-staging-health"})
+              with urlopen(request, timeout=12) as response:
+                  if response.status != 200:
+                      raise RuntimeError("non-200 health response")
+                  return response.read(8192)
+
+          expected = os.environ["EXPECTED_WEB_SHA"]
+          for attempt in range(6):
+              try:
+                  web = json.loads(get(os.environ["WEB_HEALTH_URL"]))
+                  if web.get("status") != "healthy" or str(web.get("commit", "")).strip() != expected:
+                      raise RuntimeError("Web reported unexpected status or SHA")
+                  get(os.environ["BACKEND_HEALTH_URL"])
+                  print("PASS: exact staging Web revision, healthy Web, backend HTTP 200")
+                  break
+              except Exception as exc:
+                  if attempt == 5:
+                      raise SystemExit("FAIL: staging health/revision check did not pass") from exc
+                  time.sleep(10)
+          PY
+
+  zero-provider-ui:
+    name: Staging browser reader and Classroom fixture (zero AI)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      LYO_WEB_BASE_URL: https://lyoonestagingweb-staging.up.railway.app
+      EXPECTED_WEB_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Chromium test dependencies
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+          python -m playwright install --with-deps chromium
+      - name: Verify actual deployed Web saved course reader without provider
+        run: python -u scripts/qa/web_first_course_reader_fixture.py
+      - name: Verify actual deployed Web quick teacher scene handoff without provider
+        run: python -u scripts/qa/web_first_bridge_visual_fixture.py
+      - name: Retain synthetic UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyo-web-first-zero-provider-ui
+          path: |
+            artifacts/web-first-course-reader/*.png
+            artifacts/web-first-bridge-visual-fixture/*.png
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Explicit evidence boundary
+        if: success()
+        run: |
+          echo 'PASS: real staging UI login and simulated course/teacher fixtures.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'This does not verify real course persistence, AI grading, audible output or live teacher quality.' >> "$GITHUB_STEP_SUMMARY"

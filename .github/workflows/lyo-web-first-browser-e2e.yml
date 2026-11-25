@@ -1,0 +1,73 @@
+name: LYO Web-first authenticated browser E2E
+# Compiles the exact PR candidate locally. Only synthetic accounts on staging backend.
+# No Railway deploy, production request, Android or iOS build.
+on:
+  workflow_dispatch:
+    inputs:
+      staging_ai_spend_approved:
+        description: 'I authorize bounded real-AI testing on isolated staging'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lyo-web-first-authenticated-e2e
+  cancel-in-progress: false
+
+jobs:
+  visible-login-classroom-recovery:
+    # A real authenticated Classroom lesson consumes provider allowance.
+    # Run only after explicit manual staging AI-spend approval.
+    if: ${{ inputs.staging_ai_spend_approved == true }}
+    name: Exact-head Chromium / visible login / persisted Classroom
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_API_URL: https://lyojourneystagingbackend-staging.up.railway.app
+      NEXT_PUBLIC_LYO_JOURNEYS_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install Web dependencies and compile exact candidate
+        run: |
+          npm --prefix web ci --no-audit --no-fund
+          npm --prefix web run build
+      - name: Install Chromium testing dependencies
+        run: |
+          python -m pip install --disable-pip-version-check playwright==1.56.0 websockets==14.2
+          python -m playwright install --with-deps chromium
+      - name: Run locally built Web against authenticated staging API
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm --prefix web run start > /tmp/lyo-web-first.log 2>&1 &
+          WEB_PID=$!
+          trap 'kill "$WEB_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:3000/auth/login >/dev/null; then
+              echo 'Local exact-head Web ready'
+              break
+            fi
+            if ! kill -0 "$WEB_PID" 2>/dev/null; then
+              echo 'Web process exited before readiness'
+              exit 1
+            fi
+            sleep 2
+          done
+          curl --silent --fail http://127.0.0.1:3000/auth/login >/dev/null
+          python -u scripts/qa/web_first_browser_classroom.py
+      - name: Retain synthetic screenshots (no credentials)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-first-authenticated-e2e
+          path: artifacts/web-first-browser-qa/*.png
+          if-no-files-found: ignore
+          retention-days: 3
